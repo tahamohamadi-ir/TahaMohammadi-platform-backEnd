@@ -1,0 +1,45 @@
+[project]
+name = "taha-cms"
+version = "0.1.0"
+description = "Taha Mohammadi personal platform — Django/Ninja CMS (code-first P3)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django==5.2.9",
+    "django-ninja==1.6.2",
+    "psycopg[binary]==3.3.4",
+    "uvicorn==0.52.3",
+    "gunicorn==26.0.0",
+    "filetype==1.2.0",
+    "python-json-logger>=3.3.0",
+    "django-otp==1.5.4",
+    "qrcode==8.2",
+    "argon2-cffi==25.1.0",
+    "whitenoise==6.11.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.2",
+    "pytest-django==4.12.0",
+    "factory-boy==3.3.3",
+    "ruff==0.14.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*" = ["E501", "I001"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "*_test.py"]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false

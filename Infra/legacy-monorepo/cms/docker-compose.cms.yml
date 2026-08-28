@@ -1,0 +1,193 @@
+# Unified Compose stack (ADR-0027): db + cms + web (+ optional caddy edge).
+#
+# Architecture (canonical):
+#   Host Caddy (until DEFER-0031 live cutover)
+#     ├── web (nginx, Astro dist) → 127.0.0.1:13080 (this stack)
+#     └── cms (Django/Gunicorn)   → 127.0.0.1:18000 (this stack)
+#
+#   After owner cutover (profile `edge`):
+#   Compose caddy (public 80/443) → web:8080 / cms:8000 via Docker DNS
+#
+# Versioned image (preferred production path):
+#   export CMS_IMAGE=ghcr.io/tahamohamadi-ir/taha-cms:<git-sha>
+#   docker compose -f infra/cms/docker-compose.cms.yml pull
+#   docker compose -f infra/cms/docker-compose.cms.yml up -d
+#
+# Edge Caddy (owner-attended only; does NOT start on ordinary `up -d`):
+#   docker compose -f infra/cms/docker-compose.cms.yml --profile edge up -d caddy
+#
+# Local/rebuild path (optional):
+#   export CMS_IMAGE=taha-cms:local
+#   docker compose -f infra/cms/docker-compose.cms.yml build
+#   docker compose -f infra/cms/docker-compose.cms.yml up -d
+#
+# Secrets: create infra/cms/.env from .env.example (never commit real .env).
+
+name: taha-cms
+
+services:
+  db:
+    image: postgres:17-alpine
+    hostname: db
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.50"
+    networks:
+      cms_internal:
+        aliases:
+          - db
+          - postgres
+
+  cms:
+    image: ${CMS_IMAGE:?CMS_IMAGE is required - set to ghcr.io/tahamohamadi-ir/taha-cms:<sha>}
+    build:
+      context: ../..
+      dockerfile: infra/cms/Dockerfile.cms
+    pull_policy: ${CMS_PULL_POLICY:-always}
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      POSTGRES_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    user: "10001:10001"
+    mem_limit: 512m
+    cpus: "0.50"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18000:8000"
+    volumes:
+      - cms_media:/app/media
+    networks:
+      cms_internal:
+        aliases:
+          - cms
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)); raise SystemExit(0 if d.get('db')=='ok' else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required - set to ghcr.io/tahamohamadi-ir/taha-web:<sha>}
+    build:
+      context: ../..
+      dockerfile: infra/web/Dockerfile.web
+    pull_policy: ${WEB_PULL_POLICY:-always}
+    ports:
+      - "127.0.0.1:13080:8080"
+    mem_limit: 128m
+    cpus: "0.25"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      cms_internal:
+        aliases:
+          - web
+
+  # ADR-0032 S3 — independent admin SPA container (nginx, own image/pipeline).
+  # Caddy routes /admin/* here (Caddyfile.compose); Django admin_spa.py stays
+  # as ADMIN_SPA_ROOT fallback for non-edge/local runs.
+  admin:
+    image: ${ADMIN_IMAGE:-taha-admin:local}
+    build:
+      context: ../admin
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:13081:80"
+    mem_limit: 64m
+    cpus: "0.125"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/admin/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      cms_internal:
+        aliases:
+          - admin
+
+  # ADR-0027 Slice 4 / DEFER-0031 — public TLS edge inside Compose.
+  # Profile `edge` keeps ordinary `compose up -d` (CD) from binding 80/443 while
+  # host systemd Caddy still owns those ports. Owner cutover only.
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2.9-alpine}
+    profiles: ["edge"]
+    depends_on:
+      web:
+        condition: service_healthy
+      cms:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../caddy/Caddyfile.compose:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      # Legacy host static paths referenced by Caddyfile.compose (/fonts, /presentation).
+      # Guard: after LOG-0216 host /var/www/html may be absent; Docker would create an
+      # empty dir -> Caddy 404. `create_host_path: false` fails fast instead of
+      # creating an empty mount; host must `mkdir -p /var/www/html` or remove this
+      # mount when Caddyfile.compose no longer references /var/www/html.
+      - type: bind
+        source: /var/www/html
+        target: /var/www/html
+        read_only: true
+        bind:
+          create_host_path: false
+    mem_limit: 128m
+    cpus: "0.25"
+    restart: unless-stopped
+    # BusyBox wget in caddy:alpine has no --max-redirect=0. Probing :80 follows 308
+    # to https://127.0.0.1/ and fails TLS (cert is for the public hostname, not
+    # localhost). Default admin listener on :2019 responds over plain HTTP.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:2019/config/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      cms_internal:
+        aliases:
+          - caddy
+
+volumes:
+  postgres_data:
+  cms_media:
+  caddy_data:
+  caddy_config:
+
+networks:
+  cms_internal:

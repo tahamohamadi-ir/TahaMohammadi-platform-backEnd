@@ -1,0 +1,966 @@
+{
+  "source": [
+    "apps/web/src/data/profile.ts",
+    "apps/web/src/data/profile.en.ts",
+    "apps/web/src/data/profile.fa.ts"
+  ],
+  "translationKey": "0d6e5b42-b8e1-45f2-88b1-a89a7b6f2f23",
+  "profiles": {
+    "en": {
+      "shortBio": "Software engineer and applied AI researcher focused on local LLM systems, Persian NLP-to-SQL, backend platforms, and human-centered analytical interfaces. I combine engineering, research, and design to build privacy-aware systems that translate complex data into understandable and actionable experiences.",
+      "longBio": "Taha Mohammadi is a software engineer, applied AI researcher, and human-centered data-product designer. His work connects enterprise backend engineering with local language models, natural-language interfaces, data storytelling, and decision-support systems. He has contributed to software and analytics initiatives in telecommunications, electronic payments, education, and public administration, while developing a research agenda around reliable Persian NLP-to-SQL, edge AI, explainable analytical interfaces, and privacy-preserving healthcare systems. His multidisciplinary background in visual communication and interior architecture informs a distinctive approach that treats software not only as infrastructure, but also as an interface between complex data, human cognition, and accountable action.",
+      "skills": [
+        {
+          "category": "Programming",
+          "name": "Java",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Programming",
+          "name": "Python",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Programming",
+          "name": "SQL",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Programming",
+          "name": "JavaScript",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "Spring Boot",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "FastAPI",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "REST APIs",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "Microservices",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "Enterprise integration",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "Identity and access management",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Backend Engineering",
+          "name": "Technical documentation",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "RAG",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "LangChain",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "LangGraph",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Embeddings",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "ChromaDB",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Local and quantized LLMs",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Text-to-SQL",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "STT",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Model evaluation",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Dataset preparation",
+          "source": "Master career profile"
+        },
+        {
+          "category": "AI / LLM Systems",
+          "name": "Fine-tuning workflows",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "PostgreSQL",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "Oracle",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "MongoDB",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "MariaDB",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "SQLite",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "Schema design",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "Data modeling",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Data Platforms",
+          "name": "Complex querying",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "React",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "Vue.js",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "JSP",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "Figma",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "Wireframing",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "User flows",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "Interactive prototyping",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Frontend / UX",
+          "name": "Design systems",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Visualization / Analytics",
+          "name": "Dashboard design",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Visualization / Analytics",
+          "name": "KPI derivation",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Visualization / Analytics",
+          "name": "Data storytelling",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Visualization / Analytics",
+          "name": "Information visualization",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Visualization / Analytics",
+          "name": "Decision-support interfaces",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Literature review",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Qualitative research",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Stakeholder interviews",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Requirements elicitation",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Visual semiotics",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Discourse analysis",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Benchmark design",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Ablation planning",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Error analysis",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Research",
+          "name": "Reproducibility",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "Docker",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "Docker Compose",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "Linux",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "Git",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "GitHub",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "Keycloak",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "OAuth 2.0",
+          "source": "Master career profile"
+        },
+        {
+          "category": "Infrastructure & Security",
+          "name": "OpenID Connect",
+          "source": "Master career profile"
+        }
+      ],
+      "experience": [
+        {
+          "organization": "MCI (Hamrah-e Aval)",
+          "role": "Software Engineer — Backend Engineering & Applied AI",
+          "period": "2020–Present",
+          "location": "Tehran, Iran",
+          "website": "https://mci.ir/web/en",
+          "slug": "mci-backend-applied-ai",
+          "translationKey": "a1111111-1111-1111-1111-111111111201",
+          "detailBody": "At MCI, my work spans backend engineering, applied AI, and stakeholder-facing product discovery in a large telecommunications environment. I translate interview findings into software, data, and AI architectures that can survive real operational constraints.\n\nRecent focus areas include benchmarking local and hosted LLMs, embedding and retrieval configurations, dataset preparation for RAG and fine-tuning, and the full delivery loop from implementation through documentation and knowledge transfer.",
+          "bullets": [
+            "Elicited requirements through stakeholder interviews and translated them into software, data, and AI architectures.",
+            "Designed data models and backend services using Java, Spring Boot, Python, PostgreSQL, Oracle, and MongoDB.",
+            "Benchmarked LLMs, embedding models, and retrieval configurations under deployment constraints.",
+            "Prepared and structured datasets for RAG and fine-tuning workflows.",
+            "Supported implementation, testing, deployment, documentation, knowledge transfer, and continuous improvement."
+          ]
+        },
+        {
+          "organization": "National Administrative and Employment Organization of Iran",
+          "role": "Researcher & Product Designer",
+          "period": "2022–2025",
+          "location": "Tehran, Iran",
+          "bullets": [
+            "Researched dashboard design, visual perception, cognitive load, HCI, interaction patterns, evaluation, governance, and responsible AI enhancement.",
+            "Conducted requirements discovery and interviews with stakeholders at strategic, tactical, and operational levels.",
+            "Analyzed information needs and KPI structures; designed the framework, design system, layouts, interaction logic, and iterative review process.",
+            "Documented implementation experience and authored the scientific dashboard-design book manuscript."
+          ]
+        },
+        {
+          "organization": "Shaparak Electronic Card Payment Network System",
+          "role": "Full-Stack Developer",
+          "period": "2024",
+          "location": "Tehran, Iran",
+          "website": "https://shaparak.ir/",
+          "bullets": [
+            "Debugged, maintained, and extended legacy systems in a national payment-regulation context.",
+            "Developed organizational workbench and dashboard features using Vue.js, JSP, Java, Spring Boot, and Oracle.",
+            "Analyzed requirements and comparable systems, designed data models, and investigated technical issues and emerging needs."
+          ]
+        },
+        {
+          "organization": "Sajaya Negar",
+          "role": "Full-Stack Developer & UI/UX Consultant",
+          "period": "2020",
+          "location": "Tehran, Iran",
+          "website": "https://sajayanegar.ir/",
+          "bullets": [
+            "Designed data models, researched new requirements, and contributed to full-stack development and implementation."
+          ]
+        },
+        {
+          "organization": "Tiro",
+          "role": "UI/UX Designer — Electric-Vehicle In-Vehicle Software",
+          "period": "Project engagement",
+          "location": "Tehran, Iran",
+          "bullets": [
+            "Conducted international competitive research and designed an in-vehicle software interface for managing internal vehicle functions."
+          ]
+        }
+      ],
+      "education": [
+        {
+          "institution": "Shahed University",
+          "degree": "Master's Degree",
+          "field": "Visual Communication",
+          "period": "2018–2022",
+          "gpa": "17.52/20",
+          "thesis": "Analysis of Visual Elements in Iranian Presidential Campaign Advertisements (1997–2017).",
+          "slug": "shahed-visual-communication-masters",
+          "translationKey": "a1111111-1111-1111-1111-111111111301",
+          "detailBody": "The master's program combined visual communication theory, research methodology, and applied analysis of political campaign media. The thesis examined how Reformist and Principlist presidential campaigns used visual elements between 1997 and 2017.\n\nThat research later informed both the visual political communication project and the broader dashboard-design work on how visual structure shapes interpretation, trust, and decision quality."
+        },
+        {
+          "institution": "Sooreh University",
+          "degree": "Bachelor's Degree",
+          "field": "Interior Architecture",
+          "period": "2014–2018",
+          "gpa": "16.48/20"
+        }
+      ],
+      "publications": [
+        {
+          "title": "A Comparative Analysis of Reformist and Principlist Visual Discourses in Presidential Elections (1997–2017)",
+          "status": "Manuscript in final revision"
+        },
+        {
+          "title": "Guidelines for Designing Information Dashboards Using Data Storytelling Methodology",
+          "status": "Persian book manuscript, approximately 330 pages and 12 chapters; second editorial revision in preparation for publication"
+        },
+        {
+          "title": "VTD-Edge: Reliable, Privacy-Preserving Persian NLP-to-SQL on Resource-Constrained Devices",
+          "status": "Technical manuscript in preparation",
+          "slug": "vtd-edge-persian-nlp-to-sql",
+          "translationKey": "a1111111-1111-1111-1111-111111111401",
+          "detailBody": "This manuscript documents the VTD-Edge research line: a privacy-preserving Persian NLP-to-SQL system designed for resource-constrained devices. It extends the practical PARS-SQL runtime with formal reliability, safety, and evaluation framing.\n\nThe writing emphasizes abstention, unsafe-query routing, reproducible benchmarking, and the gap between demo-grade Text-to-SQL and systems that can be trusted in mental-health and lifestyle analytics contexts."
+        }
+      ],
+      "researchProjects": [
+        {
+          "title": "PARS-SQL / VTD-Edge",
+          "url": "https://github.com/tahamohamadi-ir/ADHD-VTD",
+          "linkLabel": "GitHub",
+          "summary": "Local, privacy-first Persian Text-to-SQL system for mental-health and lifestyle analytics. Supports colloquial Persian, typos, Finglish, mixed Persian-English, Jalali date expressions, ambiguity handling, unsafe-query routing, validation, abstention, and explainable output. Research runtime and edge runtime share a common normalization, linking, validation, execution, and formatting core. Evaluation plan prioritizes reliability, safety, robustness, latency, memory, dataset documentation, human agreement, and reproducibility.",
+          "slug": "pars-sql-vtd-edge",
+          "translationKey": "a1111111-1111-1111-1111-111111111101",
+          "detailBody": "PARS-SQL / VTD-Edge is a local, privacy-first Persian Text-to-SQL system aimed at mental-health and lifestyle analytics. The runtime accepts colloquial Persian, typos, Finglish, mixed Persian-English phrasing, and Jalali date expressions, then routes unsafe or ambiguous requests through validation, abstention, and explainable output paths.\n\nResearch and edge runtimes share a common normalization, linking, validation, execution, and formatting core. The evaluation plan prioritizes reliability, safety, robustness, latency, memory use, dataset documentation, human agreement, and reproducibility rather than demo-only accuracy claims."
+        },
+        {
+          "title": "Story-Driven Dashboard Design Framework",
+          "summary": "Design-science framework for transforming static KPI panels into narrative decision-support systems. Integrates data storytelling, DIKW, SMART/GQM/GQMD, data architecture, visual perception, cognitive load, HCI, interaction, evaluation, training, governance, and AI-enhanced analytics. Applied in a national public-administration case with nine organizational dashboard suites.",
+          "slug": "story-driven-dashboard-design",
+          "translationKey": "a1111111-1111-1111-1111-111111111102",
+          "detailBody": "This design-science framework transforms static KPI panels into narrative decision-support systems. It integrates data storytelling, DIKW, SMART/GQM/GQMD, data architecture, visual perception, cognitive load, HCI, interaction design, evaluation, training, governance, and AI-enhanced analytics.\n\nThe framework was applied in a national public-administration case spanning nine organizational dashboard suites, with explicit attention to stakeholder interviews, KPI structure, layout logic, and iterative review rather than cosmetic dashboard refresh."
+        },
+        {
+          "title": "Visual Political Communication Research",
+          "summary": "Comparative study of Reformist and Principlist visual discourse in Iranian presidential campaigns from 1997 to 2017. Corpus of 80 images and 33 campaign films; 18 purposively selected discursive prototypes for intensive analysis. Methodology combined Barthesian visual semiotics, Laclau/Mouffe discourse theory, a structured codebook, Excel-based coding matrices, and intra-coder reliability checks.",
+          "slug": "visual-political-communication-research",
+          "translationKey": "a1111111-1111-1111-1111-111111111103",
+          "detailBody": "This comparative study analyzes Reformist and Principlist visual discourse in Iranian presidential campaigns from 1997 to 2017. The corpus includes 80 images and 33 campaign films, with 18 purposively selected discursive prototypes chosen for intensive analysis.\n\nThe methodology combines Barthesian visual semiotics, Laclau/Mouffe discourse theory, a structured codebook, Excel-based coding matrices, and intra-coder reliability checks. The work connects directly to the master's thesis and to later interface-design research on how visual structure shapes interpretation."
+        }
+      ],
+      "certificates": [
+        {
+          "name": "Stanford Medicine — AI Series: Introduction to Healthcare",
+          "detail": "12.0 hours — 2025"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: Introduction to Clinical Data",
+          "detail": "11.0 hours — 2025"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: Fundamentals of AI and Machine Learning in Healthcare",
+          "detail": "11.0 hours — 2026"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: Evaluations of AI Applications in Healthcare",
+          "detail": "9.5 hours — 2026"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: AI in Healthcare Capstone Project",
+          "detail": "11.0 hours — 2026"
+        },
+        {
+          "name": "Java Programming — Maktab Sharif Institute"
+        },
+        {
+          "name": "CCNA Networking Essentials"
+        }
+      ],
+      "socials": [
+        {
+          "platform": "LinkedIn",
+          "url": "https://linkedin.com/in/taha-mohammadi-95770986"
+        },
+        {
+          "platform": "GitHub",
+          "url": "https://github.com/tahamohamadi-ir"
+        },
+        {
+          "platform": "ORCID",
+          "url": "https://orcid.org/0009-0006-7736-7638"
+        }
+      ],
+      "availability": "Open to PhD opportunities, research collaboration, and professional opportunities."
+    },
+    "fa": {
+      "shortBio": "مهندس نرم‌افزار و پژوهشگر هوش مصنوعی کاربردی هستم که بر سیستم‌های LLM محلی، NLP-to-SQL فارسی، سکوهای بک‌اند و رابط‌های تحلیلی انسان‌محور تمرکز دارم. مهندسی، پژوهش و طراحی را برای ساخت سیستم‌های آگاه از حریم خصوصی که داده‌های پیچیده را به تجربه‌هایی قابل‌فهم و قابل‌اقدام تبدیل می‌کنند، در کنار هم قرار می‌دهم.",
+      "longBio": "Taha Mohammadi مهندس نرم‌افزار، پژوهشگر هوش مصنوعی کاربردی و طراح محصولات دادهٔ انسان‌محور است. کار او مهندسی بک‌اند سازمانی را به مدل‌های زبانی محلی، رابط‌های زبان طبیعی، روایت‌گری داده و سیستم‌های پشتیبان تصمیم پیوند می‌دهد. او در طرح‌های نرم‌افزاری و تحلیلی در حوزه‌های مخابرات، پرداخت الکترونیکی، آموزش و مدیریت عمومی مشارکت داشته و هم‌زمان برنامهٔ پژوهشی خود را پیرامون NLP-to-SQL قابل‌اعتماد فارسی، Edge AI، رابط‌های تحلیلی توضیح‌پذیر و سیستم‌های سلامتِ حافظ حریم خصوصی توسعه می‌دهد. پیشینهٔ میان‌رشته‌ای او در ارتباط تصویری و معماری داخلی، رویکردی متمایز به او داده است که نرم‌افزار را نه فقط زیرساخت، بلکه رابطی میان داده‌های پیچیده، شناخت انسان و اقدام پاسخ‌گو می‌داند.",
+      "skills": [
+        {
+          "category": "برنامه‌نویسی",
+          "name": "Java",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "برنامه‌نویسی",
+          "name": "Python",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "برنامه‌نویسی",
+          "name": "SQL",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "برنامه‌نویسی",
+          "name": "JavaScript",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "Spring Boot",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "FastAPI",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "REST APIs",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "Microservices",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "یکپارچه‌سازی سازمانی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "مدیریت هویت و دسترسی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مهندسی بک‌اند",
+          "name": "مستندسازی فنی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "RAG",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "LangChain",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "LangGraph",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "Embeddings",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "ChromaDB",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "LLMs محلی و کوانتیده",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "Text-to-SQL",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "STT",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "ارزیابی مدل",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "آماده‌سازی مجموعه‌داده",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سیستم‌های AI / LLM",
+          "name": "گردش‌کارهای Fine-tuning",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "PostgreSQL",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "Oracle",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "MongoDB",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "MariaDB",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "SQLite",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "طراحی Schema",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "مدل‌سازی داده",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "سکوهای داده",
+          "name": "پرس‌وجوی پیچیده",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "React",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "Vue.js",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "JSP",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "Figma",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "وایرفریم‌سازی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "جریان‌های کاربر",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "نمونه‌سازی تعاملی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "فرانت‌اند / UX",
+          "name": "سیستم‌های طراحی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مصورسازی / تحلیل داده",
+          "name": "طراحی داشبورد",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مصورسازی / تحلیل داده",
+          "name": "استخراج KPI",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مصورسازی / تحلیل داده",
+          "name": "روایت‌گری داده",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مصورسازی / تحلیل داده",
+          "name": "مصورسازی اطلاعات",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "مصورسازی / تحلیل داده",
+          "name": "رابط‌های پشتیبان تصمیم",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "مرور ادبیات",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "پژوهش کیفی",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "مصاحبه با ذی‌نفعان",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "استخراج نیازمندی‌ها",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "نشانه‌شناسی بصری",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "تحلیل گفتمان",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "طراحی Benchmark",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "برنامه‌ریزی آزمون Ablation",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "تحلیل خطا",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "پژوهش",
+          "name": "تکرارپذیری",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "Docker",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "Docker Compose",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "Linux",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "Git",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "GitHub",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "Keycloak",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "OAuth 2.0",
+          "source": "پروفایل جامع حرفه‌ای"
+        },
+        {
+          "category": "زیرساخت و امنیت",
+          "name": "OpenID Connect",
+          "source": "پروفایل جامع حرفه‌ای"
+        }
+      ],
+      "experience": [
+        {
+          "organization": "MCI (Hamrah-e Aval)",
+          "role": "مهندس نرم‌افزار — مهندسی بک‌اند و هوش مصنوعی کاربردی",
+          "period": "2020–اکنون",
+          "location": "تهران، ایران",
+          "website": "https://mci.ir/web/en",
+          "slug": "mci-backend-applied-ai",
+          "translationKey": "a1111111-1111-1111-1111-111111111201",
+          "detailBody": "در MCI، کار من میان مهندسی بک‌اند، هوش مصنوعی کاربردی و کشف نیازمندی با ذی‌نفعان در یک محیط مخابراتی بزرگ جریان دارد. یافته‌های مصاحبه را به معماری‌های نرم‌افزار، داده و AI تبدیل می‌کنم که بتوانند محدودیت‌های عملیاتی واقعی را تحمل کنند.\n\nتمرکزهای اخیر شامل ارزیابی LLMهای محلی و میزبانی‌شده، پیکربندی embedding و بازیابی، آماده‌سازی مجموعه‌داده برای RAG و fine-tuning، و چرخهٔ کامل تحویل از پیاده‌سازی تا مستندسازی و انتقال دانش است.",
+          "bullets": [
+            "نیازمندی‌ها را از طریق مصاحبه با ذی‌نفعان استخراج و به معماری‌های نرم‌افزار، داده و هوش مصنوعی تبدیل کردم.",
+            "مدل‌های داده و سرویس‌های سمت‌سرور را با استفاده از Java، Spring Boot، Python، PostgreSQL، Oracle و MongoDB طراحی کردم.",
+            "مدل‌های LLMs، مدل‌های embedding و پیکربندی‌های بازیابی را تحت محدودیت‌های استقرار ارزیابی کردم.",
+            "مجموعه‌داده‌ها را برای گردش‌کارهای RAG و fine-tuning آماده و ساختاربندی کردم.",
+            "از پیاده‌سازی، آزمون، استقرار، مستندسازی، انتقال دانش و بهبود مستمر پشتیبانی کردم."
+          ]
+        },
+        {
+          "organization": "National Administrative and Employment Organization of Iran",
+          "role": "پژوهشگر و طراح محصول",
+          "period": "2022–2025",
+          "location": "تهران، ایران",
+          "bullets": [
+            "دربارهٔ طراحی داشبورد، ادراک بصری، بار شناختی، HCI، الگوهای تعامل، ارزیابی، حکمرانی و ارتقای مسئولانهٔ AI پژوهش کردم.",
+            "نیازمندی‌ها را شناسایی کردم و با ذی‌نفعان در سطوح راهبردی، تاکتیکی و عملیاتی مصاحبه کردم.",
+            "نیازهای اطلاعاتی و ساختارهای KPI را تحلیل کردم؛ چارچوب، سیستم طراحی، چیدمان‌ها، منطق تعامل و فرایند بازبینی تکرارشونده را طراحی کردم.",
+            "تجربهٔ پیاده‌سازی را مستند کردم و دست‌نوشتهٔ کتاب علمی دربارهٔ طراحی داشبورد را تألیف کردم."
+          ]
+        },
+        {
+          "organization": "Shaparak Electronic Card Payment Network System",
+          "role": "توسعه‌دهندهٔ فول‌استک",
+          "period": "2024",
+          "location": "تهران، ایران",
+          "website": "https://shaparak.ir/",
+          "bullets": [
+            "سامانه‌های قدیمی را در بستر مقررات‌گذاری ملی پرداخت اشکال‌زدایی، نگهداری و توسعه دادم.",
+            "قابلیت‌های میزکار سازمانی و داشبورد را با استفاده از Vue.js، JSP، Java، Spring Boot و Oracle توسعه دادم.",
+            "نیازمندی‌ها و سامانه‌های مشابه را تحلیل کردم، مدل‌های داده را طراحی کردم و مسائل فنی و نیازهای نوظهور را بررسی کردم."
+          ]
+        },
+        {
+          "organization": "Sajaya Negar",
+          "role": "توسعه‌دهندهٔ فول‌استک و مشاور UI/UX",
+          "period": "2020",
+          "location": "تهران، ایران",
+          "website": "https://sajayanegar.ir/",
+          "bullets": [
+            "مدل‌های داده را طراحی کردم، نیازمندی‌های جدید را بررسی کردم و در توسعه و پیاده‌سازی فول‌استک مشارکت کردم."
+          ]
+        },
+        {
+          "organization": "Tiro",
+          "role": "طراح UI/UX — نرم‌افزار داخل خودروهای برقی",
+          "period": "همکاری پروژه‌ای",
+          "location": "تهران، ایران",
+          "bullets": [
+            "پژوهش رقابتی بین‌المللی انجام دادم و رابط نرم‌افزار داخل خودرو را برای مدیریت عملکردهای داخلی خودرو طراحی کردم."
+          ]
+        }
+      ],
+      "education": [
+        {
+          "institution": "Shahed University",
+          "degree": "کارشناسی ارشد",
+          "field": "ارتباط تصویری",
+          "period": "2018–2022",
+          "gpa": "17.52/20",
+          "thesis": "تحلیل عناصر بصری در تبلیغات انتخاباتی ریاست‌جمهوری ایران (1997–2017).",
+          "slug": "shahed-visual-communication-masters",
+          "translationKey": "a1111111-1111-1111-1111-111111111301",
+          "detailBody": "برنامهٔ کارشناسی ارشد، نظریهٔ ارتباط تصویری، روش‌شناسی پژوهش و تحلیل کاربردی رسانه‌های انتخاباتی را در کنار هم قرار داد. پایان‌نامه بررسی کرد که کارزارهای انتخاباتی اصلاح‌طلب و اصول‌گرا بین 1997 و 2017 چگونه از عناصر بصری استفاده کرده‌اند.\n\nاین پژوهش بعدها هم به پروژهٔ ارتباطات سیاسی بصری و هم به کار گسترده‌تر طراحی داشبورد دربارهٔ نقش ساختار بصری در تفسیر، اعتماد و کیفیت تصمیم‌گیری متصل شد."
+        },
+        {
+          "institution": "Sooreh University",
+          "degree": "کارشناسی",
+          "field": "معماری داخلی",
+          "period": "2014–2018",
+          "gpa": "16.48/20"
+        }
+      ],
+      "publications": [
+        {
+          "title": "تحلیلی تطبیقی از گفتمان‌های بصری اصلاح‌طلبان و اصول‌گرایان در انتخابات ریاست‌جمهوری (1997–2017)",
+          "status": "دست‌نوشته در مرحلهٔ بازبینی نهایی"
+        },
+        {
+          "title": "راهنمای طراحی داشبوردهای اطلاعاتی با استفاده از روش‌شناسی روایت‌گری داده",
+          "status": "دست‌نوشتهٔ کتاب فارسی، در حدود 330 صفحه و 12 فصل؛ بازبینی ویراستاری دوم برای آماده‌سازی انتشار در دست انجام است"
+        },
+        {
+          "title": "VTD-Edge: NLP-to-SQL فارسیِ قابل‌اعتماد و حافظ حریم خصوصی روی دستگاه‌های با منابع محدود",
+          "status": "دست‌نوشتهٔ فنی در دست تهیه",
+          "slug": "vtd-edge-persian-nlp-to-sql",
+          "translationKey": "a1111111-1111-1111-1111-111111111401",
+          "detailBody": "این دست‌نوشته خط پژوهشی VTD-Edge را مستند می‌کند: سامانه‌ای NLP-to-SQL فارسی و حافظ حریم خصوصی که برای دستگاه‌های با منابع محدود طراحی شده است. این کار، زمان‌اجرای عملی PARS-SQL را با چارچوب رسمی قابلیت اعتماد، ایمنی و ارزیابی گسترش می‌دهد.\n\nنوشتار بر خودداری از پاسخ، مسیردهی پرس‌وجوهای ناایمن، بنچمارک تکرارپذیر و فاصلهٔ میان Text-to-SQL نمایشی و سامانه‌های قابل‌اعتماد در زمینهٔ تحلیل سلامت روان و سبک زندگی تأکید دارد."
+        }
+      ],
+      "researchProjects": [
+        {
+          "title": "PARS-SQL / VTD-Edge",
+          "url": "https://github.com/tahamohamadi-ir/ADHD-VTD",
+          "linkLabel": "GitHub",
+          "summary": "سامانه‌ای محلی و حریم‌خصوصی‌محور برای Text-to-SQL فارسی در تحلیل سلامت روان و سبک زندگی. از فارسی محاوره‌ای، خطاهای تایپی، Finglish، ترکیب فارسی و انگلیسی، عبارت‌های تاریخ Jalali، مدیریت ابهام، مسیردهی پرس‌وجوهای ناایمن، اعتبارسنجی، خودداری از پاسخ و خروجی توضیح‌پذیر پشتیبانی می‌کند. زمان‌اجرای پژوهشی و زمان‌اجرای edge هستهٔ مشترکی برای نرمال‌سازی، پیونددهی، اعتبارسنجی، اجرا و قالب‌بندی دارند. برنامهٔ ارزیابی، قابلیت اعتماد، ایمنی، استحکام، تأخیر، حافظه، مستندسازی مجموعه‌داده، توافق انسانی و تکرارپذیری را در اولویت قرار می‌دهد.",
+          "slug": "pars-sql-vtd-edge",
+          "translationKey": "a1111111-1111-1111-1111-111111111101",
+          "detailBody": "PARS-SQL / VTD-Edge یک سامانهٔ محلی و حافظ حریم خصوصی برای Text-to-SQL فارسی در تحلیل سلامت روان و سبک زندگی است. این زمان‌اجرا فارسی محاوره‌ای، خطاهای تایپی، Finglish، ترکیب فارسی و انگلیسی و عبارت‌های تاریخ Jalali را می‌پذیرد و سپس درخواست‌های ناایمن یا مبهم را از مسیر اعتبارسنجی، خودداری از پاسخ و خروجی توضیح‌پذیر عبور می‌دهد.\n\nزمان‌اجرای پژوهشی و edge هستهٔ مشترکی برای نرمال‌سازی، پیونددهی، اعتبارسنجی، اجرا و قالب‌بندی دارند. برنامهٔ ارزیابی، قابلیت اعتماد، ایمنی، استحکام، تأخیر، مصرف حافظه، مستندسازی مجموعه‌داده، توافق انسانی و تکرارپذیری را بر دقت نمایشی اولویت می‌دهد."
+        },
+        {
+          "title": "چارچوب طراحی داشبورد روایت‌محور",
+          "summary": "چارچوبی مبتنی بر علم طراحی برای تبدیل پنل‌های ایستای KPI به سامانه‌های روایت‌محورِ پشتیبان تصمیم. این چارچوب روایت‌گری داده، DIKW، SMART/GQM/GQMD، معماری داده، ادراک بصری، بار شناختی، HCI، تعامل، ارزیابی، آموزش، حکمرانی و تحلیل تقویت‌شده با AI را یکپارچه می‌کند. در یک مطالعهٔ موردی از ادارهٔ عمومی در سطح ملی، روی 9 مجموعهٔ داشبورد سازمانی به کار گرفته شد.",
+          "slug": "story-driven-dashboard-design",
+          "translationKey": "a1111111-1111-1111-1111-111111111102",
+          "detailBody": "این چارچوب مبتنی بر علم طراحی، پنل‌های ایستای KPI را به سامانه‌های روایت‌محور پشتیبان تصمیم تبدیل می‌کند. روایت‌گری داده، DIKW، SMART/GQM/GQMD، معماری داده، ادراک بصری، بار شناختی، HCI، طراحی تعامل، ارزیابی، آموزش، حکمرانی و تحلیل تقویت‌شده با AI را یکپارچه می‌کند.\n\nاین چارچوب در یک مطالعهٔ موردی ملی با نه مجموعهٔ داشبورد سازمانی به کار گرفته شد و بر مصاحبه با ذی‌نفعان، ساختار KPI، منطق چیدمان و بازبینی تکرارشونده تمرکز داشت نه صرفاً بازطراحی ظاهری داشبورد."
+        },
+        {
+          "title": "پژوهش ارتباطات سیاسی بصری",
+          "summary": "مطالعه‌ای تطبیقی دربارهٔ گفتمان بصری اصلاح‌طلبان و اصول‌گرایان در کارزارهای انتخاباتی ریاست‌جمهوری ایران از 1997 تا 2017. پیکره شامل 80 تصویر و 33 فیلم انتخاباتی بود؛ 18 نمونهٔ گفتمانیِ هدفمند برای تحلیل عمیق انتخاب شد. روش‌شناسی، نشانه‌شناسی بصریِ Barthesian، نظریهٔ گفتمان Laclau/Mouffe، کتابچهٔ کدگذاری ساختاریافته، ماتریس‌های کدگذاری مبتنی بر Excel و بررسی‌های پایایی درون‌کدگذار را ترکیب کرد.",
+          "slug": "visual-political-communication-research",
+          "translationKey": "a1111111-1111-1111-1111-111111111103",
+          "detailBody": "این مطالعهٔ تطبیقی، گفتمان بصری اصلاح‌طلبان و اصول‌گرایان در کارزارهای انتخاباتی ریاست‌جمهوری ایران از 1997 تا 2017 را تحلیل می‌کند. پیکره شامل 80 تصویر و 33 فیلم انتخاباتی است و 18 نمونهٔ گفتمانی هدفمند برای تحلیل عمیق انتخاب شده‌اند.\n\nروش‌شناسی، نشانه‌شناسی بصری Barthesian، نظریهٔ گفتمان Laclau/Mouffe، کتابچهٔ کدگذاری ساختاریافته، ماتریس‌های کدگذاری مبتنی بر Excel و بررسی پایایی درون‌کدگذار را ترکیب می‌کند. این کار مستقیماً به پایان‌نامهٔ کارشناسی ارشد و پژوهش‌های بعدی طراحی رابط دربارهٔ نقش ساختار بصری در تفسیر متصل است."
+        }
+      ],
+      "certificates": [
+        {
+          "name": "Stanford Medicine — AI Series: مقدمه‌ای بر مراقبت‌های سلامت",
+          "detail": "12.0 ساعت — 2025"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: مقدمه‌ای بر داده‌های بالینی",
+          "detail": "11.0 ساعت — 2025"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: مبانی AI و یادگیری ماشین در مراقبت‌های سلامت",
+          "detail": "11.0 ساعت — 2026"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: ارزیابی کاربردهای AI در مراقبت‌های سلامت",
+          "detail": "9.5 ساعت — 2026"
+        },
+        {
+          "name": "Stanford Medicine — AI Series: پروژهٔ نهایی AI در مراقبت‌های سلامت",
+          "detail": "11.0 ساعت — 2026"
+        },
+        {
+          "name": "برنامه‌نویسی Java — Maktab Sharif Institute"
+        },
+        {
+          "name": "CCNA — مبانی شبکه"
+        }
+      ],
+      "socials": [
+        {
+          "platform": "LinkedIn",
+          "url": "https://linkedin.com/in/taha-mohammadi-95770986"
+        },
+        {
+          "platform": "GitHub",
+          "url": "https://github.com/tahamohamadi-ir"
+        },
+        {
+          "platform": "ORCID",
+          "url": "https://orcid.org/0009-0006-7736-7638"
+        }
+      ],
+      "availability": "برای فرصت‌های دکتری، همکاری پژوهشی و فرصت‌های حرفه‌ای آمادهٔ گفتگو هستم."
+    }
+  }
+}

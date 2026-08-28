@@ -1,0 +1,6 @@
+---
+description: Backend repository rules
+alwaysApply: true
+---
+
+Read AGENTS.md and PROJECT-MANIFEST.md before editing. Preserve migrated behavior unless explicitly changed with tests. Never invent contracts, weaken server authorization, commit secrets/data, or execute legacy infrastructure before its paths are rewritten and verified.

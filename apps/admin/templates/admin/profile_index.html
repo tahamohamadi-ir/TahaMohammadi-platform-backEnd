@@ -1,0 +1,80 @@
+{% extends "security/staff_base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'taha_admin/profile_editor.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="tp-admin-index">
+  <p><a class="button button-secondary" href="/admin/">SPA admin</a></p>
+  <div class="tp-admin-metrics">
+    <article class="tp-admin-card">
+      <span class="tp-admin-card__label">Profiles</span>
+      <strong class="tp-admin-card__value">{{ total_profiles }}</strong>
+      <p class="tp-admin-card__meta">Same-origin records editable in the staff session.</p>
+    </article>
+    <article class="tp-admin-card">
+      <span class="tp-admin-card__label">Published</span>
+      <strong class="tp-admin-card__value">{{ published_profiles }}</strong>
+      <p class="tp-admin-card__meta">Lifecycle stays independent per locale.</p>
+    </article>
+  </div>
+
+  <section class="tp-admin-panel">
+    <header class="tp-admin-panel__header">
+      <div>
+        <h2 class="tp-admin-panel__title">Profile records</h2>
+        <p class="tp-admin-panel__meta">Prefer the SPA content editor; this HTML page remains a staff fallback.</p>
+      </div>
+    </header>
+
+    <div class="tp-admin-table-wrap">
+      <table class="tp-admin-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Locale</th>
+            <th>Lifecycle</th>
+            <th>Translation</th>
+            <th>Revision</th>
+            <th>Completeness</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>
+              <strong>{{ row.title }}</strong>
+              <div class="tp-admin-table__slug"><code>{{ row.slug }}</code></div>
+            </td>
+            <td dir="{{ row.dir }}">{{ row.localeLabel }}</td>
+            <td><span class="tp-badge">{{ row.status }}</span></td>
+            <td><span class="tp-badge tp-badge--muted">{{ row.translationStatus }}</span></td>
+            <td>{{ row.revision }}</td>
+            <td>
+              <div class="tp-completeness">
+                <span class="tp-completeness__item {% if row.completeness.title %}is-complete{% endif %}">Title</span>
+                <span class="tp-completeness__item {% if row.completeness.slug %}is-complete{% endif %}">Slug</span>
+                <span class="tp-completeness__item {% if row.completeness.body %}is-complete{% endif %}">Body</span>
+                <span class="tp-completeness__item {% if row.completeness.seo %}is-complete{% endif %}">SEO</span>
+              </div>
+            </td>
+            <td class="tp-admin-table__actions">
+              <a class="button button-small button-secondary" href="{{ row.href }}">Open editor</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7">No profile records exist in this checkout yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

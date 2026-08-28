@@ -1,0 +1,41 @@
+# Local laptop stack (mode A1/A2) — taha-local project.
+# NEVER used by production deploy; prod uses infra/cms/docker-compose.cms.yml.
+name: taha-local
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: taha-local-db
+    environment:
+      POSTGRES_USER: taha
+      POSTGRES_PASSWORD: taha_local_only
+      POSTGRES_DB: taha
+    ports:
+      - "15432:5432"
+    volumes:
+      - taha-local-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taha -d taha"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Mode A2 only (full-docker rehearsal). Mode A1 runs Django on the host.
+  cms:
+    build:
+      context: ../../apps/cms
+      dockerfile: Dockerfile.cms
+    container_name: taha-local-cms
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DATABASE_URL: postgres://taha:taha_local_only@db:5432/taha
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "18001:18000"
+    profiles: ["a2"]
+
+volumes:
+  taha-local-db-data:

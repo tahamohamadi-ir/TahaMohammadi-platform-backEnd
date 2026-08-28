@@ -1,0 +1,13 @@
+{% load i18n %}
+<p>
+    {% if has_totp %}
+        {% trans "TOTP is enabled. You will need an authenticator code at each sign-in." %}
+    {% else %}
+        {% trans "TOTP is not set up yet. Enable it before using the rest of the admin." %}
+    {% endif %}
+</p>
+<p>
+    <a class="button {% if has_totp %}button-secondary{% endif %}" href="{{ setup_url }}">
+        {% if has_totp %}{% trans "View two-factor status" %}{% else %}{% trans "Set up authenticator app" %}{% endif %}
+    </a>
+</p>

@@ -1,0 +1,11 @@
+[Unit]
+Description=Every-minute schedule for due CMS scheduled publishes
+
+[Timer]
+OnCalendar=*-*-* *:*:00 UTC
+Persistent=true
+AccuracySec=30s
+Unit=taha-publish-scheduled-content.service
+
+[Install]
+WantedBy=timers.target

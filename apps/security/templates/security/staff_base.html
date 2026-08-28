@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{% block title %}Staff{% endblock %}</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 56rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.45;
+      }
+      .help {
+        color: #555;
+      }
+      .button {
+        display: inline-block;
+        margin: 0.25rem 0.25rem 0.25rem 0;
+        padding: 0.4rem 0.75rem;
+        background: #1a1a1a;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 4px;
+        border: 0;
+        cursor: pointer;
+      }
+      .button-secondary {
+        background: #555;
+      }
+      .errors,
+      .errorlist {
+        color: #b00020;
+      }
+      code {
+        font-size: 0.95em;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #ddd;
+        text-align: left;
+        padding: 0.4rem;
+      }
+    </style>
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    {% if messages %}
+    <ul>
+      {% for message in messages %}
+      <li>{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </body>
+</html>

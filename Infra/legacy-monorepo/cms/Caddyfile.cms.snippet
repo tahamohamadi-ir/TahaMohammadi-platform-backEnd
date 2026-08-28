@@ -1,0 +1,69 @@
+# SUPERSEDED ? this file is replaced by infra/caddy/Caddyfile which is the
+# single source of truth for the full production Caddyfile. Kept as a
+# documentation reference only. Do not use for deployment.
+#
+# Caddy reverse-proxy snippet for the CMS runtime (same origin as the static site).
+#
+# Architecture:
+#   Internet ? Caddy (TLS)
+#     handle /admin/*         ? reverse_proxy 127.0.0.1:18000   (React admin SPA, ADR-0026)
+#     handle /staff/*         ? reverse_proxy 127.0.0.1:18000   (Django staff HTML: login/preview/MFA)
+#     handle /static/*        ? reverse_proxy 127.0.0.1:18000   (Django/SPA static assets)
+#     handle /health/*        ? reverse_proxy 127.0.0.1:18000   (NOT /health* ? that would steal /health.json)
+#     import taha_application_routes / file_server
+#
+# Insert these `handle` blocks INSIDE the tahamohamadi.ir site block, BEFORE
+# `import taha_application_routes` (or any catch-all file_server). Order matters.
+#
+# Match the live VPS style: `/admin/*` `/static/*` `/health/*` (not bare `/admin*`).
+# Do NOT proxy /api/ or /media/ until owner approves DEFER-0017.
+# When approved, merge infra/cms/Caddyfile.cms.api.snippet (see
+# docs/plan/P3-public-api-caddy-task-spec.md) before file_server.
+#
+# After edit: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Keep a timestamped Caddyfile backup before applying.
+#
+# Evidence 2026-08-16: without handle /static/*, public CSS 404s on the Astro
+# file_server while loopback CMS returns 200 with X-Forwarded-Proto: https.
+
+redir /admin /admin/ 308
+
+handle /admin/* {
+	reverse_proxy 127.0.0.1:18000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_down X-Robots-Tag "noindex, nofollow"
+		header_down Cache-Control "no-store, no-cache, must-revalidate"
+	}
+}
+
+# Django staff HTML (DEBT-0003): LOGIN_URL, staff preview, MFA fallback.
+# Matched explicitly because `/admin/*` does not match `/staff/*`.
+redir /staff /staff/ 308
+
+handle /staff/* {
+	reverse_proxy 127.0.0.1:18000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_down X-Robots-Tag "noindex, nofollow"
+		header_down Cache-Control "no-store, no-cache, must-revalidate"
+	}
+}
+
+handle /static/* {
+	reverse_proxy 127.0.0.1:18000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_down X-Robots-Tag "noindex, nofollow"
+		header_down Cache-Control "public, max-age=3600"
+	}
+}
+
+handle /health/* {
+	reverse_proxy 127.0.0.1:18000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_down X-Robots-Tag "noindex, nofollow"
+		header_down Cache-Control "no-store"
+	}
+}

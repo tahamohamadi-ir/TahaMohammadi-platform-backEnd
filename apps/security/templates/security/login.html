@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Staff sign in</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 28rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      label {
+        display: block;
+        margin-top: 0.75rem;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.4rem;
+      }
+      button {
+        margin-top: 1rem;
+      }
+      .errors {
+        color: #b00020;
+      }
+      .hint {
+        color: #555;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Staff sign in</h1>
+    <p class="hint">
+      Preferred path:
+      <a href="/admin/login/">SPA admin login</a>
+      (session + TOTP via API). This form is the Django fallback for staff preview
+      and HTML MFA.
+    </p>
+    {% if form.errors %}
+    <div class="errors">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <form method="post" action="">
+      {% csrf_token %}
+      {% if next %}
+      <input type="hidden" name="next" value="{{ next }}" />
+      {% endif %}
+      <label for="id_username">Username / email</label>
+      {{ form.username }}
+      {% if form.username.errors %}
+      <div class="errors">{{ form.username.errors }}</div>
+      {% endif %}
+      <label for="id_password">Password</label>
+      {{ form.password }}
+      {% if form.password.errors %}
+      <div class="errors">{{ form.password.errors }}</div>
+      {% endif %}
+      <label for="id_otp_token">Authenticator or recovery code</label>
+      {{ form.otp_token }}
+      {% if form.otp_token.errors %}
+      <div class="errors">{{ form.otp_token.errors }}</div>
+      {% endif %}
+      <button type="submit">Sign in</button>
+    </form>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{% extends "security/staff_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Recovery codes" %}{% endblock %}
+
+{% block content %}
+<main id="main">
+  <h1>{% trans "Save your recovery codes" %}</h1>
+  <p>{% trans "Each code can be used once if you lose access to your authenticator app. Store them offline. This page will not show them again." %}</p>
+  <ul>
+    {% for code in codes %}
+    <li><code>{{ code }}</code></li>
+    {% endfor %}
+  </ul>
+  <p>
+    <a class="button" href="{% url 'security_totp_setup' %}">{% trans "I have saved these codes" %}</a>
+    <a class="button button-secondary" href="/admin/">{% trans "Dashboard" %}</a>
+  </p>
+</main>
+{% endblock %}

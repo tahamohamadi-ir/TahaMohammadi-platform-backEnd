@@ -1,0 +1,57 @@
+{% extends "security/staff_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Two-factor authentication" %}{% endblock %}
+
+{% block content %}
+<main id="main">
+  <h1>{% trans "Two-factor authentication (TOTP)" %}</h1>
+
+  {% if enrolled %}
+  <p>{% trans "TOTP is enabled on this account. You will be asked for a code from your authenticator app at each sign-in." %}</p>
+  <p>{% blocktrans count counter=unused_recovery_codes %}{{ counter }} unused recovery code remains.{% plural %}{{ counter }} unused recovery codes remain.{% endblocktrans %}</p>
+  <p>
+    <a class="button" href="/admin/">{% trans "Back to dashboard" %}</a>
+    <a class="button button-secondary" href="{{ regenerate_url }}">{% trans "Regenerate recovery codes" %}</a>
+    <a class="button button-secondary" href="{{ disable_url }}">{% trans "Disable two-factor" %}</a>
+    <a class="button button-secondary" href="/admin/security">{% trans "SPA security" %}</a>
+  </p>
+  {% else %}
+  <p>{% trans "Scan this QR code with an authenticator app (Google Authenticator, 1Password, Authy, etc.), then enter the 6-digit code to confirm." %}</p>
+
+  {% if qrcode_url %}
+  <p>
+    <img src="{{ qrcode_url }}" alt="{% trans 'TOTP QR code' %}" width="200" height="200" />
+  </p>
+  {% endif %}
+
+  <p>
+    <strong>{% trans "Manual secret" %}:</strong>
+    <code>{{ manual_secret }}</code>
+  </p>
+  <p class="help">{% trans "Issuer" %}: <code>tahamohamadi.ir</code></p>
+
+  <form method="post" action="{% url 'security_totp_setup' %}" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <ul class="errorlist">
+      {% for error in form.non_field_errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <label for="{{ form.otp_token.id_for_label }}">{{ form.otp_token.label }}</label>
+    {{ form.otp_token }}
+    {% if form.otp_token.errors %}
+    <ul class="errorlist">
+      {% for error in form.otp_token.errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <button type="submit" class="button">{% trans "Confirm and enable" %}</button>
+    <a class="button button-secondary" href="/admin/security">{% trans "Cancel" %}</a>
+  </form>
+  {% endif %}
+</main>
+{% endblock %}

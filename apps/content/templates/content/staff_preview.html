@@ -1,0 +1,28 @@
+{% extends "security/staff_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Staff preview" %}: {{ title }}{% endblock %}
+
+{% block content %}
+<main id="main">
+  <p class="help">
+    {% if is_public_share %}
+    {% blocktrans with kind=kind status=status content_locale=content_locale %}
+    Shared preview link ({{ kind }} · {{ status }} · {{ content_locale }}). Expires soon. Not indexed.
+    {% endblocktrans %}
+    {% else %}
+    {% blocktrans with kind=kind status=status content_locale=content_locale %}
+    Staff-only preview ({{ kind }} · {{ status }} · {{ content_locale }}). Not public. Not indexed.
+    {% endblocktrans %}
+    {% endif %}
+  </p>
+  <h1>{{ title }}</h1>
+  <p class="help"><code>{{ slug }}</code></p>
+  <div class="staff-preview-body">
+    {{ body_html|safe }}
+  </div>
+  <p>
+    <a class="button button-secondary" href="/admin/">{% trans "Back to dashboard" %}</a>
+  </p>
+</main>
+{% endblock %}

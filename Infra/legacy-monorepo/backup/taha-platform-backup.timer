@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily schedule for Taha platform encrypted production backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+AccuracySec=1m
+Unit=taha-platform-backup.service
+
+[Install]
+WantedBy=timers.target

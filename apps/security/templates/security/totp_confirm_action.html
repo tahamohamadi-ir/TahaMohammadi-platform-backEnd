@@ -1,0 +1,32 @@
+{% extends "security/staff_base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<main id="main">
+  <h1>{{ title }}</h1>
+  <p>{{ intro }}</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <ul class="errorlist">
+      {% for error in form.non_field_errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <label for="{{ form.otp_token.id_for_label }}">{{ form.otp_token.label }}</label>
+    {{ form.otp_token }}
+    {% if form.otp_token.errors %}
+    <ul class="errorlist">
+      {% for error in form.otp_token.errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <button type="submit" class="button">{{ submit_label }}</button>
+    <a class="button button-secondary" href="{% url 'security_totp_setup' %}">{% trans "Cancel" %}</a>
+  </form>
+</main>
+{% endblock %}

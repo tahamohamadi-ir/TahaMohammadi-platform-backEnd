@@ -1,0 +1,15 @@
+[Unit]
+Description=Taha platform encrypted production backup
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/taha-backup.env
+ExecStart=/usr/local/sbin/taha-platform-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

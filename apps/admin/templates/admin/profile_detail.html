@@ -1,0 +1,24 @@
+{% extends "security/staff_base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'taha_admin/profile_editor.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="tp-editor-shell" lang="{{ chrome_locale }}" dir="{{ chrome_dir }}">
+  <div class="tp-editor-shell__toolbar">
+    <a class="button button-small button-secondary" href="{% url 'admin_profile_index' %}">Back to profiles</a>
+    <p class="tp-editor-shell__help">Edits save through the same-origin admin API and must send the current <code>If-Match</code> revision.</p>
+  </div>
+
+  <div class="tp-editor-shell__body" data-profile-editor-root>
+    <div class="loading-mask loading">Loading editor…</div>
+  </div>
+</section>
+
+{{ bootstrap|json_script:"profile-editor-bootstrap" }}
+<script src="{% static 'taha_admin/profile_editor.js' %}" defer></script>
+{% endblock %}
