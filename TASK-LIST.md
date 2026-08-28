@@ -9,7 +9,7 @@
 - [x] Preserve legacy infrastructure under an explicitly reference-only path.
 - [x] Add repository governance, architecture, API inventory, migration, quality, and operations documents.
 - [x] Establish a clean dependency sync and test result in the new path.
-- [ ] Commit and push the verified migration baseline.
+- [x] Commit and push the verified migration baseline to `origin/main`.
 
 ## Standalone extraction
 
