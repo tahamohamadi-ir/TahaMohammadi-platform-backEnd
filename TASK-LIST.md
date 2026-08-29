@@ -8,11 +8,11 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 
 ## BE-0 — Database and local runtime
 
-- [ ] **BACKEND-010** Document disposable PostgreSQL profile (host port, db, user, password policy) in `docs/operations/LOCAL-DATABASE.md`.
-- [ ] **BACKEND-020** Reconcile `.env.example` for Docker-local and standalone PostgreSQL; document conflict avoidance with legacy `tahamohamadi-website` stack.
-- [ ] **BACKEND-030** Boot Django with `config.settings.development` against disposable PostgreSQL.
-- [ ] **BACKEND-040** Run `migrate` on empty database; capture migration plan artifact.
-- [ ] **BACKEND-050** Verify `GET /health/`; record example response in `docs/operations/HEALTH-CHECK.md`.
+- [x] **BACKEND-010** Document disposable PostgreSQL profile (host port, db, user, password policy) in `docs/operations/LOCAL-DATABASE.md`.
+- [x] **BACKEND-020** Reconcile `.env.example` for Docker-local and standalone PostgreSQL; document conflict avoidance with legacy `tahamohamadi-website` stack.
+- [x] **BACKEND-030** Boot Django with `config.settings.development` against disposable PostgreSQL.
+- [x] **BACKEND-040** Run `migrate` on empty database; capture migration plan artifact.
+- [x] **BACKEND-050** Verify `GET /health/`; record example response in `docs/operations/HEALTH-CHECK.md`.
 
 ## BE-1 — Seed v1.1 import
 

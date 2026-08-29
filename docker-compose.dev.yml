@@ -1,0 +1,24 @@
+# Disposable PostgreSQL for new-platform local development (Wave 0).
+# NOT the legacy taha-local stack (host port 15432) or tahamohamadi-website (80/443).
+name: taha-platform-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: taha-platform-dev-db
+    environment:
+      POSTGRES_USER: taha_dev
+      POSTGRES_PASSWORD: taha_dev_local_only
+      POSTGRES_DB: taha_platform_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - taha-platform-dev-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taha_dev -d taha_platform_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  taha-platform-dev-db-data:
