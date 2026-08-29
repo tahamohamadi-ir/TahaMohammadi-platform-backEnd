@@ -16,9 +16,9 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 
 ## BE-1 — Seed v1.1 import
 
-- [ ] **BACKEND-060** Implement `import_content_seed` management command reading `Docs/01-product/owner-content-seed-v1/cms-package/content-records.v1.1-seed.json`.
-- [ ] **BACKEND-070** Import all 85 records as draft/not-public; apply `supplement/seed-settings.json` defaults where mapped.
-- [ ] **BACKEND-080** Add pytest: seed import idempotency + public API does not expose unpublished records.
+- [x] **BACKEND-060** Implement `import_content_seed` management command reading `Docs/01-product/owner-content-seed-v1/cms-package/content-records.v1.1-seed.json`.
+- [x] **BACKEND-070** Import all 85 records as draft/not-public; apply `supplement/seed-settings.json` defaults where mapped.
+- [x] **BACKEND-080** Add pytest: seed import idempotency + public API does not expose unpublished records.
 - [ ] **BACKEND-081** Map `seed.empty.*` records to route copy / unavailable surfaces without inventing facts.
 - [ ] **BACKEND-082** Map `admin.*` supplement records to admin-only models; verify public serializers omit them.
 

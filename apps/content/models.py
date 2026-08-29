@@ -2066,3 +2066,50 @@ class GraphEdge(models.Model):
                 )
         if errors:
             raise ValidationError(errors)
+
+
+class ContentSeedRecord(models.Model):
+    """Owner content seed row keyed by stable ``content_id`` (BACKEND-060..070).
+
+    Stores the canonical v1.1 seed payload and publication gate fields from the
+    JSON package. Typed CMS models may mirror mappable rows as ``draft`` only;
+    this table is the idempotent upsert target for all 85 seed records.
+    """
+
+    content_id = models.CharField(max_length=200, unique=True, db_index=True)
+    content_type = models.CharField(max_length=64, db_index=True)
+    locale = models.CharField(max_length=8, db_index=True)
+    slug = models.SlugField(max_length=200)
+    title = models.CharField(max_length=300)
+    approval_state = models.CharField(max_length=32)
+    publication_state = models.CharField(max_length=32)
+    translation_state = models.CharField(max_length=32)
+    visibility = models.CharField(max_length=32)
+    payload = models.JSONField()
+    package_version = models.CharField(max_length=64, blank=True, default="")
+    mapped_model_label = models.CharField(max_length=128, blank=True, default="")
+    mapped_object_id = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "content_seed_record"
+        ordering = ["content_id"]
+        indexes = [
+            models.Index(
+                fields=["content_type", "locale"],
+                name="seed_record_type_locale_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.content_id
+
+    @property
+    def is_publication_allowed(self) -> bool:
+        """Three-part gate from the seed package (never auto-satisfied on import)."""
+        return (
+            self.approval_state == "approved"
+            and self.publication_state == "published"
+            and self.visibility == "public"
+        )
