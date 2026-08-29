@@ -1,46 +1,67 @@
 # Backend Task List
 
-## Migration baseline
+Detailed execution queue. Cross-repo board: `../../Docs/05-delivery/MULTI-AGENT-TASK-BOARD.md` (IDs prefixed `BACKEND-`).
 
-- [x] Connect the independent Git repository.
-- [x] Copy 198 tracked backend files from the legacy monorepo.
-- [x] Verify every copied backend file by SHA-256.
-- [x] Exclude virtual environments, caches, local databases, media, build output, and secrets.
-- [x] Preserve legacy infrastructure under an explicitly reference-only path.
-- [x] Add repository governance, architecture, API inventory, migration, quality, and operations documents.
-- [x] Establish a clean dependency sync and test result in the new path.
-- [x] Commit and push the verified migration baseline to `origin/main`.
+Status: `[x]` done, `[ ]` open, `[~]` in progress.
 
-## Standalone extraction
+---
 
-- [x] Make bare Django CLI/WSGI/ASGI default to isolated SQLite development settings; production/local/test remain explicit.
-- [ ] Inventory every old monorepo path in scripts and infrastructure.
-- [ ] Decide and document standalone container/process topology.
-- [ ] Replace path assumptions and add environment validation.
-- [ ] Validate local PostgreSQL and disposable E2E profiles.
-- [ ] Rebuild backup and restore commands for this repository.
-- [ ] Validate deployment, health, logging, media, scheduled publishing, and rollback.
-- [ ] Verify the documented Docker-local database profile and standalone PostgreSQL alternative against `config.settings.local`.
+## BE-0 — Database and local runtime
 
-## Contract and integration
+- [ ] **BACKEND-010** Document disposable PostgreSQL profile (host port, db, user, password policy) in `docs/operations/LOCAL-DATABASE.md`.
+- [ ] **BACKEND-020** Reconcile `.env.example` for Docker-local and standalone PostgreSQL; document conflict avoidance with legacy `tahamohamadi-website` stack.
+- [ ] **BACKEND-030** Boot Django with `config.settings.development` against disposable PostgreSQL.
+- [ ] **BACKEND-040** Run `migrate` on empty database; capture migration plan artifact.
+- [ ] **BACKEND-050** Verify `GET /health/`; record example response in `docs/operations/HEALTH-CHECK.md`.
 
-- [x] Freeze an accepted public/admin OpenAPI snapshot (`Docs/03-contracts/OPENAPI-ACCEPTANCE.md`; provenance `scaffold-accepted`).
-- [x] Verify public OpenAPI anonymously and admin OpenAPI with a disposable verified staff-plus-OTP fixture.
-- [x] Generate source review snapshots and provenance with `scripts/export_openapi.py` (40 public paths; 47 admin paths; scaffold-accepted).
-- [x] Generate a source-plus-schema endpoint inventory with commit and SHA-256 metadata.
-- [ ] Reconcile public endpoints with public-site requirements.
-- [ ] Reconcile admin endpoints, permissions, CSRF/session, and MFA with admin requirements.
-- [ ] Normalize documented error envelopes without breaking compatibility.
-- [ ] Add response fixtures for admin `code/message/fields`, public `detail`, contact `ok/error`, form HTML, and framework validation variants.
-- [ ] Add frontend-consumer contract tests and seeded fixtures.
-- [ ] Decide deprecation plan for legacy `/admin/`, `/staff/`, `/api/admin/`, and rebuild routes.
+## BE-1 — Seed v1.1 import
 
-## Quality and release
+- [ ] **BACKEND-060** Implement `import_content_seed` management command reading `Docs/01-product/owner-content-seed-v1/cms-package/content-records.v1.1-seed.json`.
+- [ ] **BACKEND-070** Import all 85 records as draft/not-public; apply `supplement/seed-settings.json` defaults where mapped.
+- [ ] **BACKEND-080** Add pytest: seed import idempotency + public API does not expose unpublished records.
+- [ ] **BACKEND-081** Map `seed.empty.*` records to route copy / unavailable surfaces without inventing facts.
+- [ ] **BACKEND-082** Map `admin.*` supplement records to admin-only models; verify public serializers omit them.
 
-- [ ] Full tests and lint green in CI; the local migration baseline is green.
-- [ ] Migration forward/reverse rehearsal on a production-like copy.
-- [ ] Security, media, preview, contact, and rebuild threat review.
-- [ ] Backup/restore and disaster-recovery drill.
-- [ ] Staging integration with both new frontends.
-- [ ] Verify same-origin reverse-proxy session, CSRF, MFA, preview, contact, media, and logout behavior with both new frontends.
-- [ ] Cutover and rollback evidence accepted.
+## BE-2 — Legacy infra extraction
+
+- [ ] **BACKEND-090** Classify every file under `Infra/legacy-monorepo/` (rewrite, reference, delete).
+- [ ] **BACKEND-100** Author new-platform `docker-compose.yml` (API + PostgreSQL on non-conflicting port).
+- [ ] **BACKEND-101** Replace monorepo path assumptions in active scripts.
+- [ ] **BACKEND-102** Validate `config.settings.local` against Docker profile.
+- [ ] **BACKEND-160** Document backup/restore for new repository layout.
+
+## BE-3 — Contracts and OpenAPI
+
+- [x] Freeze accepted OpenAPI snapshot (`OPENAPI-ACCEPTANCE.md`; provenance `scaffold-accepted`).
+- [x] Verify public OpenAPI anonymously and admin OpenAPI with staff+OTP fixture.
+- [x] Export OpenAPI artifacts and endpoint inventory.
+- [ ] **BACKEND-110** Reconcile public endpoints vs central `ROUTE-REGISTRY.md`.
+- [ ] **BACKEND-120** Reconcile admin endpoints vs `Front-End/admin-panel/docs/architecture/WORKFLOW-API-MAP.md`.
+- [ ] **BACKEND-130** Add response fixtures per `ERROR-COMPATIBILITY-MATRIX.md`.
+- [ ] **BACKEND-140** OpenAPI hash drift tests (fail when artifact changes without acceptance).
+- [ ] **BACKEND-150** Error envelope normalization plan (non-breaking).
+- [ ] **BACKEND-151** Deprecation plan for legacy `/admin/`, `/staff/`, `/api/admin/` routes.
+
+## BE-4 — CI and quality
+
+- [ ] **BACKEND-041** GitHub Actions: `uv sync`, Ruff, pytest, `manage.py check`, OpenAPI fixture tests.
+- [ ] **BACKEND-042** GitHub Actions: OpenAPI export hash matches accepted provenance.
+- [ ] Migration forward/reverse rehearsal on production-like copy.
+- [ ] Security review: media, preview tokens, contact, rebuild callbacks.
+
+## BE-5 — Integration and release
+
+- [ ] **BACKEND-170** Same-origin integration test plan with new frontends.
+- [ ] **BACKEND-180** Browser smoke: sign-in, MFA, CSRF failure, session expiry, contact, preview, media.
+- [ ] **BACKEND-190** Permission matrix tests for all admin mutations.
+- [ ] **BACKEND-200** Staging artifact + rollback evidence (`R7` backend slice).
+
+---
+
+## Completed baseline (do not redo)
+
+- [x] Independent Git repository connected.
+- [x] 198-file migration with zero hash mismatches.
+- [x] Governance, architecture, contracts, quality docs.
+- [x] CPython 3.12 + `uv` environment; 636 pytest pass locally.
+- [x] Default CLI/WSGI/ASGI → development SQLite settings.

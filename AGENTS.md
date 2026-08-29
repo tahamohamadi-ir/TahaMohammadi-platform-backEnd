@@ -8,6 +8,7 @@
 4. `../Docs/03-contracts/`
 5. `docs/architecture/ARCHITECTURE.md`
 6. `TASK-LIST.md`
+7. `../Docs/05-delivery/MULTI-AGENT-TASK-BOARD.md` (pick one `BACKEND-*` task)
 
 ## Rules
 
