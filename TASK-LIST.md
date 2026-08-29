@@ -13,19 +13,25 @@
 
 ## Standalone extraction
 
+- [x] Make bare Django CLI/WSGI/ASGI default to isolated SQLite development settings; production/local/test remain explicit.
 - [ ] Inventory every old monorepo path in scripts and infrastructure.
 - [ ] Decide and document standalone container/process topology.
 - [ ] Replace path assumptions and add environment validation.
 - [ ] Validate local PostgreSQL and disposable E2E profiles.
 - [ ] Rebuild backup and restore commands for this repository.
 - [ ] Validate deployment, health, logging, media, scheduled publishing, and rollback.
+- [ ] Verify the documented Docker-local database profile and standalone PostgreSQL alternative against `config.settings.local`.
 
 ## Contract and integration
 
-- [ ] Freeze an accepted public/admin OpenAPI snapshot.
+- [x] Freeze an accepted public/admin OpenAPI snapshot (`Docs/03-contracts/OPENAPI-ACCEPTANCE.md`; provenance `scaffold-accepted`).
+- [x] Verify public OpenAPI anonymously and admin OpenAPI with a disposable verified staff-plus-OTP fixture.
+- [x] Generate source review snapshots and provenance with `scripts/export_openapi.py` (40 public paths; 47 admin paths; scaffold-accepted).
+- [x] Generate a source-plus-schema endpoint inventory with commit and SHA-256 metadata.
 - [ ] Reconcile public endpoints with public-site requirements.
 - [ ] Reconcile admin endpoints, permissions, CSRF/session, and MFA with admin requirements.
 - [ ] Normalize documented error envelopes without breaking compatibility.
+- [ ] Add response fixtures for admin `code/message/fields`, public `detail`, contact `ok/error`, form HTML, and framework validation variants.
 - [ ] Add frontend-consumer contract tests and seeded fixtures.
 - [ ] Decide deprecation plan for legacy `/admin/`, `/staff/`, `/api/admin/`, and rebuild routes.
 
@@ -36,4 +42,5 @@
 - [ ] Security, media, preview, contact, and rebuild threat review.
 - [ ] Backup/restore and disaster-recovery drill.
 - [ ] Staging integration with both new frontends.
+- [ ] Verify same-origin reverse-proxy session, CSRF, MFA, preview, contact, media, and logout behavior with both new frontends.
 - [ ] Cutover and rollback evidence accepted.

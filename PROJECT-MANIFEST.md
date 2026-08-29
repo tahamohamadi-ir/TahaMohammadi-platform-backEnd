@@ -9,6 +9,7 @@
 | Source commit | `cdaa283fac9da57c6d88e22aa0751be6214b6cf6` |
 | Verified transfer | 198 tracked files; zero SHA-256 mismatches |
 | Shared contracts | `D:\Project\tahamohammadi-platform\Docs` |
+| Consumer integration | Scaffold foundation accepted per `Docs\03-contracts\OPENAPI-ACCEPTANCE.md`; type generation may proceed; owner content (PS-08) and fonts (PS-10) remain separate gates |
 | Infrastructure status | Legacy reference pending standalone rewrite |
 
 ## Owned outcomes

@@ -6,7 +6,10 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    # A bare local command must boot a usable, isolated SQLite development
+    # profile. Deployment, Docker-local PostgreSQL, test, and production
+    # invocations always provide their explicit settings module.
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
