@@ -16,3 +16,4 @@ staticfiles/
 admin-ui/
 .DS_Store
 Thumbs.db
+.repowise/

@@ -1,0 +1,11 @@
+{
+  "id": 1,
+  "email": "admin@example.com",
+  "displayName": "admin@example.com",
+  "isStaff": true,
+  "mfaEnrolled": true,
+  "otpVerified": true,
+  "featureFlags": {
+    "admin_bulk_archive": false
+  }
+}

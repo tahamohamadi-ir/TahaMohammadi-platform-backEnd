@@ -106,6 +106,17 @@ def _is_admin_only(record: dict[str, Any]) -> bool:
     return status.get("visibility") == ADMIN_ONLY_VISIBILITY
 
 
+def _is_public_empty_state(record: dict[str, Any]) -> bool:
+    """Public-safe seed states (seed.empty.*) copy routes / unavailable surfaces.
+
+    Restricted to seed-provided facts: public visibility plus an explicit
+    ``data.empty_state`` flag. Admin-only documents never qualify.
+    """
+    status = record.get("status") or {}
+    data = record.get("data") or {}
+    return status.get("visibility") == "public" and data.get("empty_state") is True
+
+
 def _locale_or_none(record: dict[str, Any]) -> str | None:
     locale = record.get("locale")
     if locale in (Locale.EN, Locale.FA):
@@ -229,6 +240,8 @@ def map_typed_model(
 
     content_type = record["content_type"]
     mapper = _TYPED_MAPPERS.get(content_type)
+    if content_type == "document" and _is_public_empty_state(record):
+        mapper = _map_route_copy
     if mapper is None:
         stats.typed_skipped += 1
         return

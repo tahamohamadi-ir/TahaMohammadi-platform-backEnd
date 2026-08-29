@@ -192,3 +192,206 @@ def test_import_full_seed_package_has_85_records():
     assert ContentSeedRecord.objects.filter(visibility="admin-only").count() == 13
     assert Landing.objects.public().count() == 0
     assert Profile.objects.public().count() == 0
+
+
+# --- BACKEND-081: seed.empty.* → route copy / unavailable surfaces ----------
+
+EMPTY_STATE_SEED = {
+    "package_version": "1.1.0-seed-test",
+    "records": [
+        {
+            "content_id": "seed.empty.creative.en",
+            "content_type": "route_copy",
+            "slug": "creative-empty",
+            "locale": "en",
+            "title": "Creative work",
+            "excerpt": (
+                "Selected visual and design work will be added after authorship, "
+                "credits, and publication rights are confirmed."
+            ),
+            "body_markdown": (
+                "Selected visual and design work will be added here after authorship, "
+                "collaborators, credits, and publication rights are confirmed."
+            ),
+            "route": "/creative",
+            "status": {
+                "approval_state": "approved",
+                "publication_state": "draft",
+                "translation_state": "approved",
+                "visibility": "public",
+            },
+            "dates": {"start": None, "end": None, "published_at": None, "retired_at": None},
+            "sort_order": 0,
+            "tags": [],
+            "links": [],
+            "data": {"empty_state": True, "reason": "media-rights-and-records-pending"},
+            "evidence": [],
+            "restrictions": [],
+            "seo": {},
+            "relations": [],
+        },
+        {
+            "content_id": "seed.empty.teaching.en",
+            "content_type": "route_copy",
+            "slug": "teaching-empty",
+            "locale": "en",
+            "title": "Teaching",
+            "excerpt": "No public teaching record is available yet.",
+            "body_markdown": "No public teaching record is available yet.",
+            "route": "/about/teaching",
+            "status": {
+                "approval_state": "approved",
+                "publication_state": "draft",
+                "translation_state": "approved",
+                "visibility": "public",
+            },
+            "dates": {"start": None, "end": None, "published_at": None, "retired_at": None},
+            "sort_order": 0,
+            "tags": [],
+            "links": [],
+            "data": {"empty_state": True, "reason": "owner-verification-required"},
+            "evidence": [],
+            "restrictions": [],
+            "seo": {},
+            "relations": [],
+        },
+        {
+            "content_id": "seed.empty.cv.en",
+            "content_type": "document",
+            "slug": "cv-unavailable",
+            "locale": "en",
+            "title": "CV",
+            "excerpt": "The current public CV is not yet available for download.",
+            "body_markdown": "The current public CV is not yet available for download.",
+            "route": "/cv",
+            "status": {
+                "approval_state": "approved",
+                "publication_state": "draft",
+                "translation_state": "approved",
+                "visibility": "public",
+            },
+            "dates": {"start": None, "end": None, "published_at": None, "retired_at": None},
+            "sort_order": 0,
+            "tags": [],
+            "links": [],
+            "data": {"empty_state": True, "download_available": False},
+            "evidence": [],
+            "restrictions": [],
+            "seo": {},
+            "relations": [],
+        },
+    ],
+}
+
+
+def _write_empty_state_seed(tmp_path: Path) -> tuple[Path, Path]:
+    seed_path = tmp_path / "content-records.v1.1-seed.json"
+    settings_path = tmp_path / "seed-settings.json"
+    seed_path.write_text(json.dumps(EMPTY_STATE_SEED), encoding="utf-8")
+    settings_path.write_text(json.dumps(MINIMAL_SETTINGS), encoding="utf-8")
+    return seed_path, settings_path
+
+
+def _import_empty_state_seed(tmp_path):
+    seed_path, settings_path = _write_empty_state_seed(tmp_path)
+    call_command(
+        "import_content_seed",
+        file=str(seed_path),
+        settings_file=str(settings_path),
+    )
+
+
+@pytest.mark.django_db
+def test_seed_empty_route_copy_maps_to_draft_landing(tmp_path):
+    _import_empty_state_seed(tmp_path)
+
+    for slug, title, body in (
+        ("creative-empty", "Creative work", "Selected visual and design work"),
+        ("teaching-empty", "Teaching", "No public teaching record is available yet."),
+    ):
+        landing = Landing.objects.get(locale="en", slug=slug)
+        assert landing.status == LifecycleStatus.DRAFT
+        assert landing.title == title
+        assert body in landing.body
+        seed_row = ContentSeedRecord.objects.get(
+            content_id=f"seed.empty.{slug.replace('-empty', '')}.en"
+        )
+        assert seed_row.mapped_model_label == "content.Landing"
+        assert seed_row.mapped_object_id == landing.pk
+
+
+@pytest.mark.django_db
+def test_seed_empty_cv_maps_to_unavailable_route_copy_surface(tmp_path):
+    _import_empty_state_seed(tmp_path)
+
+    landing = Landing.objects.get(locale="en", slug="cv-unavailable")
+    assert landing.status == LifecycleStatus.DRAFT
+    assert landing.title == "CV"
+    assert "not yet available for download" in landing.body
+
+    seed_row = ContentSeedRecord.objects.get(content_id="seed.empty.cv.en")
+    assert seed_row.mapped_model_label == "content.Landing"
+    assert seed_row.mapped_object_id == landing.pk
+
+
+@pytest.mark.django_db
+def test_seed_empty_cv_unavailable_surface_invents_no_download(tmp_path):
+    _import_empty_state_seed(tmp_path)
+
+    from apps.siteconfig.models import SiteSettings
+
+    settings_row = SiteSettings.get_singleton()
+    assert settings_row.current_cv_media is None
+    assert settings_row.current_resume_media is None
+
+    client = Client()
+    response = client.get("/api/site")
+    assert response.status_code == 200
+    assert response.json()["downloads"] == []
+    assert client.get("/api/landings/en/cv-unavailable").status_code == 404
+
+
+@pytest.mark.django_db
+def test_seed_empty_records_never_publish(tmp_path):
+    _import_empty_state_seed(tmp_path)
+
+    assert Landing.objects.public().count() == 0
+    assert (
+        Landing.objects.filter(
+            slug__in=["creative-empty", "teaching-empty", "cv-unavailable"],
+            status=LifecycleStatus.PUBLISHED,
+        ).count()
+        == 0
+    )
+    client = Client()
+    assert client.get("/api/landings/en").json() == []
+    assert client.get("/api/landings/en/creative-empty").status_code == 404
+    assert client.get("/api/landings/en/teaching-empty").status_code == 404
+    assert client.get("/api/landings/en/cv-unavailable").status_code == 404
+
+
+@pytest.mark.django_db
+@pytest.mark.skipif(
+    not default_seed_path().exists(),
+    reason="Workspace seed package not available",
+)
+def test_full_seed_package_maps_all_seed_empty_records_to_route_copy():
+    call_command("import_content_seed")
+
+    empty_rows = ContentSeedRecord.objects.filter(content_id__startswith="seed.empty.")
+    assert empty_rows.count() == 6
+    for row in empty_rows:
+        assert row.mapped_model_label == "content.Landing", row.content_id
+        assert row.mapped_object_id is not None
+
+    assert Landing.objects.filter(slug="creative-empty").count() == 2
+    assert Landing.objects.filter(slug="teaching-empty").count() == 2
+    assert Landing.objects.filter(slug="cv-unavailable").count() == 2
+    assert (
+        Landing.objects.filter(
+            slug__in=["creative-empty", "teaching-empty", "cv-unavailable"]
+        )
+        .exclude(status=LifecycleStatus.DRAFT)
+        .count()
+        == 0
+    )

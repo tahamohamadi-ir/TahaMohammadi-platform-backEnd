@@ -16,9 +16,8 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIRECTORY = REPOSITORY_ROOT / "docs" / "contracts" / "openapi" / "current"
@@ -49,16 +48,18 @@ def write_endpoint_inventory(path: Path, public_schema: dict, admin_schema: dict
     rows = [
         "# Generated endpoint inventory",
         "",
-        "Status: source-generated-unaccepted. Do not implement against this file until the endpoint-access fixtures and contract acceptance are complete.",
+        "Status: source-generated-unaccepted. Do not implement against this file "
+        "until the endpoint-access fixtures and contract acceptance are complete.",
         "",
         "| Surface | Method | Path | Summary |",
         "|---|---|---|---|",
     ]
     count = 0
+    http_methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     for surface, schema in (("public", public_schema), ("admin", admin_schema)):
         for path_name, path_item in sorted(schema.get("paths", {}).items()):
             for method, operation in sorted(path_item.items()):
-                if method.lower() not in {"get", "post", "put", "patch", "delete", "head", "options"}:
+                if method.lower() not in http_methods:
                     continue
                 summary = str(operation.get("summary", "")).replace("|", "\\|")
                 rows.append(f"| {surface} | {method.upper()} | `{path_name}` | {summary} |")
@@ -91,7 +92,7 @@ def main() -> None:
 
     provenance = {
         "status": "source-generated-unaccepted",
-        "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
+        "generatedAtUtc": datetime.now(UTC).isoformat(),
         "sourceCommit": git_commit(),
         "djangoSettingsModule": os.environ["DJANGO_SETTINGS_MODULE"],
         "command": "python scripts/export_openapi.py",
@@ -110,7 +111,10 @@ def main() -> None:
                 "paths": len(admin_schema.get("paths", {})),
                 "version": admin_schema.get("info", {}).get("version"),
             },
-            "endpoint-inventory.md": {"sha256": sha256(inventory_path), "operations": endpoint_count},
+            "endpoint-inventory.md": {
+                "sha256": sha256(inventory_path),
+                "operations": endpoint_count,
+            },
         },
     }
     write_json(OUTPUT_DIRECTORY / "PROVENANCE.json", provenance)

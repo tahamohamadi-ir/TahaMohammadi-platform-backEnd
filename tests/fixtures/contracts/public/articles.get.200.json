@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "locale": "en",
+      "slug": "first-post",
+      "title": "First post",
+      "excerpt": "Hello",
+      "license": "cc-by-nc-4",
+      "reading_time_minutes": 1,
+      "published_at": "2026-01-10T12:00:00Z",
+      "updated_at": "2026-01-10T12:00:00Z",
+      "topic_tags": [
+        {
+          "name": "Systems",
+          "slug": "systems",
+          "locale": "en",
+          "description": "",
+          "synonyms": ""
+        }
+      ],
+      "series": [
+        {
+          "locale": "en",
+          "slug": "foundations",
+          "title": "Foundations",
+          "description": "Series intro",
+          "ordering": 1,
+          "published_at": "2026-01-10T12:00:00Z"
+        }
+      ],
+      "featured_image": null
+    }
+  ],
+  "count": 1
+}

@@ -19,8 +19,8 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 - [x] **BACKEND-060** Implement `import_content_seed` management command reading `Docs/01-product/owner-content-seed-v1/cms-package/content-records.v1.1-seed.json`.
 - [x] **BACKEND-070** Import all 85 records as draft/not-public; apply `supplement/seed-settings.json` defaults where mapped.
 - [x] **BACKEND-080** Add pytest: seed import idempotency + public API does not expose unpublished records.
-- [ ] **BACKEND-081** Map `seed.empty.*` records to route copy / unavailable surfaces without inventing facts.
-- [ ] **BACKEND-082** Map `admin.*` supplement records to admin-only models; verify public serializers omit them.
+- [x] **BACKEND-081** Map `seed.empty.*` records to route copy / unavailable surfaces without inventing facts.
+- [x] **BACKEND-082** Map `admin.*` supplement records to admin-only models; verify public serializers omit them.
 
 ## BE-2 — Legacy infra extraction
 
@@ -35,16 +35,16 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 - [x] Freeze accepted OpenAPI snapshot (`OPENAPI-ACCEPTANCE.md`; provenance `scaffold-accepted`).
 - [x] Verify public OpenAPI anonymously and admin OpenAPI with staff+OTP fixture.
 - [x] Export OpenAPI artifacts and endpoint inventory.
-- [ ] **BACKEND-110** Reconcile public endpoints vs central `ROUTE-REGISTRY.md`.
+- [x] **BACKEND-110** Reconcile public endpoints vs central `ROUTE-REGISTRY.md`.
 - [ ] **BACKEND-120** Reconcile admin endpoints vs `Front-End/admin-panel/docs/architecture/WORKFLOW-API-MAP.md`.
-- [ ] **BACKEND-130** Add response fixtures per `ERROR-COMPATIBILITY-MATRIX.md`.
-- [ ] **BACKEND-140** OpenAPI hash drift tests (fail when artifact changes without acceptance).
+- [x] **BACKEND-130** Add response fixtures per `ERROR-COMPATIBILITY-MATRIX.md`.
+- [x] **BACKEND-140** OpenAPI hash drift tests (fail when artifact changes without acceptance).
 - [ ] **BACKEND-150** Error envelope normalization plan (non-breaking).
 - [ ] **BACKEND-151** Deprecation plan for legacy `/admin/`, `/staff/`, `/api/admin/` routes.
 
 ## BE-4 — CI and quality
 
-- [ ] **BACKEND-041** GitHub Actions: `uv sync`, Ruff, pytest, `manage.py check`, OpenAPI fixture tests.
+- [x] **BACKEND-041** GitHub Actions: `uv sync`, Ruff, pytest, `manage.py check`, OpenAPI fixture tests.
 - [ ] **BACKEND-042** GitHub Actions: OpenAPI export hash matches accepted provenance.
 - [ ] Migration forward/reverse rehearsal on production-like copy.
 - [ ] Security review: media, preview tokens, contact, rebuild callbacks.

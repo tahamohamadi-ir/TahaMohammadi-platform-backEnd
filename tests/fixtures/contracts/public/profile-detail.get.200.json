@@ -1,0 +1,21 @@
+{
+  "locale": "en",
+  "slug": "about",
+  "title": "About",
+  "seoTitle": "",
+  "seoDescription": "",
+  "shortBio": "Short bio",
+  "longBio": "Long bio",
+  "availability": "",
+  "publishedAt": "2026-01-10T12:00:00Z",
+  "availableLocales": [
+    "en"
+  ],
+  "skills": [],
+  "experience": [],
+  "education": [],
+  "publications": [],
+  "researchProjects": [],
+  "certificates": [],
+  "socials": []
+}
