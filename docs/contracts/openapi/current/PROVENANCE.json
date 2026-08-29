@@ -1,0 +1,28 @@
+{
+  "accessEvidence": {
+    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29).",
+    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29)."
+  },
+  "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
+  "artifacts": {
+    "admin-openapi.json": {
+      "paths": 47,
+      "sha256": "1328f8244c5541f225648082891a0a1244961c0dead6692488992ac8c7606f09",
+      "version": "0.1.0"
+    },
+    "endpoint-inventory.md": {
+      "operations": 103,
+      "sha256": "618ab18826875a5f27357ab87a3917082291d2e8610959b18aa2f936a7f3aa96"
+    },
+    "public-openapi.json": {
+      "paths": 40,
+      "sha256": "0f672693de28ed33286789e5119eb3226c062693fb15168b1aba5513c257c0a5",
+      "version": "0.4.0"
+    }
+  },
+  "command": "python scripts/export_openapi.py",
+  "djangoSettingsModule": "config.settings.development",
+  "generatedAtUtc": "2026-08-29T08:21:02.625046+00:00",
+  "sourceCommit": "82e3984520154b60146009ae4a0d21eb5c30373e",
+  "status": "scaffold-accepted"
+}

@@ -1,0 +1,5586 @@
+{
+  "components": {
+    "schemas": {
+      "AdminUserOut": {
+        "description": "Safe admin identity — never includes session, CSRF, or secrets.",
+        "properties": {
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "featureFlags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Featureflags",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isStaff": {
+            "title": "Isstaff",
+            "type": "boolean"
+          },
+          "mfaEnrolled": {
+            "title": "Mfaenrolled",
+            "type": "boolean"
+          },
+          "otpVerified": {
+            "title": "Otpverified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "displayName",
+          "isStaff",
+          "mfaEnrolled",
+          "otpVerified"
+        ],
+        "title": "AdminUserOut",
+        "type": "object"
+      },
+      "BlockFieldSpecOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "BlockFieldSpecOut",
+        "type": "object"
+      },
+      "BlockTypeOut": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/BlockFieldSpecOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "labelFa": {
+            "title": "Labelfa",
+            "type": "string"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required",
+            "type": "array"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "labelFa"
+        ],
+        "title": "BlockTypeOut",
+        "type": "object"
+      },
+      "CompositionBlockOut": {
+        "properties": {
+          "blockType": {
+            "title": "Blocktype",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "blockType",
+          "enabled"
+        ],
+        "title": "CompositionBlockOut",
+        "type": "object"
+      },
+      "CompositionBlockUpdateIn": {
+        "properties": {
+          "blockType": {
+            "title": "Blocktype",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "blockType"
+        ],
+        "title": "CompositionBlockUpdateIn",
+        "type": "object"
+      },
+      "CompositionCreateIn": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "default": "landing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "locale",
+          "title"
+        ],
+        "title": "CompositionCreateIn",
+        "type": "object"
+      },
+      "CompositionDetailOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionSectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "kind",
+          "locale",
+          "title",
+          "status",
+          "publishedAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "CompositionDetailOut",
+        "type": "object"
+      },
+      "CompositionListItemOut": {
+        "description": "Compact admin row for the composition list view.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "kind",
+          "locale",
+          "title",
+          "status",
+          "publishedAt",
+          "updatedAt"
+        ],
+        "title": "CompositionListItemOut",
+        "type": "object"
+      },
+      "CompositionListOut": {
+        "description": "Paginated composition list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionListItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "CompositionListOut",
+        "type": "object"
+      },
+      "CompositionSchemaOut": {
+        "properties": {
+          "blockTypes": {
+            "items": {
+              "$ref": "#/components/schemas/BlockTypeOut"
+            },
+            "title": "Blocktypes",
+            "type": "array"
+          },
+          "kind": {
+            "default": "landing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sectionLayouts": {
+            "items": {
+              "$ref": "#/components/schemas/SectionLayoutOut"
+            },
+            "title": "Sectionlayouts",
+            "type": "array"
+          }
+        },
+        "title": "CompositionSchemaOut",
+        "type": "object"
+      },
+      "CompositionSectionOut": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionBlockOut"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "layout": {
+            "title": "Layout",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "ratio": {
+            "title": "Ratio",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "layout",
+          "ratio",
+          "enabled"
+        ],
+        "title": "CompositionSectionOut",
+        "type": "object"
+      },
+      "CompositionSectionUpdateIn": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionBlockUpdateIn"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "layout": {
+            "default": "1col",
+            "title": "Layout",
+            "type": "string"
+          },
+          "ratio": {
+            "default": "",
+            "title": "Ratio",
+            "type": "string"
+          }
+        },
+        "title": "CompositionSectionUpdateIn",
+        "type": "object"
+      },
+      "CompositionUpdateIn": {
+        "properties": {
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/CompositionSectionUpdateIn"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "CompositionUpdateIn",
+        "type": "object"
+      },
+      "ContentBulkArchiveIn": {
+        "description": "Bulk archive request (feature-flagged; Wave 5 / DEFER-0032).",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "ContentBulkArchiveIn",
+        "type": "object"
+      },
+      "ContentBulkArchiveOut": {
+        "description": "Bulk archive result with archived count for confirm UX.",
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "integer"
+          },
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "archived",
+          "skipped",
+          "ids"
+        ],
+        "title": "ContentBulkArchiveOut",
+        "type": "object"
+      },
+      "ContentCreateIn": {
+        "description": "Create payload for any content entity.",
+        "properties": {
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title"
+        ],
+        "title": "ContentCreateIn",
+        "type": "object"
+      },
+      "ContentDetailOut": {
+        "description": "Content detail with entity-specific fields (camelCase keys).",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "scheduledFor": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduledfor"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "locale",
+          "slug",
+          "title",
+          "status",
+          "publishedAt",
+          "createdAt",
+          "updatedAt",
+          "fields"
+        ],
+        "title": "ContentDetailOut",
+        "type": "object"
+      },
+      "ContentEntitySchemaOut": {
+        "description": "Writable-field schema for one content entity.",
+        "properties": {
+          "entity": {
+            "title": "Entity",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ContentFieldSpecOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entity",
+          "fields"
+        ],
+        "title": "ContentEntitySchemaOut",
+        "type": "object"
+      },
+      "ContentFieldSpecOut": {
+        "description": "Writable-field metadata for generic SPA form rendering.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "ContentFieldSpecOut",
+        "type": "object"
+      },
+      "ContentHealthOut": {
+        "description": "Aggregate lifecycle counts plus media-health indicators.",
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "integer"
+          },
+          "drafts": {
+            "title": "Drafts",
+            "type": "integer"
+          },
+          "incompleteTranslations": {
+            "title": "Incompletetranslations",
+            "type": "integer"
+          },
+          "missingAltMedia": {
+            "title": "Missingaltmedia",
+            "type": "integer"
+          },
+          "orphanMedia": {
+            "title": "Orphanmedia",
+            "type": "integer"
+          },
+          "published": {
+            "title": "Published",
+            "type": "integer"
+          },
+          "review": {
+            "title": "Review",
+            "type": "integer"
+          },
+          "scheduled": {
+            "default": 0,
+            "title": "Scheduled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "published",
+          "drafts",
+          "review",
+          "archived",
+          "incompleteTranslations",
+          "missingAltMedia",
+          "orphanMedia"
+        ],
+        "title": "ContentHealthOut",
+        "type": "object"
+      },
+      "ContentListItemOut": {
+        "description": "Compact admin row for a content entity (list view).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "scheduledFor": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduledfor"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "locale",
+          "slug",
+          "title",
+          "status",
+          "publishedAt",
+          "updatedAt"
+        ],
+        "title": "ContentListItemOut",
+        "type": "object"
+      },
+      "ContentListOut": {
+        "description": "Paginated content list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentListItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "ContentListOut",
+        "type": "object"
+      },
+      "ContentRevisionCreateIn": {
+        "description": "Optional note when creating an immutable snapshot.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "ContentRevisionCreateIn",
+        "type": "object"
+      },
+      "ContentRevisionListOut": {
+        "description": "Revision history for one content row.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRevisionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ContentRevisionListOut",
+        "type": "object"
+      },
+      "ContentRevisionOut": {
+        "description": "Immutable content revision metadata (snapshot omitted from list).",
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "createdById": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdbyid"
+          },
+          "entityKey": {
+            "title": "Entitykey",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "objectId": {
+            "title": "Objectid",
+            "type": "integer"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot"
+          }
+        },
+        "required": [
+          "id",
+          "entityKey",
+          "objectId",
+          "note",
+          "createdAt"
+        ],
+        "title": "ContentRevisionOut",
+        "type": "object"
+      },
+      "ContentSchemaOut": {
+        "description": "All entity schemas keyed by entity name.",
+        "properties": {
+          "entities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ContentEntitySchemaOut"
+            },
+            "title": "Entities",
+            "type": "object"
+          }
+        },
+        "required": [
+          "entities"
+        ],
+        "title": "ContentSchemaOut",
+        "type": "object"
+      },
+      "ContentTransitionIn": {
+        "description": "Lifecycle transition request (ADM-4 / DEBT-0005).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scheduledFor": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduledfor"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "ContentTransitionIn",
+        "type": "object"
+      },
+      "ContentUpdateIn": {
+        "description": "Optimistically-locked partial update payload.",
+        "properties": {
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ContentUpdateIn",
+        "type": "object"
+      },
+      "CurrentDocumentOut": {
+        "description": "Admin projection of one current CV/resume media slot.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isActive": {
+            "title": "Isactive",
+            "type": "boolean"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "mime",
+          "size",
+          "isActive",
+          "url",
+          "updatedAt"
+        ],
+        "title": "CurrentDocumentOut",
+        "type": "object"
+      },
+      "DashboardSummaryOut": {
+        "description": "Action-oriented counts for the admin dashboard.",
+        "properties": {
+          "contentCounts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Contentcounts",
+            "type": "object"
+          },
+          "drafts": {
+            "title": "Drafts",
+            "type": "integer"
+          },
+          "published": {
+            "title": "Published",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contentCounts",
+          "drafts",
+          "published"
+        ],
+        "title": "DashboardSummaryOut",
+        "type": "object"
+      },
+      "FeaturedItemCreateIn": {
+        "description": "Create payload for a featured spotlight.",
+        "properties": {
+          "endAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endat"
+          },
+          "isActive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isactive"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "startAt": {
+            "title": "Startat",
+            "type": "string"
+          },
+          "targetEntity": {
+            "title": "Targetentity",
+            "type": "string"
+          },
+          "targetSlug": {
+            "title": "Targetslug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "targetEntity",
+          "targetSlug",
+          "locale",
+          "startAt"
+        ],
+        "title": "FeaturedItemCreateIn",
+        "type": "object"
+      },
+      "FeaturedItemListOut": {
+        "description": "Paginated featured list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeaturedItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "FeaturedItemListOut",
+        "type": "object"
+      },
+      "FeaturedItemOut": {
+        "description": "Featured spotlight row.",
+        "properties": {
+          "endAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isActive": {
+            "title": "Isactive",
+            "type": "boolean"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "startAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startat"
+          },
+          "targetEntity": {
+            "title": "Targetentity",
+            "type": "string"
+          },
+          "targetSlug": {
+            "title": "Targetslug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "targetEntity",
+          "targetSlug",
+          "locale",
+          "startAt",
+          "endAt",
+          "isActive",
+          "updatedAt"
+        ],
+        "title": "FeaturedItemOut",
+        "type": "object"
+      },
+      "FeaturedItemUpdateIn": {
+        "description": "Optimistically-locked partial featured update (None = unchanged).",
+        "properties": {
+          "endAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endat"
+          },
+          "isActive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isactive"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          },
+          "startAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startat"
+          },
+          "targetEntity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetentity"
+          },
+          "targetSlug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetslug"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "FeaturedItemUpdateIn",
+        "type": "object"
+      },
+      "GraphActivateOut": {
+        "description": "POST activate response.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "GraphActivateOut",
+        "type": "object"
+      },
+      "GraphPayloadIn": {
+        "description": "PUT /versions/{id}/payload body (validator owns the semantics).",
+        "properties": {
+          "edges": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "groups": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "title": "GraphPayloadIn",
+        "type": "object"
+      },
+      "GraphRevisionOut": {
+        "description": "PUT response: the new version revision (updatedAt ISO).",
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "GraphRevisionOut",
+        "type": "object"
+      },
+      "GraphValidationOut": {
+        "description": "GET /validation/{id} response.",
+        "properties": {
+          "issues": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Issues",
+            "type": "array"
+          }
+        },
+        "required": [
+          "issues"
+        ],
+        "title": "GraphValidationOut",
+        "type": "object"
+      },
+      "GraphVersionCreateIn": {
+        "description": "POST /versions body.",
+        "properties": {
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale"
+        ],
+        "title": "GraphVersionCreateIn",
+        "type": "object"
+      },
+      "GraphVersionDetailOut": {
+        "description": "Full camel payload of one version (PUT If-Match uses ``updatedAt``).",
+        "properties": {
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "locale",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "nodes",
+          "edges",
+          "groups"
+        ],
+        "title": "GraphVersionDetailOut",
+        "type": "object"
+      },
+      "GraphVersionOut": {
+        "description": "One row of the versions list / POST create response.",
+        "properties": {
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "edgeCount": {
+            "title": "Edgecount",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "nodeCount": {
+            "title": "Nodecount",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "locale",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "nodeCount",
+          "edgeCount"
+        ],
+        "title": "GraphVersionOut",
+        "type": "object"
+      },
+      "HomeModuleAdminOut": {
+        "description": "Admin projection of one HomeModule row.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "provenance_note": {
+            "title": "Provenance Note",
+            "type": "string"
+          },
+          "selection_mode": {
+            "title": "Selection Mode",
+            "type": "string"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "visible",
+          "order",
+          "selection_mode",
+          "provenance_note"
+        ],
+        "title": "HomeModuleAdminOut",
+        "type": "object"
+      },
+      "HomeModuleIn": {
+        "description": "One module slot in a PUT/validate payload.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "provenance_note": {
+            "default": "",
+            "title": "Provenance Note",
+            "type": "string"
+          },
+          "selection_mode": {
+            "default": "manual",
+            "title": "Selection Mode",
+            "type": "string"
+          },
+          "visible": {
+            "default": false,
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "order"
+        ],
+        "title": "HomeModuleIn",
+        "type": "object"
+      },
+      "HomeModulesAdminOut": {
+        "description": "GET response: locale-level revision plus every row of the locale.",
+        "properties": {
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/HomeModuleAdminOut"
+            },
+            "title": "Modules",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "modules"
+        ],
+        "title": "HomeModulesAdminOut",
+        "type": "object"
+      },
+      "HomeModulesPutIn": {
+        "description": "Full-array bulk save / dry-run payload.",
+        "properties": {
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/HomeModuleIn"
+            },
+            "title": "Modules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "modules"
+        ],
+        "title": "HomeModulesPutIn",
+        "type": "object"
+      },
+      "HomeModulesRevisionOut": {
+        "description": "PUT response: the new locale-level revision.",
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "HomeModulesRevisionOut",
+        "type": "object"
+      },
+      "LocaleTranslationOut": {
+        "description": "Completeness of one locale row within a translation group.",
+        "properties": {
+          "missingFields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missingfields",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LocaleTranslationOut",
+        "type": "object"
+      },
+      "LoginIn": {
+        "description": "Admin login request — email (username), password, optional OTP/recovery code.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Email",
+            "type": "string"
+          },
+          "otpToken": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Otptoken"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginIn",
+        "type": "object"
+      },
+      "MediaCreateIn": {
+        "description": "Multipart create metadata (the uploaded bytes arrive via the ``file`` param).",
+        "properties": {
+          "altTextEn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alttexten"
+          },
+          "altTextFa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alttextfa"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "MediaCreateIn",
+        "type": "object"
+      },
+      "MediaItemOut": {
+        "description": "Admin media row: metadata + storage URL + usage count.",
+        "properties": {
+          "altText": {
+            "title": "Alttext",
+            "type": "string"
+          },
+          "altTextEn": {
+            "title": "Alttexten",
+            "type": "string"
+          },
+          "altTextFa": {
+            "title": "Alttextfa",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isActive": {
+            "title": "Isactive",
+            "type": "boolean"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "usageCount": {
+            "default": 0,
+            "title": "Usagecount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "altText",
+          "altTextFa",
+          "altTextEn",
+          "mime",
+          "size",
+          "isActive",
+          "url",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "MediaItemOut",
+        "type": "object"
+      },
+      "MediaLicenseOut": {
+        "description": "Reference row backing the AF license select box.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "MediaLicenseOut",
+        "type": "object"
+      },
+      "MediaListOut": {
+        "description": "Paginated media list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "MediaListOut",
+        "type": "object"
+      },
+      "MediaPresentationOut": {
+        "description": "PATCH success body: row id plus the new If-Match revision.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "updatedAt"
+        ],
+        "title": "MediaPresentationOut",
+        "type": "object"
+      },
+      "MediaPresentationPatchIn": {
+        "description": "Subset patch payload; explicit null clears (see module docstring).",
+        "properties": {
+          "caption_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption En"
+          },
+          "caption_fa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption Fa"
+          },
+          "focal_x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focal X"
+          },
+          "focal_y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focal Y"
+          },
+          "license_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Id"
+          },
+          "rights_statement_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rights Statement En"
+          },
+          "rights_statement_fa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rights Statement Fa"
+          }
+        },
+        "title": "MediaPresentationPatchIn",
+        "type": "object"
+      },
+      "MediaUpdateIn": {
+        "description": "Optimistically-locked partial update payload.",
+        "properties": {
+          "altText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alttext"
+          },
+          "altTextEn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alttexten"
+          },
+          "altTextFa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alttextfa"
+          },
+          "isActive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isactive"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "MediaUpdateIn",
+        "type": "object"
+      },
+      "MfaStatusOut": {
+        "properties": {
+          "configUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configurl"
+          },
+          "enrolled": {
+            "title": "Enrolled",
+            "type": "boolean"
+          },
+          "manualSecret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manualsecret"
+          },
+          "otpVerified": {
+            "title": "Otpverified",
+            "type": "boolean"
+          },
+          "unusedRecoveryCodes": {
+            "title": "Unusedrecoverycodes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrolled",
+          "otpVerified",
+          "unusedRecoveryCodes"
+        ],
+        "title": "MfaStatusOut",
+        "type": "object"
+      },
+      "MfaTokenIn": {
+        "properties": {
+          "otpToken": {
+            "maxLength": 40,
+            "minLength": 6,
+            "title": "Otptoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "otpToken"
+        ],
+        "title": "MfaTokenIn",
+        "type": "object"
+      },
+      "NavLinkOut": {
+        "description": "One navigation link entry stored in the settings singleton.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "href",
+          "locale"
+        ],
+        "title": "NavLinkOut",
+        "type": "object"
+      },
+      "OkOut": {
+        "description": "Empty success body used by DELETE endpoints.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "OkOut",
+        "type": "object"
+      },
+      "PreviewLinkOut": {
+        "description": "Short-lived public preview share URL.",
+        "properties": {
+          "expiresAt": {
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "ttlSeconds": {
+            "title": "Ttlseconds",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "path",
+          "expiresAt",
+          "ttlSeconds"
+        ],
+        "title": "PreviewLinkOut",
+        "type": "object"
+      },
+      "ProjectCaseMediaOut": {
+        "description": "Nested diagram + screenshot rows for a project (Media library FKs).",
+        "properties": {
+          "diagrams": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectDiagramOut"
+            },
+            "title": "Diagrams",
+            "type": "array"
+          },
+          "projectId": {
+            "title": "Projectid",
+            "type": "integer"
+          },
+          "screenshots": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectScreenshotOut"
+            },
+            "title": "Screenshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projectId",
+          "diagrams",
+          "screenshots"
+        ],
+        "title": "ProjectCaseMediaOut",
+        "type": "object"
+      },
+      "ProjectDiagramImageIn": {
+        "description": "Assign or clear a diagram Media FK.",
+        "properties": {
+          "diagramImageId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagramimageid"
+          }
+        },
+        "title": "ProjectDiagramImageIn",
+        "type": "object"
+      },
+      "ProjectDiagramOut": {
+        "description": "Admin projection of a project diagram row.",
+        "properties": {
+          "altText": {
+            "title": "Alttext",
+            "type": "string"
+          },
+          "diagramDate": {
+            "format": "date",
+            "title": "Diagramdate",
+            "type": "string"
+          },
+          "diagramImageId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagramimageid"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "longDescription": {
+            "title": "Longdescription",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "version",
+          "diagramDate",
+          "altText",
+          "longDescription",
+          "visibility",
+          "diagramImageId"
+        ],
+        "title": "ProjectDiagramOut",
+        "type": "object"
+      },
+      "ProjectScreenshotImageIn": {
+        "description": "Assign or clear a screenshot Media FK.",
+        "properties": {
+          "screenshotImageId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshotimageid"
+          }
+        },
+        "title": "ProjectScreenshotImageIn",
+        "type": "object"
+      },
+      "ProjectScreenshotOut": {
+        "description": "Admin projection of a project screenshot row.",
+        "properties": {
+          "altText": {
+            "title": "Alttext",
+            "type": "string"
+          },
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "externalUrl": {
+            "title": "Externalurl",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "screenshotImageId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshotimageid"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "altText",
+          "externalUrl",
+          "visibility",
+          "screenshotImageId"
+        ],
+        "title": "ProjectScreenshotOut",
+        "type": "object"
+      },
+      "RecoveryCodesOut": {
+        "properties": {
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "codes"
+        ],
+        "title": "RecoveryCodesOut",
+        "type": "object"
+      },
+      "SectionLayoutOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ratios": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ratios",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "SectionLayoutOut",
+        "type": "object"
+      },
+      "SiteSettingsOut": {
+        "description": "Site settings projection (camelCase).",
+        "properties": {
+          "brandName": {
+            "title": "Brandname",
+            "type": "string"
+          },
+          "contactEmail": {
+            "title": "Contactemail",
+            "type": "string"
+          },
+          "contactEmployer": {
+            "title": "Contactemployer",
+            "type": "string"
+          },
+          "contactEmployerUrl": {
+            "title": "Contactemployerurl",
+            "type": "string"
+          },
+          "contactFormEnabled": {
+            "title": "Contactformenabled",
+            "type": "boolean"
+          },
+          "contactLinkedin": {
+            "title": "Contactlinkedin",
+            "type": "string"
+          },
+          "contactLocation": {
+            "title": "Contactlocation",
+            "type": "string"
+          },
+          "contactOrcid": {
+            "title": "Contactorcid",
+            "type": "string"
+          },
+          "contactPhone": {
+            "title": "Contactphone",
+            "type": "string"
+          },
+          "contactPhoneIntl": {
+            "title": "Contactphoneintl",
+            "type": "string"
+          },
+          "currentCv": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentCvMediaId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentcvmediaid"
+          },
+          "currentResume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentResumeMediaId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentresumemediaid"
+          },
+          "footerText": {
+            "title": "Footertext",
+            "type": "string"
+          },
+          "navLinks": {
+            "items": {
+              "$ref": "#/components/schemas/NavLinkOut"
+            },
+            "title": "Navlinks",
+            "type": "array"
+          },
+          "primaryColor": {
+            "title": "Primarycolor",
+            "type": "string"
+          },
+          "seoDefaultDescription": {
+            "title": "Seodefaultdescription",
+            "type": "string"
+          },
+          "seoDefaultTitle": {
+            "title": "Seodefaulttitle",
+            "type": "string"
+          },
+          "tagline": {
+            "title": "Tagline",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brandName",
+          "tagline",
+          "footerText",
+          "primaryColor",
+          "navLinks",
+          "seoDefaultTitle",
+          "seoDefaultDescription",
+          "contactEmail",
+          "contactPhone",
+          "contactPhoneIntl",
+          "contactLocation",
+          "contactLinkedin",
+          "contactOrcid",
+          "contactEmployer",
+          "contactEmployerUrl",
+          "contactFormEnabled",
+          "currentCvMediaId",
+          "currentResumeMediaId",
+          "currentCv",
+          "currentResume",
+          "updatedAt"
+        ],
+        "title": "SiteSettingsOut",
+        "type": "object"
+      },
+      "SiteSettingsUpdateIn": {
+        "description": "Optimistically-locked partial settings update (unset = unchanged).\n\n``currentCvMediaId`` / ``currentResumeMediaId``: omit to leave unchanged;\nsend ``null`` to clear; send a positive media id to set (must be PDF).",
+        "properties": {
+          "brandName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brandname"
+          },
+          "contactEmail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactemail"
+          },
+          "contactEmployer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactemployer"
+          },
+          "contactEmployerUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactemployerurl"
+          },
+          "contactFormEnabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactformenabled"
+          },
+          "contactLinkedin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactlinkedin"
+          },
+          "contactLocation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactlocation"
+          },
+          "contactOrcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactorcid"
+          },
+          "contactPhone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactphone"
+          },
+          "contactPhoneIntl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contactphoneintl"
+          },
+          "currentCvMediaId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentcvmediaid"
+          },
+          "currentResumeMediaId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentresumemediaid"
+          },
+          "footerText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footertext"
+          },
+          "navLinks": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Navlinks"
+          },
+          "primaryColor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primarycolor"
+          },
+          "seoDefaultDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seodefaultdescription"
+          },
+          "seoDefaultTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seodefaulttitle"
+          },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          }
+        },
+        "title": "SiteSettingsUpdateIn",
+        "type": "object"
+      },
+      "TagCreateIn": {
+        "description": "Create payload for a topic tag.",
+        "properties": {
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name",
+          "locale"
+        ],
+        "title": "TagCreateIn",
+        "type": "object"
+      },
+      "TagListOut": {
+        "description": "Paginated tag list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TagOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pageSize": {
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "title": "TagListOut",
+        "type": "object"
+      },
+      "TagOut": {
+        "description": "Topic tag row with its article reference count.",
+        "properties": {
+          "articleCount": {
+            "title": "Articlecount",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "locale",
+          "articleCount"
+        ],
+        "title": "TagOut",
+        "type": "object"
+      },
+      "TagUpdateIn": {
+        "description": "Optimistically-locked partial tag update (None = unchanged).",
+        "properties": {
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "TagUpdateIn",
+        "type": "object"
+      },
+      "TimelineAdminOut": {
+        "description": "Admin projection of one TimelineRecord row.",
+        "properties": {
+          "attach": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "detail_url": {
+            "title": "Detail Url",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "period_label": {
+            "title": "Period Label",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "label",
+          "period_label",
+          "body",
+          "role",
+          "weight",
+          "detail_url",
+          "order",
+          "attach",
+          "updatedAt"
+        ],
+        "title": "TimelineAdminOut",
+        "type": "object"
+      },
+      "TimelineCreateIn": {
+        "description": "Create payload (position=append default; optional after_id insert).",
+        "properties": {
+          "after_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Id"
+          },
+          "attach": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "detail_url": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Detail Url",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "period_label": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Period Label",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Role",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "weight": {
+            "default": 0,
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "label"
+        ],
+        "title": "TimelineCreateIn",
+        "type": "object"
+      },
+      "TimelinePatchIn": {
+        "description": "Partial field edit; an explicit null ``attach`` clears the attachment.",
+        "properties": {
+          "attach": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "detail_url": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Url"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "period_label": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Label"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "title": "TimelinePatchIn",
+        "type": "object"
+      },
+      "TimelineReorderIn": {
+        "description": "Full id permutation of one locale's rows.",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "TimelineReorderIn",
+        "type": "object"
+      },
+      "TranslationQueueItemOut": {
+        "description": "One cross-locale (slug) group with per-locale completeness.",
+        "properties": {
+          "en": {
+            "$ref": "#/components/schemas/LocaleTranslationOut"
+          },
+          "entity": {
+            "title": "Entity",
+            "type": "string"
+          },
+          "fa": {
+            "$ref": "#/components/schemas/LocaleTranslationOut"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "slug",
+          "fa",
+          "en",
+          "status"
+        ],
+        "title": "TranslationQueueItemOut",
+        "type": "object"
+      },
+      "TranslationQueueOut": {
+        "description": "Bounded translation queue listing.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationQueueItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "title": "TranslationQueueOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "",
+    "title": "Taha Custom Admin API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/admin/auth/csrf": {
+      "get": {
+        "operationId": "apps_api_admin_api_auth_csrf",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Return the CSRF token and ensure the csrftoken cookie is set."
+      }
+    },
+    "/api/v1/admin/auth/login": {
+      "post": {
+        "operationId": "apps_api_admin_api_auth_login",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Admin login."
+      }
+    },
+    "/api/v1/admin/auth/logout": {
+      "post": {
+        "operationId": "apps_api_admin_api_auth_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "End the admin session."
+      }
+    },
+    "/api/v1/admin/auth/me": {
+      "get": {
+        "operationId": "apps_api_admin_api_auth_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Current admin user."
+      }
+    },
+    "/api/v1/admin/auth/mfa/confirm": {
+      "post": {
+        "operationId": "apps_api_admin_mfa_mfa_confirm",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Confirm a pending TOTP device."
+      }
+    },
+    "/api/v1/admin/auth/mfa/disable": {
+      "post": {
+        "operationId": "apps_api_admin_mfa_mfa_disable",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Disable TOTP and recovery codes."
+      }
+    },
+    "/api/v1/admin/auth/mfa/recovery-codes": {
+      "get": {
+        "operationId": "apps_api_admin_mfa_mfa_recovery_peek",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Pop one-time stashed codes."
+      }
+    },
+    "/api/v1/admin/auth/mfa/regenerate": {
+      "post": {
+        "operationId": "apps_api_admin_mfa_mfa_regenerate",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodesOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Replace recovery codes."
+      }
+    },
+    "/api/v1/admin/auth/mfa/status": {
+      "get": {
+        "operationId": "apps_api_admin_mfa_mfa_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatusOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "TOTP enrollment status."
+      }
+    },
+    "/api/v1/admin/composition": {
+      "get": {
+        "operationId": "apps_api_admin_composition_composition_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List composition pages."
+      },
+      "post": {
+        "operationId": "apps_api_admin_composition_composition_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompositionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionDetailOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create a composition page."
+      }
+    },
+    "/api/v1/admin/composition/schema": {
+      "get": {
+        "operationId": "apps_api_admin_composition_composition_schema_view",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "landing",
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionSchemaOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Composition schema metadata."
+      }
+    },
+    "/api/v1/admin/composition/{page_id}": {
+      "get": {
+        "operationId": "apps_api_admin_composition_composition_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Composition page detail."
+      },
+      "put": {
+        "operationId": "apps_api_admin_composition_composition_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompositionUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompositionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Replace a composition page (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/content/project/{id}/case-media": {
+      "get": {
+        "operationId": "apps_api_admin_content_project_case_media_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCaseMediaOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List project diagrams and screenshots (Media FKs)."
+      }
+    },
+    "/api/v1/admin/content/project/{id}/diagrams/{diagram_id}": {
+      "put": {
+        "operationId": "apps_api_admin_content_project_diagram_set_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "diagram_id",
+            "required": true,
+            "schema": {
+              "title": "Diagram Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDiagramImageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDiagramOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Set diagram Media FK."
+      }
+    },
+    "/api/v1/admin/content/project/{id}/screenshots/{screenshot_id}": {
+      "put": {
+        "operationId": "apps_api_admin_content_project_screenshot_set_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "screenshot_id",
+            "required": true,
+            "schema": {
+              "title": "Screenshot Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectScreenshotImageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectScreenshotOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Set screenshot Media FK."
+      }
+    },
+    "/api/v1/admin/content/schema": {
+      "get": {
+        "operationId": "apps_api_admin_content_content_schema",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentSchemaOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Writable-field metadata."
+      }
+    },
+    "/api/v1/admin/content/{entity}": {
+      "get": {
+        "operationId": "apps_api_admin_content_content_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List content."
+      },
+      "post": {
+        "operationId": "apps_api_admin_content_content_create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDetailOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create content."
+      }
+    },
+    "/api/v1/admin/content/{entity}/bulk-archive": {
+      "post": {
+        "description": "Archive many rows when ``FEATURE_ADMIN_BULK_ARCHIVE`` is on (default off).",
+        "operationId": "apps_api_admin_content_content_bulk_archive",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentBulkArchiveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentBulkArchiveOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Bulk-archive content rows (feature-flagged)."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}": {
+      "get": {
+        "operationId": "apps_api_admin_content_content_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Content detail with entity-specific fields."
+      },
+      "put": {
+        "operationId": "apps_api_admin_content_content_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update content (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}/preview-link": {
+      "post": {
+        "operationId": "apps_api_admin_content_content_preview_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewLinkOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Generate a short-lived public preview share link."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}/revisions": {
+      "get": {
+        "operationId": "apps_api_admin_content_content_revisions_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRevisionListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List immutable content revisions."
+      },
+      "post": {
+        "operationId": "apps_api_admin_content_content_revisions_create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentRevisionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRevisionOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create an immutable content snapshot."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}/revisions/{revision_id}/restore": {
+      "post": {
+        "operationId": "apps_api_admin_content_content_revisions_restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Restore a revision as draft (never overwrites live published)."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}/transition": {
+      "post": {
+        "operationId": "apps_api_admin_content_content_transition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentTransitionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Transition content lifecycle state."
+      }
+    },
+    "/api/v1/admin/dashboard/summary": {
+      "get": {
+        "operationId": "apps_api_admin_api_dashboard_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummaryOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Action-oriented content counts."
+      }
+    },
+    "/api/v1/admin/featured": {
+      "get": {
+        "operationId": "apps_api_admin_siteconfig_featured_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "current",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Current"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturedItemListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List featured items."
+      },
+      "post": {
+        "operationId": "apps_api_admin_siteconfig_featured_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeaturedItemCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturedItemOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create a featured item."
+      }
+    },
+    "/api/v1/admin/featured/{id}": {
+      "delete": {
+        "operationId": "apps_api_admin_siteconfig_featured_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkOut"
+                }
+              }
+            },
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete a featured item."
+      },
+      "put": {
+        "operationId": "apps_api_admin_siteconfig_featured_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeaturedItemUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturedItemOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update a featured item (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/graph/validation/{version_id}": {
+      "get": {
+        "operationId": "apps_api_admin_graph_graph_validation_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphValidationOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Validator report for one version (no mutation)."
+      }
+    },
+    "/api/v1/admin/graph/versions": {
+      "get": {
+        "operationId": "apps_api_admin_graph_graph_versions_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GraphVersionOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Every graph version with node/edge counts."
+      },
+      "post": {
+        "operationId": "apps_api_admin_graph_graph_version_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphVersionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphVersionOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create an empty draft graph version."
+      }
+    },
+    "/api/v1/admin/graph/versions/{version_id}": {
+      "get": {
+        "operationId": "apps_api_admin_graph_graph_version_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphVersionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Full camel payload of one graph version."
+      }
+    },
+    "/api/v1/admin/graph/versions/{version_id}/activate": {
+      "post": {
+        "operationId": "apps_api_admin_graph_graph_version_activate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphActivateOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Activate a DRAFT version; the previously active one is archived."
+      }
+    },
+    "/api/v1/admin/graph/versions/{version_id}/payload": {
+      "put": {
+        "operationId": "apps_api_admin_graph_graph_payload_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphPayloadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphRevisionOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Replace the whole payload of a DRAFT version (If-Match optimistic lock)."
+      }
+    },
+    "/api/v1/admin/home-modules/{locale}": {
+      "get": {
+        "operationId": "apps_api_admin_home_home_modules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeModulesAdminOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Every home module row of a locale (draft+published), ordered."
+      },
+      "put": {
+        "operationId": "apps_api_admin_home_home_modules_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomeModulesPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeModulesRevisionOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Full-array bulk save with optimistic locking via If-Match."
+      }
+    },
+    "/api/v1/admin/home-modules/{locale}/validate": {
+      "post": {
+        "operationId": "apps_api_admin_home_home_modules_validate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomeModulesPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Dry-run validation of a home composition payload (no writes)."
+      }
+    },
+    "/api/v1/admin/media": {
+      "get": {
+        "operationId": "apps_api_admin_media_media_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List media."
+      },
+      "post": {
+        "operationId": "apps_api_admin_media_media_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "altTextEn": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Alttexten"
+                  },
+                  "altTextFa": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Alttextfa"
+                  },
+                  "file": {
+                    "anyOf": [
+                      {
+                        "format": "binary",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "File"
+                  },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Title"
+                  }
+                },
+                "title": "MultiPartBodyParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Upload media (multipart)."
+      }
+    },
+    "/api/v1/admin/media/licenses": {
+      "get": {
+        "description": "GET /api/v1/admin/media/licenses (backs the AF select box).",
+        "operationId": "apps_api_admin_media_ext_media_licenses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaLicenseOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Reference list of licenses ordered by name (backs the AF select box)."
+      }
+    },
+    "/api/v1/admin/media/orphans": {
+      "get": {
+        "operationId": "apps_api_admin_media_media_orphans",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List media with zero usage references."
+      }
+    },
+    "/api/v1/admin/media/{media_id}": {
+      "get": {
+        "operationId": "apps_api_admin_media_media_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Media detail."
+      },
+      "put": {
+        "operationId": "apps_api_admin_media_media_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update media (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/media/{media_id}/presentation": {
+      "patch": {
+        "description": "PATCH /api/v1/admin/media/{id}/presentation (optimistic locking).",
+        "operationId": "apps_api_admin_media_ext_media_presentation_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaPresentationPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaPresentationOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update media presentation metadata (optimistic locking via If-Match)."
+      }
+    },
+    "/api/v1/admin/media/{media_id}/replace": {
+      "post": {
+        "operationId": "apps_api_admin_media_media_replace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "anyOf": [
+                      {
+                        "format": "binary",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "File"
+                  }
+                },
+                "title": "FileParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Replace the media file (MIME-family compatible)."
+      }
+    },
+    "/api/v1/admin/overview/content-health": {
+      "get": {
+        "operationId": "apps_api_admin_health_content_health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentHealthOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Content health counts."
+      }
+    },
+    "/api/v1/admin/overview/translation-queue": {
+      "get": {
+        "operationId": "apps_api_admin_health_translation_queue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationQueueOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Per-slug translation queue."
+      }
+    },
+    "/api/v1/admin/site": {
+      "get": {
+        "operationId": "apps_api_admin_siteconfig_site_settings_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get site settings."
+      },
+      "put": {
+        "operationId": "apps_api_admin_siteconfig_site_settings_put",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteSettingsUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update site settings (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/tags": {
+      "get": {
+        "operationId": "apps_api_admin_siteconfig_tag_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": "1",
+              "title": "Page",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": "20",
+              "title": "Pagesize",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List topic tags."
+      },
+      "post": {
+        "operationId": "apps_api_admin_siteconfig_tag_create",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create a topic tag."
+      }
+    },
+    "/api/v1/admin/tags/{id}": {
+      "delete": {
+        "operationId": "apps_api_admin_siteconfig_tag_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkOut"
+                }
+              }
+            },
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete a topic tag."
+      },
+      "put": {
+        "operationId": "apps_api_admin_siteconfig_tag_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update a topic tag."
+      }
+    },
+    "/api/v1/admin/timeline/{locale}": {
+      "get": {
+        "operationId": "apps_api_admin_timeline_timeline_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TimelineAdminOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Every timeline record of a locale (draft+published), ordered; optional profile filter."
+      },
+      "post": {
+        "operationId": "apps_api_admin_timeline_timeline_create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelineCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineAdminOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Create a timeline record (append, or insert after after_id)."
+      }
+    },
+    "/api/v1/admin/timeline/{locale}/reorder": {
+      "post": {
+        "operationId": "apps_api_admin_timeline_timeline_reorder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelineReorderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TimelineAdminOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Reorder the locale's records; ids must be a full permutation."
+      }
+    },
+    "/api/v1/admin/timeline/{locale}/{id}": {
+      "delete": {
+        "operationId": "apps_api_admin_timeline_timeline_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Delete a timeline record (hard delete; 204 no content)."
+      },
+      "patch": {
+        "operationId": "apps_api_admin_timeline_timeline_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimelinePatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineAdminOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Edit timeline record fields (optimistic locking via If-Match)."
+      }
+    }
+  },
+  "servers": []
+}
