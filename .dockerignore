@@ -1,0 +1,14 @@
+# Never bake secrets, local state, or reference-only trees into the image.
+.env
+.env.*
+.git
+.venv
+media
+*.sqlite3
+**/*.sqlite3
+staticfiles
+.pytest_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+Infra

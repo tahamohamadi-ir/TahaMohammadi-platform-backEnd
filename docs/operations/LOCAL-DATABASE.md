@@ -88,6 +88,29 @@ If Docker is unavailable, install PostgreSQL 16 locally, create `taha_platform_d
 
 Omit `DATABASE_URL` from `.env`. `config.settings.development` falls back to SQLite (`dev.sqlite3`) for bare CLI commands and quick checks. PostgreSQL on 5433 is still the recommended path for schema rehearsal and health verification.
 
+## API service (compose) — BACKEND-100
+
+`docker-compose.dev.yml` also defines an `api` service that builds
+`Back-End/Dockerfile` (python:3.12-slim, uv install from `pyproject.toml`/`uv.lock`,
+gunicorn, non-root) and publishes **127.0.0.1:18010 -> container 8000** (18010
+avoids every legacy port: 80, 443, 13080, 13081, 18000, 15432, plus the new DB
+host port 5433 and host-side runserver 8000).
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d api
+```
+
+- The `db` service is unchanged; `docker compose -f docker-compose.dev.yml up -d db` keeps working.
+- Secrets come from the environment (`.env`), never from the compose file or the image. The default settings module is `config.settings.production`, which fails closed without `DJANGO_SECRET_KEY` — set it in `.env` (any local value), or set `DJANGO_SETTINGS_MODULE=config.settings.development` to run the dev profile in-container.
+- Health: `http://127.0.0.1:18010/health/` must report `"status": "ok"` and `"db": "ok"`.
+- Migrations are **not** run at container start — they are an explicit deploy step:
+
+  ```powershell
+  docker compose -f docker-compose.dev.yml run --rm api python manage.py migrate
+  ```
+
+- Runtime validation of the image/container is pending Docker daemon availability on the authoring machine; compose syntax was validated with `docker compose config`.
+
 ## Migration plan (empty database)
 
 Run against a disposable database before first `migrate`:

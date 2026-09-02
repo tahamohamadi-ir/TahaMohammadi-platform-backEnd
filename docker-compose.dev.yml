@@ -20,5 +20,49 @@ services:
       timeout: 3s
       retries: 20
 
+  api:
+    # BACKEND-100: new-platform app service. Built from Back-End/Dockerfile
+    # (python:3.12-slim, uv install from pyproject.toml/uv.lock, gunicorn,
+    # non-root). Secrets come only from the environment (.env) — they are never
+    # baked into the image or hardcoded here.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taha-platform-dev-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Defaults mirror the disposable db profile above; override in .env.
+      # config.settings.production fails closed without DJANGO_SECRET_KEY.
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings.production}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # In-container DB wiring targets the db service over the compose network.
+      # The host-side DATABASE_URL in .env (127.0.0.1:5433) is for runserver on
+      # the host; the container connects to db:5432 instead.
+      POSTGRES_DB: ${POSTGRES_DB:-taha_platform_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-taha_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taha_dev_local_only}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    ports:
+      # Host 18010 is new-platform-only: it avoids every legacy port (80, 443,
+      # 13080, 13081, 18000, 15432) plus the new DB host port 5433 and the
+      # host-side runserver port 8000. Loopback bind only — the same-origin
+      # reverse proxy (DEPLOYMENT-TOPOLOGY.md) terminates TLS.
+      - "127.0.0.1:18010:8000"
+    # Healthcheck without extra packages: python:3.12-slim ships no wget/curl,
+    # so use stdlib urllib against /health/ and require "db": "ok".
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)); raise SystemExit(0 if d.get('db')=='ok' else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+    # Migrations are NOT run at container start — they are an explicit deploy
+    # step (deployment readiness principle):
+    #   docker compose -f docker-compose.dev.yml run --rm api python manage.py migrate
+
 volumes:
   taha-platform-dev-db-data:

@@ -1,8 +1,14 @@
-"""Local laptop settings — real Postgres on 127.0.0.1:15432 (mode A1/A2).
+"""Local laptop settings — real Postgres selected via DATABASE_URL.
 
-Track BK-L0. Companion to infra/cms/docker-compose.local.yml (project
-taha-local). Throwaway credentials only; never used in production.
-Fallback when Docker is unavailable: config.settings.development (sqlite).
+Default target is the legacy monorepo parity profile 127.0.0.1:15432
+(project taha-local; compose file Infra/legacy-monorepo/cms/
+docker-compose.local.yml, tracked BK-L0). Throwaway credentials only;
+never used in production. For the new-platform Docker profile
+(Back-End/docker-compose.dev.yml, host port 5433), export the
+recommended DATABASE_URL from .env.example into the process
+environment — see docs/operations/LOCAL-DATABASE.md. Nothing auto-loads
+.env. Fallback when Docker is unavailable: config.settings.development
+(sqlite).
 """
 
 import os
