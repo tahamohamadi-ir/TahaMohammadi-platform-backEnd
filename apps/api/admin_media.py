@@ -25,7 +25,9 @@ from ninja import File, Form, Router, Schema
 from ninja.files import UploadedFile
 
 from apps.api.admin_common import (
+    MEDIA_IN_USE,
     AdminError,
+    _audit_log,
     _check_csrf,
     _parse_positive_int,
     _require_admin_otp,
@@ -175,7 +177,32 @@ def _admin_conflict_handler(request, exc: AdminConflictError):
         {
             "code": exc.code,
             "message": exc.message,
+            "field_errors": {},
             "currentUpdatedAt": exc.current_updated_at,
+        },
+        status=exc.status,
+    )
+
+
+class AdminUsageConflictError(AdminError):
+    """409 MEDIA_IN_USE conflict carrying the media row's current usage count."""
+
+    def __init__(self, usage_count: int):
+        super().__init__(
+            409,
+            MEDIA_IN_USE,
+            "Media is still referenced by content and cannot be deleted.",
+        )
+        self.usage_count = usage_count
+
+
+def _admin_usage_conflict_handler(request, exc: AdminUsageConflictError):
+    return JsonResponse(
+        {
+            "code": exc.code,
+            "message": exc.message,
+            "field_errors": {},
+            "usageCount": exc.usage_count,
         },
         status=exc.status,
     )
@@ -468,6 +495,43 @@ def media_replace(
     return media
 
 
+@media_router.delete(
+    "/{media_id}",
+    summary="Delete media (blocked while referenced by content).",
+)
+def media_delete(request, media_id: int):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    file_name = ""
+    try:
+        with transaction.atomic():
+            # Row lock so a concurrent reference (or delete) cannot race the
+            # usage check; the guard and the row delete commit together.
+            media = Media.objects.select_for_update().get(pk=media_id)
+            usage = media_usage_count(media)
+            if usage:
+                raise AdminUsageConflictError(usage)
+            file_name = media.file.name
+            media.delete()
+    except Media.DoesNotExist:
+        raise AdminError(404, "NOT_FOUND", "Media not found.") from None
+    # Storage cleanup happens only after the row delete committed; a storage
+    # failure then leaves an orphaned file, never a row pointing at a
+    # missing file.
+    media.file.delete(save=False)
+    _audit_log(
+        request,
+        action="media.delete",
+        model_name="media",
+        object_id=str(media_id),
+        detail=(
+            f"DELETE /api/v1/admin/media/{media_id} -> 200; file={file_name}"
+        ),
+    )
+    return {"ok": True, "id": media_id}
+
+
 from apps.api.admin_api import admin_api  # noqa: E402
 
 admin_api.exception_handler(AdminConflictError)(_admin_conflict_handler)
+admin_api.exception_handler(AdminUsageConflictError)(_admin_usage_conflict_handler)

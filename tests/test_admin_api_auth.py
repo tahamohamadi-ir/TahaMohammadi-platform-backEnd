@@ -5,6 +5,7 @@ Covers the /api/v1/admin/auth/* + /dashboard/summary contract: CSRF, login
 dashboard guard, CSRF enforcement and login rate limiting.
 """
 
+import json
 import time
 from datetime import timedelta
 
@@ -257,3 +258,32 @@ def test_login_rate_limited_and_audited(admin_user):
     assert blocked.status_code == 429
     assert blocked.json()["code"] == "RATE_LIMITED"
     assert AuditLog.objects.filter(action="login.blocked").exists()
+
+
+# --- ADR-0006 phase 1: normalized error envelope on AdminError responses ------
+
+
+def test_admin_error_envelope_includes_empty_field_errors(csrf_client):
+    response = csrf_client.get("/api/v1/admin/auth/me")
+    assert response.status_code == 401
+    body = response.json()
+    assert body["code"] == "AUTH_REQUIRED"
+    assert body["message"]
+    assert body["field_errors"] == {}
+    assert "request_id" not in body
+
+
+def test_admin_error_envelope_keeps_fields_dual_key(admin_api_client):
+    response = admin_api_client.post(
+        "/api/v1/admin/content/article",
+        data=json.dumps(
+            {"locale": "en", "slug": "envelope", "title": "T", "fields": {"bogus": 1}}
+        ),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "VALIDATION"
+    assert body["fields"] == {"fields": ["bogus"]}
+    assert body["field_errors"] == {"fields": ["bogus"]}
+    assert "request_id" not in body

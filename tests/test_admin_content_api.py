@@ -5,6 +5,8 @@ pagination, validation) and GET /api/v1/admin/content/{entity}/{id} detail
 (entity-specific fields, 404).
 """
 
+import json
+
 import pytest
 from django.core.cache import cache
 from django.test import Client
@@ -14,8 +16,11 @@ from apps.content.models import (
     Article,
     LifecycleStatus,
     Locale,
+    Profile,
+    ProfileSkill,
     Project,
 )
+from apps.security.models import AuditLog
 
 
 @pytest.fixture(autouse=True)
@@ -211,4 +216,183 @@ def test_admin_spa_traversal_blocked(rf):
     for evil in ("../../config/settings/base.py", "index.html/../../../secrets.txt"):
         with pytest.raises(Http404):
             serve_admin_ui(request, spa_path=evil)
+
+
+# --- G-G: profile sibling-locale creation on the accepted admin API -----------
+
+
+def _make_profile(*, locale, slug, title, status=LifecycleStatus.DRAFT):
+    return Profile.objects.create(
+        locale=locale,
+        slug=slug,
+        title=title,
+        status=status,
+    )
+
+
+def test_sibling_locale_requires_auth(csrf_client, db):
+    profile = _make_profile(locale=Locale.EN, slug="about", title="About")
+    response = csrf_client.post(
+        f"/api/v1/admin/content/profile/{profile.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "AUTH_REQUIRED"
+    assert not Profile.objects.filter(locale=Locale.FA, slug="about").exists()
+
+
+def test_sibling_locale_requires_otp(csrf_client, admin_user, db):
+    csrf_client.force_login(admin_user)  # staff but NO otp session
+    profile = _make_profile(locale=Locale.EN, slug="about", title="About")
+    response = csrf_client.post(
+        f"/api/v1/admin/content/profile/{profile.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 403
+    assert response.json()["code"] == "OTP_REQUIRED"
+    assert not Profile.objects.filter(locale=Locale.FA, slug="about").exists()
+
+
+def test_sibling_locale_requires_csrf(admin_user, totp_device, db):
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    session = client.session
+    session["otp_device_id"] = totp_device.persistent_id
+    session.save()
+    profile = _make_profile(locale=Locale.EN, slug="about", title="About")
+    response = client.post(
+        f"/api/v1/admin/content/profile/{profile.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )  # no X-CSRFToken header
+    assert response.status_code == 403
+    assert response.json()["code"] == "CSRF_FAILED"
+    assert not Profile.objects.filter(locale=Locale.FA, slug="about").exists()
+
+
+def test_sibling_locale_unknown_profile_404(admin_api_client):
+    response = admin_api_client.post(
+        "/api/v1/admin/content/profile/999999/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "NOT_FOUND"
+
+
+def test_sibling_locale_invalid_target_locale_400(admin_api_client):
+    profile = _make_profile(locale=Locale.EN, slug="about", title="About")
+    response = admin_api_client.post(
+        f"/api/v1/admin/content/profile/{profile.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "xx"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION"
+
+
+def test_sibling_locale_same_locale_400(admin_api_client):
+    profile = _make_profile(locale=Locale.EN, slug="about", title="About")
+    response = admin_api_client.post(
+        f"/api/v1/admin/content/profile/{profile.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "en"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION"
+
+
+def test_sibling_locale_creates_draft_sibling_201(
+    admin_api_client, admin_user, db
+):
+    source = _make_profile(locale=Locale.EN, slug="about", title="About")
+    Profile.objects.filter(pk=source.pk).update(
+        short_bio="Bio", availability="Open", updated_at=source.updated_at
+    )
+    ProfileSkill.objects.create(
+        profile=source, category="Design", name="Figma", source="Work"
+    )
+    source.refresh_from_db()
+
+    response = admin_api_client.post(
+        f"/api/v1/admin/content/profile/{source.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+        REMOTE_ADDR="203.0.113.12",
+    )
+    assert response.status_code == 201
+    body = response.json()
+
+    created = Profile.objects.get(locale=Locale.FA, slug="about")
+    assert body["editorUrl"] == f"/admin/content/profile/{created.pk}"
+    assert body["profile"]["locale"] == "fa"
+    assert body["profile"]["slug"] == "about"
+    assert body["profile"]["title"] == ""
+    assert body["profile"]["status"] == "draft"
+    assert body["profile"]["revision"] == 1
+    assert body["profile"]["translationStatus"]["status"] == "COMPLETE"
+
+    created.refresh_from_db()
+    assert created.translation_key == source.translation_key
+    assert created.status == LifecycleStatus.DRAFT
+    assert created.title == ""
+    assert created.body == ""
+    assert created.seo_title == ""
+    assert created.seo_description == ""
+    assert created.short_bio == ""
+    assert created.long_bio == ""
+    assert created.availability == ""
+    assert created.published_at is None
+    # Legacy behavior: the sibling inherits the source row's updated_at.
+    assert created.updated_at == source.updated_at
+
+    row = AuditLog.objects.get(action="admin.profile.sibling_created")
+    assert row.user == admin_user
+    assert row.model_name == "profile"
+    assert row.object_id == str(created.pk)
+    assert row.ip == "203.0.113.12"
+
+
+def test_sibling_locale_existing_sibling_409(admin_api_client, db):
+    source = _make_profile(locale=Locale.EN, slug="about", title="About")
+    Profile.objects.create(
+        locale=Locale.FA,
+        slug="about",
+        title="درباره",
+        status=LifecycleStatus.DRAFT,
+        translation_key=source.translation_key,
+    )
+    response = admin_api_client.post(
+        f"/api/v1/admin/content/profile/{source.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "DUPLICATE"
+    assert body["field_errors"] == {}
+    assert Profile.objects.filter(locale=Locale.FA, slug="about").count() == 1
+
+
+def test_sibling_locale_slug_conflict_409(admin_api_client, db):
+    source = _make_profile(locale=Locale.EN, slug="about", title="About")
+    Profile.objects.create(
+        locale=Locale.FA,
+        slug="about",
+        title="Unrelated fa profile",
+        status=LifecycleStatus.DRAFT,
+    )
+    response = admin_api_client.post(
+        f"/api/v1/admin/content/profile/{source.pk}/sibling-locale",
+        data=json.dumps({"targetLocale": "fa"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "DUPLICATE"
+    assert body["field_errors"] == {}
+    assert Profile.objects.filter(locale=Locale.FA, slug="about").count() == 1
+    assert not AuditLog.objects.filter(action="admin.profile.sibling_created").exists()
 

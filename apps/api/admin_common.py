@@ -77,6 +77,9 @@ DUPLICATE_RELATED = "DUPLICATE_RELATED"
 UNKNOWN_GROUP_MEMBER = "UNKNOWN_GROUP_MEMBER"
 DUPLICATE_GROUP_MEMBER = "DUPLICATE_GROUP_MEMBER"
 
+# Media deletion (G-E).
+MEDIA_IN_USE = "MEDIA_IN_USE"
+
 
 class AdminError(Exception):
     """Structured API error carrying status + Problem-Details-style body."""
@@ -90,7 +93,15 @@ class AdminError(Exception):
 
 def _api_error_handler(request, exc):
     if isinstance(exc, AdminError):
-        payload: dict = {"code": exc.code, "message": exc.message}
+        # ADR-0006 phase 1: the normalized envelope's ``field_errors`` is
+        # always present ({} when empty) alongside the legacy ``fields`` key
+        # (dual-key safety, mapping row 1). ``fields`` keeps its exact legacy
+        # behavior. No ``request_id`` is fabricated.
+        payload: dict = {
+            "code": exc.code,
+            "message": exc.message,
+            "field_errors": dict(exc.fields or {}),
+        }
         if exc.fields:
             payload["fields"] = exc.fields
         return JsonResponse(payload, status=exc.status)

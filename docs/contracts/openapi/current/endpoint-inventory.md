@@ -58,6 +58,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | GET | `/api/v1/admin/composition/schema` | Composition schema metadata. |
 | admin | GET | `/api/v1/admin/composition/{page_id}` | Composition page detail. |
 | admin | PUT | `/api/v1/admin/composition/{page_id}` | Replace a composition page (optimistic locking). |
+| admin | POST | `/api/v1/admin/content/profile/{id}/sibling-locale` | Create the sibling-locale draft for a profile (G-G). |
 | admin | GET | `/api/v1/admin/content/project/{id}/case-media` | List project diagrams and screenshots (Media FKs). |
 | admin | PUT | `/api/v1/admin/content/project/{id}/diagrams/{diagram_id}` | Set diagram Media FK. |
 | admin | PUT | `/api/v1/admin/content/project/{id}/screenshots/{screenshot_id}` | Set screenshot Media FK. |
@@ -90,6 +91,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | POST | `/api/v1/admin/media` | Upload media (multipart). |
 | admin | GET | `/api/v1/admin/media/licenses` | Reference list of licenses ordered by name (backs the AF select box). |
 | admin | GET | `/api/v1/admin/media/orphans` | List media with zero usage references. |
+| admin | DELETE | `/api/v1/admin/media/{media_id}` | Delete media (blocked while referenced by content). |
 | admin | GET | `/api/v1/admin/media/{media_id}` | Media detail. |
 | admin | PUT | `/api/v1/admin/media/{media_id}` | Update media (optimistic locking). |
 | admin | PATCH | `/api/v1/admin/media/{media_id}/presentation` | Update media presentation metadata (optimistic locking via If-Match). |

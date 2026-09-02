@@ -12,7 +12,9 @@ from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 
+from apps.content.models import Article, Locale
 from apps.media.models import Media
+from apps.security.models import AuditLog
 
 PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n"
@@ -324,4 +326,82 @@ def test_orphans_pagination(admin_api_client):
     body = r.json()
     assert body["total"] == 3
     assert len(body["items"]) == 1
+
+
+# --- G-E: DELETE /api/v1/admin/media/{id} (usage-guarded deletion) ------------
+
+
+def test_delete_media_requires_auth(csrf_client, media_root, db):
+    media = _make_media(title="Delete me")
+    response = csrf_client.delete(f"/api/v1/admin/media/{media.pk}")
+    assert response.status_code == 401
+    assert response.json()["code"] == "AUTH_REQUIRED"
+    assert Media.objects.filter(pk=media.pk).exists()
+
+
+def test_delete_media_requires_otp(csrf_client, admin_user, media_root):
+    csrf_client.force_login(admin_user)  # staff but NO otp session
+    media = _make_media(title="Delete me")
+    response = csrf_client.delete(f"/api/v1/admin/media/{media.pk}")
+    assert response.status_code == 403
+    assert response.json()["code"] == "OTP_REQUIRED"
+    assert Media.objects.filter(pk=media.pk).exists()
+
+
+def test_delete_media_requires_csrf(admin_user, totp_device, media_root):
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(admin_user)
+    session = client.session
+    session["otp_device_id"] = totp_device.persistent_id
+    session.save()
+    media = _make_media(title="Delete me")
+    response = client.delete(f"/api/v1/admin/media/{media.pk}")  # no X-CSRFToken
+    assert response.status_code == 403
+    assert response.json()["code"] == "CSRF_FAILED"
+    assert Media.objects.filter(pk=media.pk).exists()
+
+
+def test_delete_media_404(admin_api_client):
+    response = admin_api_client.delete("/api/v1/admin/media/999999")
+    assert response.status_code == 404
+    assert response.json()["code"] == "NOT_FOUND"
+
+
+def test_delete_media_in_use_409(admin_api_client, media_root):
+    media = _make_media(title="Referenced")
+    Article.objects.create(
+        locale=Locale.EN,
+        slug="references-media",
+        title="Referencing article",
+        featured_image=media,
+    )
+    response = admin_api_client.delete(f"/api/v1/admin/media/{media.pk}")
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "MEDIA_IN_USE"
+    assert body["usageCount"] == 1
+    assert body["field_errors"] == {}
+    assert Media.objects.filter(pk=media.pk).exists()
+
+
+def test_delete_media_success_removes_row_file_and_audits(
+    admin_api_client, admin_user, media_root
+):
+    created = _upload(admin_api_client, title="Doomed")
+    assert created.status_code == 201
+    media_id = created.json()["id"]
+    media = Media.objects.get(pk=media_id)
+    stored_path = media_root / media.file.name
+    assert stored_path.exists()
+
+    response = admin_api_client.delete(f"/api/v1/admin/media/{media_id}")
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "id": media_id}
+    assert not Media.objects.filter(pk=media_id).exists()
+    assert not stored_path.exists()
+
+    row = AuditLog.objects.get(action="media.delete", object_id=str(media_id))
+    assert row.model_name == "media"
+    assert row.user == admin_user
+    assert row.detail
 

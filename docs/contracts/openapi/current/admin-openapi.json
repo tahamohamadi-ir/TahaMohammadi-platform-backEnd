@@ -2202,6 +2202,20 @@
         "title": "PreviewLinkOut",
         "type": "object"
       },
+      "ProfileSiblingLocaleIn": {
+        "description": "Target locale for the new sibling-locale profile draft (G-G).",
+        "properties": {
+          "targetLocale": {
+            "title": "Targetlocale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetLocale"
+        ],
+        "title": "ProfileSiblingLocaleIn",
+        "type": "object"
+      },
       "ProjectCaseMediaOut": {
         "description": "Nested diagram + screenshot rows for a project (Media library FKs).",
         "properties": {
@@ -3614,6 +3628,48 @@
         "summary": "Replace a composition page (optimistic locking)."
       }
     },
+    "/api/v1/admin/content/profile/{id}/sibling-locale": {
+      "post": {
+        "description": "Create the missing sibling-locale draft sharing the source translation_key.\n\nMirrors the legacy ``POST /api/admin/profiles/{locale}/{slug}/siblings/\n{target_locale}`` behavior (apps/content/admin_api.py): the new row starts\nas an empty draft inheriting the source's slug, translation_key and\nupdated_at; registry codes replace the legacy local codes.",
+        "operationId": "apps_api_admin_content_profile_create_sibling_locale",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileSiblingLocaleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create the sibling-locale draft for a profile (G-G)."
+      }
+    },
     "/api/v1/admin/content/project/{id}/case-media": {
       "get": {
         "operationId": "apps_api_admin_content_project_case_media_list",
@@ -4967,6 +5023,26 @@
       }
     },
     "/api/v1/admin/media/{media_id}": {
+      "delete": {
+        "operationId": "apps_api_admin_media_media_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Delete media (blocked while referenced by content)."
+      },
       "get": {
         "operationId": "apps_api_admin_media_media_detail",
         "parameters": [

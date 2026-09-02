@@ -1,18 +1,18 @@
 {
   "accessEvidence": {
-    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29).",
-    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29)."
+    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py (auth/OTP/CSRF guards, usage guard, duplicate handling); amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
+    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 amendment."
   },
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 47,
-      "sha256": "1328f8244c5541f225648082891a0a1244961c0dead6692488992ac8c7606f09",
+      "paths": 48,
+      "sha256": "60e5aba0e19426ced2b0386aad23cef388f5909c22294fd5799aea533cf13bfc",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 103,
-      "sha256": "618ab18826875a5f27357ab87a3917082291d2e8610959b18aa2f936a7f3aa96"
+      "operations": 105,
+      "sha256": "df2d1921d7fda90169dd5e1926a94c5d3e229be245ed6cac3a3abdb19fb70605"
     },
     "public-openapi.json": {
       "paths": 40,
@@ -22,7 +22,7 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-08-29T08:21:02.625046+00:00",
-  "sourceCommit": "82e3984520154b60146009ae4a0d21eb5c30373e",
+  "generatedAtUtc": "2026-09-02T14:24:01.448730+00:00",
+  "sourceCommit": "edecc10188c207df88a3c7bceaf31dcd6fcfc5ec",
   "status": "scaffold-accepted"
 }

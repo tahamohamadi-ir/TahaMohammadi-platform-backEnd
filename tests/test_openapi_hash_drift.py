@@ -2,12 +2,14 @@
 
 The accepted artifact hashes, path counts, and versions below are locked by
 ``Docs/03-contracts/OPENAPI-ACCEPTANCE.md`` (provenance ``scaffold-accepted``,
-backend commit ``82e3984520154b60146009ae4a0d21eb5c30373e``). Any content change
-to the exported snapshots without regenerating ``PROVENANCE.json`` and creating
-a new acceptance record fails these tests and reopens PS-05.
+backend commit ``edecc10188c207df88a3c7bceaf31dcd6fcfc5ec``, acceptance
+addendum 2026-09-02 — G-E media delete + G-G profile sibling-locale). Any
+content change to the exported snapshots without regenerating
+``PROVENANCE.json`` and creating a new acceptance record fails these tests and
+reopens PS-05.
 
 Line-ending provenance: the acceptance record hashed CRLF-encoded bytes
-(``0f672693…`` / ``1328f824…`` / ``618ab188…``). The repository now normalizes
+(``0f672693…`` / ``60e5aba0…`` / ``df2d1921…``). The repository now normalizes
 text to LF (``.gitattributes`` ``eol=lf``), so the committed files hash
 differently while being byte-identical modulo line endings. These tests hash
 the LF-canonical content and additionally prove that re-encoding it with CRLF
@@ -33,21 +35,21 @@ ACCEPTED = {
         "version": "0.4.0",
     },
     "admin-openapi.json": {
-        "sha256": "1328f8244c5541f225648082891a0a1244961c0dead6692488992ac8c7606f09",
-        "paths": 47,
+        "sha256": "60e5aba0e19426ced2b0386aad23cef388f5909c22294fd5799aea533cf13bfc",
+        "paths": 48,
         "version": "0.1.0",
     },
     "endpoint-inventory.md": {
-        "sha256": "618ab18826875a5f27357ab87a3917082291d2e8610959b18aa2f936a7f3aa96",
-        "operations": 103,
+        "sha256": "df2d1921d7fda90169dd5e1926a94c5d3e229be245ed6cac3a3abdb19fb70605",
+        "operations": 105,
     },
 }
 
 # Hashes of the same content with LF line endings (canonical repo form).
 CANONICAL_LF = {
     "public-openapi.json": "be8fdbea748aa5215d20ceb4140434fc4e90582c667e66607956cb02ebaf5f94",
-    "admin-openapi.json": "46e456c63e878a85625fbfcfdc028a66c6ce5becbdb029c87b062a4641746f46",
-    "endpoint-inventory.md": "08310cd1dd0de009028cc005e3b3881fda17e1e711132221e4ceecb737ba57d9",
+    "admin-openapi.json": "5b56abe2fbb062293435329658749515f1c035a08e4fd8ba2eb80a1dc4e572b2",
+    "endpoint-inventory.md": "fe05fc1e375b26802367372936d246fdebe9c4ed26a3e930b3462f08158dfdd3",
 }
 
 

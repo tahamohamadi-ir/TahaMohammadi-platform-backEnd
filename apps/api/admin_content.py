@@ -34,6 +34,7 @@ from apps.content.models import (
     CreativeWork,
     Download,
     Landing,
+    LifecycleStatus,
     Profile,
     Project,
     Publication,
@@ -43,6 +44,10 @@ from apps.content.models import (
     Talk,
 )
 from apps.content.preview_token import build_preview_share_path, preview_ttl_seconds
+from apps.content.profile_api import (
+    resolve_translation_status,
+    serialize_profile_detail,
+)
 from apps.content.revisions import create_revision, restore_revision_as_draft
 from apps.content.services.lifecycle import (
     LifecycleError,
@@ -464,6 +469,7 @@ def _admin_conflict_handler(request, exc: AdminConflictError):
         {
             "code": exc.code,
             "message": exc.message,
+            "field_errors": {},
             "currentUpdatedAt": exc.current_updated_at,
         },
         status=exc.status,
@@ -1231,6 +1237,113 @@ def content_preview_link(request, entity: str, id: int):
         expiresAt=expires_at,
         ttlSeconds=ttl,
     )
+
+
+class ProfileSiblingLocaleIn(Schema):
+    """Target locale for the new sibling-locale profile draft (G-G)."""
+
+    targetLocale: str
+
+
+def _serialize_sibling_profile(profile: Profile) -> dict[str, object]:
+    """Legacy admin profile projection (content.admin_api parity)."""
+    data = serialize_profile_detail(profile)
+    data["status"] = profile.status
+    data["revision"] = profile.revision
+    data["translationStatus"] = resolve_translation_status(profile)
+    return data
+
+
+@content_router.post(
+    "/profile/{id}/sibling-locale",
+    response={201: dict},
+    summary="Create the sibling-locale draft for a profile (G-G).",
+)
+def profile_create_sibling_locale(request, id: int, payload: ProfileSiblingLocaleIn):
+    """Create the missing sibling-locale draft sharing the source translation_key.
+
+    Mirrors the legacy ``POST /api/admin/profiles/{locale}/{slug}/siblings/
+    {target_locale}`` behavior (apps/content/admin_api.py): the new row starts
+    as an empty draft inheriting the source's slug, translation_key and
+    updated_at; registry codes replace the legacy local codes.
+    """
+    _require_admin_otp(request)
+    _check_csrf(request)
+    source = Profile.objects.filter(pk=id).first()
+    if source is None:
+        raise AdminError(404, "NOT_FOUND", "Profile not found.")
+    if payload.targetLocale not in VALID_LOCALES:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"Invalid targetLocale. Expected one of: {', '.join(VALID_LOCALES)}.",
+        )
+    if payload.targetLocale == source.locale:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "The sibling locale must be different from the current locale.",
+        )
+    if Profile.objects.filter(
+        translation_key=source.translation_key, locale=payload.targetLocale
+    ).exists():
+        raise AdminError(
+            409,
+            "DUPLICATE",
+            "The sibling locale already exists for this profile family.",
+        )
+    if Profile.objects.filter(
+        locale=payload.targetLocale, slug=source.slug
+    ).exists():
+        raise AdminError(
+            409,
+            "DUPLICATE",
+            "That locale already has a different profile using this slug.",
+        )
+    try:
+        with transaction.atomic():
+            created = Profile.objects.create(
+                locale=payload.targetLocale,
+                slug=source.slug,
+                title="",
+                body="",
+                seo_title="",
+                seo_description="",
+                short_bio="",
+                long_bio="",
+                availability="",
+                status=LifecycleStatus.DRAFT,
+                translation_key=source.translation_key,
+                published_at=None,
+            )
+            # Legacy behavior: the sibling inherits the source row's updated_at
+            # (update() bypasses auto_now).
+            Profile.objects.filter(pk=created.pk).update(updated_at=source.updated_at)
+    except IntegrityError:
+        raise AdminError(
+            409,
+            "DUPLICATE",
+            "The sibling locale already exists for this profile family.",
+        ) from None
+    created.refresh_from_db()
+    AuditLog.objects.create(
+        user=request.user,
+        action="admin.profile.sibling_created",
+        model_name="profile",
+        object_id=str(created.pk),
+        ip=_client_ip(request),
+        detail=(
+            f"profile family {source.translation_key} "
+            f"source={source.locale}/{source.slug} "
+            f"created={created.locale}/{created.slug}"
+        ),
+    )
+    return {
+        "editorUrl": f"/admin/content/profile/{created.pk}",
+        "profile": _serialize_sibling_profile(
+            Profile.objects.filter(pk=created.pk).get()
+        ),
+    }
 
 
 from apps.api.admin_api import admin_api  # noqa: E402
