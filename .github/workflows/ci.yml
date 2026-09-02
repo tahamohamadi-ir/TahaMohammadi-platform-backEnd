@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   checks:
-    name: uv sync, Ruff, manage.py check, pytest
+    name: uv sync, Ruff, manage.py check, pytest, OpenAPI provenance gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,3 +38,6 @@ jobs:
         run: |
           uv run pytest tests/test_public_openapi.py tests/test_admin_openapi.py
           uv run pytest tests/test_contract_fixtures.py tests/test_openapi_hash_drift.py
+
+      - name: OpenAPI export hash matches accepted provenance
+        run: uv run python scripts/verify_openapi_export.py
