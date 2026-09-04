@@ -1,18 +1,18 @@
 {
   "accessEvidence": {
-    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py (auth/OTP/CSRF guards, usage guard, duplicate handling); amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
-    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 amendment."
+    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py. 2026-09-04 additions (approval-queue read surface, owner publication gate, approvalState projections) verified in tests/test_admin_approvals.py; amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
+    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 and 2026-09-04 amendments."
   },
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 48,
-      "sha256": "60e5aba0e19426ced2b0386aad23cef388f5909c22294fd5799aea533cf13bfc",
+      "paths": 49,
+      "sha256": "5856a37dbefbae60ea5e27ed48a1a2ab37767c9352800fe389371ab94a94b49a",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 105,
-      "sha256": "df2d1921d7fda90169dd5e1926a94c5d3e229be245ed6cac3a3abdb19fb70605"
+      "operations": 106,
+      "sha256": "452de5ab13f5e0b9ea57bf22cd7687ef04cadad96edb0fd2057918f7d8ffd7ef"
     },
     "public-openapi.json": {
       "paths": 40,
@@ -22,7 +22,7 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-02T14:24:01.448730+00:00",
-  "sourceCommit": "edecc10188c207df88a3c7bceaf31dcd6fcfc5ec",
+  "generatedAtUtc": "2026-09-04T14:56:35.087832+00:00",
+  "sourceCommit": "6cf763897f34f58c022f83ec3319e755aaa2441e",
   "status": "scaffold-accepted"
 }

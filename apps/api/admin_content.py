@@ -30,6 +30,7 @@ from apps.content.models import (
     Article,
     Book,
     ContentRevision,
+    ContentSeedRecord,
     Course,
     CreativeWork,
     Download,
@@ -487,6 +488,7 @@ class ContentListItemOut(Schema):
     publishedAt: datetime | None
     scheduledFor: datetime | None = None
     updatedAt: datetime
+    approvalState: str | None = None
 
 
 class ContentListOut(Schema):
@@ -510,6 +512,7 @@ class ContentDetailOut(Schema):
     scheduledFor: datetime | None = None
     createdAt: datetime
     updatedAt: datetime
+    approvalState: str | None = None
     fields: dict[str, object]
 
 
@@ -609,6 +612,46 @@ class ContentRevisionListOut(Schema):
     items: list[ContentRevisionOut]
 
 
+def _seed_approval_state(model, object_id: int) -> str | None:
+    """Approval state from the linked ContentSeedRecord (BACKEND-210).
+
+    Returns ``None`` for admin-created rows with no seed provenance — those
+    are owner-authored through this admin and carry no separate gate.
+    """
+    record = ContentSeedRecord.objects.filter(
+        mapped_model_label=model._meta.label, mapped_object_id=object_id
+    ).first()
+    if record is None:
+        return None
+    return record.approval_state or None
+
+
+def _seed_approval_states(model, object_ids: list[int]) -> dict[int, str]:
+    """Bulk variant of :func:`_seed_approval_state` for list views."""
+    rows = ContentSeedRecord.objects.filter(
+        mapped_model_label=model._meta.label, mapped_object_id__in=object_ids
+    ).values_list("mapped_object_id", "approval_state")
+    return {object_id: state for object_id, state in rows if state}
+
+
+def _enforce_publication_gate(item, model) -> None:
+    """Block ``→ published`` while the owner seed record is not approved.
+
+    Admin-created rows without seed provenance are owner-authored through
+    this admin and publish without an extra gate.
+    """
+    record = ContentSeedRecord.objects.filter(
+        mapped_model_label=model._meta.label, mapped_object_id=item.pk
+    ).first()
+    if record is not None and not record.is_publication_allowed:
+        raise AdminError(
+            409,
+            "APPROVAL_REQUIRED",
+            "Owner approval is required before this record can be published "
+            f"(approval_state={record.approval_state!r}).",
+        )
+
+
 def _detail_response(item, model, entity: str) -> ContentDetailOut:
     """Serialize an entity row into the shared detail envelope."""
     fields: dict[str, object] = {}
@@ -628,6 +671,7 @@ def _detail_response(item, model, entity: str) -> ContentDetailOut:
         scheduledFor=getattr(item, "scheduled_for", None),
         createdAt=item.created_at,
         updatedAt=item.updated_at,
+        approvalState=_seed_approval_state(model, item.pk),
         fields=fields,
     )
 
@@ -698,7 +742,8 @@ def content_list(
         qs = qs.filter(Q(title__icontains=q) | Q(slug__icontains=q))
 
     total = qs.count()
-    items = qs[(page_num - 1) * page_size : page_num * page_size]
+    items = list(qs[(page_num - 1) * page_size : page_num * page_size])
+    approval_states = _seed_approval_states(model, [item.pk for item in items])
     return ContentListOut(
         items=[
             ContentListItemOut(
@@ -710,6 +755,7 @@ def content_list(
                 publishedAt=item.published_at,
                 scheduledFor=getattr(item, "scheduled_for", None),
                 updatedAt=item.updated_at,
+                approvalState=approval_states.get(item.pk),
             )
             for item in items
         ],
@@ -922,6 +968,10 @@ def content_transition(request, entity: str, id: int, payload: ContentTransition
             # validate against the same stale status; audit is written in the
             # same transaction as the status change.
             item = model.objects.select_for_update().get(pk=id)
+            if payload.to == "published":
+                # Owner publication gate (BACKEND-210): seed-sourced rows
+                # cannot publish without the owner's approval triple.
+                _enforce_publication_gate(item, model)
             try:
                 transition_item(
                     item,

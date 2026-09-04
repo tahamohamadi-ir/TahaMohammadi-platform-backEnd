@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.content.models import (
     Article,
+    ContentSeedRecord,
     Landing,
     LifecycleStatus,
     Profile,
@@ -74,6 +75,22 @@ class Command(BaseCommand):
                             or item.scheduled_for is None
                             or item.scheduled_for > timezone.now()
                         ):
+                            continue
+                        # Owner publication gate (BACKEND-210): the same
+                        # rule the admin transition enforces; a scheduled row
+                        # whose seed approval triple never cleared is skipped
+                        # (and reported), never published here.
+                        seed = ContentSeedRecord.objects.filter(
+                            mapped_model_label=model._meta.label,
+                            mapped_object_id=pk,
+                        ).first()
+                        if seed is not None and not seed.is_publication_allowed:
+                            reason = (
+                                f"{label}: APPROVAL_REQUIRED "
+                                f"(approval_state={seed.approval_state!r})"
+                            )
+                            failures.append(reason)
+                            self.stderr.write(self.style.ERROR(f"blocked {reason}"))
                             continue
                         old_status = item.status
                         item.status = LifecycleStatus.PUBLISHED

@@ -47,6 +47,104 @@
         "title": "AdminUserOut",
         "type": "object"
       },
+      "ApprovalQueueCountsOut": {
+        "description": "Counts over every seed record, independent of the ``state`` filter.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "notApproved": {
+            "title": "Notapproved",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "approved",
+          "notApproved"
+        ],
+        "title": "ApprovalQueueCountsOut",
+        "type": "object"
+      },
+      "ApprovalQueueItemOut": {
+        "description": "One seed row as the admin approval queue shows it.",
+        "properties": {
+          "approvalState": {
+            "title": "Approvalstate",
+            "type": "string"
+          },
+          "contentId": {
+            "title": "Contentid",
+            "type": "string"
+          },
+          "contentType": {
+            "title": "Contenttype",
+            "type": "string"
+          },
+          "isPublicationAllowed": {
+            "title": "Ispublicationallowed",
+            "type": "boolean"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "publicationState": {
+            "title": "Publicationstate",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contentId",
+          "contentType",
+          "locale",
+          "slug",
+          "title",
+          "approvalState",
+          "publicationState",
+          "visibility",
+          "isPublicationAllowed"
+        ],
+        "title": "ApprovalQueueItemOut",
+        "type": "object"
+      },
+      "ApprovalQueueOut": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/ApprovalQueueCountsOut"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalQueueItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "counts"
+        ],
+        "title": "ApprovalQueueOut",
+        "type": "object"
+      },
       "BlockFieldSpecOut": {
         "properties": {
           "key": {
@@ -587,6 +685,17 @@
       "ContentDetailOut": {
         "description": "Content detail with entity-specific fields (camelCase keys).",
         "properties": {
+          "approvalState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvalstate"
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -759,6 +868,17 @@
       "ContentListItemOut": {
         "description": "Compact admin row for a content entity (list view).",
         "properties": {
+          "approvalState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvalstate"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -3234,6 +3354,36 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/approval-queue": {
+      "get": {
+        "operationId": "apps_api_admin_approvals_approval_queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "not-approved",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalQueueOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Owner approval queue from the imported seed records."
+      }
+    },
     "/api/v1/admin/auth/csrf": {
       "get": {
         "operationId": "apps_api_admin_api_auth_csrf",

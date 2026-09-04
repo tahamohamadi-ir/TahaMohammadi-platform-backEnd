@@ -35,21 +35,21 @@ ACCEPTED = {
         "version": "0.4.0",
     },
     "admin-openapi.json": {
-        "sha256": "60e5aba0e19426ced2b0386aad23cef388f5909c22294fd5799aea533cf13bfc",
-        "paths": 48,
+        "sha256": "5856a37dbefbae60ea5e27ed48a1a2ab37767c9352800fe389371ab94a94b49a",
+        "paths": 49,
         "version": "0.1.0",
     },
     "endpoint-inventory.md": {
-        "sha256": "df2d1921d7fda90169dd5e1926a94c5d3e229be245ed6cac3a3abdb19fb70605",
-        "operations": 105,
+        "sha256": "452de5ab13f5e0b9ea57bf22cd7687ef04cadad96edb0fd2057918f7d8ffd7ef",
+        "operations": 106,
     },
 }
 
 # Hashes of the same content with LF line endings (canonical repo form).
 CANONICAL_LF = {
     "public-openapi.json": "be8fdbea748aa5215d20ceb4140434fc4e90582c667e66607956cb02ebaf5f94",
-    "admin-openapi.json": "5b56abe2fbb062293435329658749515f1c035a08e4fd8ba2eb80a1dc4e572b2",
-    "endpoint-inventory.md": "fe05fc1e375b26802367372936d246fdebe9c4ed26a3e930b3462f08158dfdd3",
+    "admin-openapi.json": "1a8a408e1ed114fe2d341f7bd990fff55e51f9b8805e1ec373b7a9d9cb522529",
+    "endpoint-inventory.md": "bf0ccdfcd41c7f359612c6249fe4c85b6ca2de9a81457ac784e7b631e6cfd574",
 }
 
 

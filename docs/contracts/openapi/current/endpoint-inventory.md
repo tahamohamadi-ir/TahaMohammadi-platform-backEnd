@@ -44,6 +44,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/talks/{locale}/{slug}` | Get one published talk by slug |
 | public | GET | `/api/teaching/{locale}` | List published teaching courses for a locale (alias of /courses/) |
 | public | GET | `/api/teaching/{locale}/{slug}` | Get one published teaching course by slug (alias) |
+| admin | GET | `/api/v1/admin/approval-queue` | Owner approval queue from the imported seed records. |
 | admin | GET | `/api/v1/admin/auth/csrf` | Return the CSRF token and ensure the csrftoken cookie is set. |
 | admin | POST | `/api/v1/admin/auth/login` | Admin login. |
 | admin | POST | `/api/v1/admin/auth/logout` | End the admin session. |
