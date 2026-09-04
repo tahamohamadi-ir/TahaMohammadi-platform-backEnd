@@ -187,6 +187,7 @@ class SiteSettingsOut(Schema):
     currentResumeMediaId: int | None
     currentCv: CurrentDocumentOut | None
     currentResume: CurrentDocumentOut | None
+    seedPolicy: dict[str, object] | None = None
     updatedAt: datetime
 
 
@@ -380,6 +381,7 @@ def _serialize_site_settings(item: SiteSettings) -> SiteSettingsOut:
         currentResumeMediaId=resume.pk if resume is not None else None,
         currentCv=_serialize_current_document(cv),
         currentResume=_serialize_current_document(resume),
+        seedPolicy=item.seed_policy,
         updatedAt=item.updated_at,
     )
 

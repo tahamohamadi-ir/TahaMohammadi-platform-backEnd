@@ -20,6 +20,9 @@ class SiteSettings(models.Model):
     footer_text = models.TextField(blank=True, default="")
     primary_color = models.CharField(max_length=7, default="#1f2937")
     nav_links = models.JSONField(default=list, blank=True)
+    # Raw supplement/seed-settings.json payload (BACKEND-211 / ADMIN-281);
+    # written by the seed import only — never by the admin API.
+    seed_policy = models.JSONField(blank=True, default=None, null=True)
     seo_default_title = models.CharField(max_length=200, blank=True, default="")
     seo_default_description = models.TextField(blank=True, default="")
     # Public contact block (board A10 decision 2026-08-23: contact path

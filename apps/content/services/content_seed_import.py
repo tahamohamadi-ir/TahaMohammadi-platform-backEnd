@@ -179,12 +179,17 @@ def _ensure_profile(locale: str) -> Profile:
 
 
 def apply_seed_settings(settings_path: Path) -> SiteSettings:
-    """Apply supplement defaults where SiteSettings has matching fields."""
+    """Apply supplement defaults where SiteSettings has matching fields.
+
+    The raw policy payload is also persisted (BACKEND-211 / ADMIN-281) so the
+    site settings admin can label seed-managed surfaces instead of guessing.
+    """
     settings_row = SiteSettings.get_singleton()
     if not settings_path.exists():
         return settings_row
 
     payload = load_json(settings_path)
+    settings_row.seed_policy = payload
     if not payload.get("show_phone", False):
         settings_row.contact_phone = ""
         settings_row.contact_phone_intl = ""

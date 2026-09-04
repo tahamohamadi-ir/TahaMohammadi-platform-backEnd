@@ -2646,6 +2646,18 @@
             "title": "Primarycolor",
             "type": "string"
           },
+          "seedPolicy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seedpolicy"
+          },
           "seoDefaultDescription": {
             "title": "Seodefaultdescription",
             "type": "string"

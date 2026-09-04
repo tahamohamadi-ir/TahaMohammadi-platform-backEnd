@@ -1,13 +1,12 @@
 {
   "accessEvidence": {
-    "admin": "tests/test_admin_openapi.py — verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py. 2026-09-04 additions (approval-queue read surface, owner publication gate, approvalState projections) verified in tests/test_admin_approvals.py; amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
-    "public": "tests/test_public_openapi.py — anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 and 2026-09-04 amendments."
+    "admin": "tests/test_admin_openapi.py - verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py. 2026-09-04 additions (approval-queue, publication gate, approvalState, seedPolicy) verified in tests/test_admin_approvals.py and tests/test_admin_seed_policy.py; amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
+    "public": "tests/test_public_openapi.py - anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 and 2026-09-04 amendments."
   },
-  "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "artifacts": {
     "admin-openapi.json": {
       "paths": 49,
-      "sha256": "5856a37dbefbae60ea5e27ed48a1a2ab37767c9352800fe389371ab94a94b49a",
+      "sha256": "38ff4d81d454287bd0e6c437ad84bfada41255e8fa6acc13704144223014fd7a",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
@@ -22,7 +21,8 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-04T14:56:35.087832+00:00",
-  "sourceCommit": "6cf763897f34f58c022f83ec3319e755aaa2441e",
-  "status": "scaffold-accepted"
+  "generatedAtUtc": "2026-09-04T15:45:08.720081+00:00",
+  "sourceCommit": "f38c3b019b427857b41db7c5903d88cd6125ea87",
+  "status": "scaffold-accepted",
+  "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md"
 }
