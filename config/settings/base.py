@@ -138,8 +138,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-OTP_TOTP_ISSUER = "tahamohamadi.ir"
-OTP_EMAIL_SENDER = "noreply@tahamohamadi.ir"
+OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "tahamohamadi.ir")
+OTP_EMAIL_SENDER = os.environ.get("OTP_EMAIL_SENDER", "noreply@tahamohamadi.ir")
 
 # Outbound email (contact form). All env-driven; empty EMAIL_HOST means the
 # contact endpoint answers 503 honestly instead of pretending to send.
