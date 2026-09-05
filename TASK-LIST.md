@@ -47,7 +47,7 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 
 - [x] **BACKEND-041** GitHub Actions: `uv sync`, Ruff, pytest, `manage.py check`, OpenAPI fixture tests.
 - [x] **BACKEND-042** CI gate: `scripts/verify_openapi_export.py` re-exports and hashes artifacts against `PROVENANCE.json` (3/3 match locally); wired as a step in `.github/workflows/ci.yml`.
-- [ ] Migration forward/reverse rehearsal on production-like copy.
+- [x] Migration forward/reverse rehearsal on production-like copy (disposable Docker profile 5433; BACKEND-200 evidence).
 - [ ] Security review: media, preview tokens, contact, rebuild callbacks.
 
 ## BE-5 — Integration and release
@@ -55,7 +55,7 @@ Status: `[x]` done, `[ ]` open, `[~]` in progress.
 - [x] **BACKEND-170** Same-origin integration test plan: `docs/quality/INTEGRATION-TEST-PLAN.md` (checklist against `DEPLOYMENT-TOPOLOGY.md` evidence list).
 - [x] **BACKEND-180** Disposable-env smoke: `tests/test_staging_smoke.py` (health, sign-in, MFA enroll+OTP, CSRF failure, session expiry, re-auth, content create, preview share+expiry, media boundary, logout, contact HTML/JSON/cross-origin/non-persistence). 3/3 pass; full suite 675 pass. PostgreSQL-profile run pending: Docker daemon unavailable (Docker Desktop failed to start).
 - [x] **BACKEND-190** Permission matrix tests for all admin mutations (`tests/test_admin_permission_matrix.py`: non-staff 403 across content/media/site/approvals, staff-without-OTP 403, preview-link guard matrix; closes the WORKFLOW-API-MAP BACKEND-190 gap list).
-- [ ] **BACKEND-200** Staging artifact + rollback evidence (`R7` backend slice).
+- [x] **BACKEND-200** Staging artifact + rollback evidence (R7 backend slice) — image `taha-platform-dev-api` `sha256:cc5bd6a7…`, fresh-DB forward (53 migrations), reverse/re-forward of latest, stack down/up + `/health/ 200 ok/ok/ok`; see `docs/quality/BACKEND-200-STAGING-ARTIFACT-EVIDENCE.md` (local disposable; deployed-staging host remains COORD-060 P2/P4).
 - [x] **BACKEND-211** `SiteSettings.seed_policy` persisted at import (migration `siteconfig.0004`), served read-only via `GET /api/v1/admin/site`; OpenAPI admin artifact re-locked per OPENAPI-ACCEPTANCE addendum 2026-09-04b.
 - [x] **BACKEND-210** Owner approval queue endpoint (`GET /api/v1/admin/approval-queue`), publication gate on `to=published` transitions and the scheduled-publish command (`409 APPROVAL_REQUIRED`), `approvalState` in admin content projections; OpenAPI re-accepted (49 paths / 106 ops) per OPENAPI-ACCEPTANCE addendum 2026-09-04.
 

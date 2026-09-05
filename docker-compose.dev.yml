@@ -46,6 +46,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taha_dev_local_only}
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
+      # Contact-form health parity: the /health/ probe answers "degraded" when
+      # the form is enabled but EMAIL_HOST is unset (base.py reads it from env).
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
     ports:
       # Host 18010 is new-platform-only: it avoids every legacy port (80, 443,
       # 13080, 13081, 18000, 15432) plus the new DB host port 5433 and the
