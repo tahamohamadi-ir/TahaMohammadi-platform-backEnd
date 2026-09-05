@@ -11,7 +11,7 @@ htmlcov/
 !.env.example
 dev.sqlite3
 *.sqlite3
-media/
+/media/
 staticfiles/
 admin-ui/
 .DS_Store
