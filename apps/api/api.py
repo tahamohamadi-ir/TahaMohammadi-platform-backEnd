@@ -14,14 +14,32 @@ from pathlib import PurePosixPath
 from django.http import FileResponse
 from ninja import Field, NinjaAPI, Schema
 from ninja.errors import HttpError
+from ninja.errors import ValidationError as NinjaValidationError
 from ninja.pagination import PageNumberPagination, paginate
 
+from apps.api.admin_siteconfig import (
+    LocalizedAudienceLinkOut,
+    LocalizedNavLinkOut,
+    LocalizedSceneOut,
+    LocalizedSiteSeoOut,
+)
+from apps.api.record_resolver import (
+    _ID_RE,
+    MAX_ID,
+    RESOLVER_FAMILIES,
+    ROUTE_FAMILY_MAP,
+    ErrorEnvelopeOut,
+    WorkRefOut,
+    _error_response,
+    _extract_summary,
+)
 from apps.composition.projection import public_story_document
 from apps.content.models import (
     AccessState,
     Article,
     ArticleSlugRedirect,
     Book,
+    Collection,
     Course,
     CreativeWork,
     Download,
@@ -30,6 +48,7 @@ from apps.content.models import (
     GraphVersion,
     HomeModule,
     Landing,
+    Lesson,
     Locale,
     Profile,
     Project,
@@ -40,13 +59,20 @@ from apps.content.models import (
     Talk,
     TopicTag,
 )
+from apps.content.published import (
+    FAMILY_TO_ENTITY_KEY,
+    order_like,
+    published_list_extras,
+    resolve_published_detail,
+    resolve_published_target,
+)
 from apps.content.services.public_projection import (
     published_for_locale,
     sanitize_public_richtext,
 )
 from apps.media.models import Media
 from apps.media.public_urls import public_media_ref
-from apps.siteconfig.models import SiteSettings
+from apps.siteconfig.models import LocalizedSiteSettings, SiteSettings
 
 api = NinjaAPI(title="Taha CMS Public API", version="0.4.0")
 
@@ -224,7 +250,215 @@ class StoryDocumentOut(Schema):
     sections: list[StorySectionOut] = Field(default_factory=list)
 
 
-class ArticleDetailOut(ArticleListOut):
+class PublicSeoOut(Schema):
+    """Publication metadata SEO projection with title/description/image."""
+
+    title: str
+    description: str
+    image: str | None = None
+
+
+class AlternateLocaleOut(Schema):
+    """Alternate locale route projection resolved via explicit translation key."""
+
+    locale: str
+    slug: str
+    routeFamily: str
+    courseSlug: str | None = None
+
+
+def _resolve_public_seo(obj, context=None) -> PublicSeoOut:
+    title = (getattr(obj, "seo_title", "") or "").strip()
+    if not title:
+        title = (getattr(obj, "title", "") or "").strip()
+
+    description = (getattr(obj, "seo_description", "") or "").strip()
+    if not description:
+        family = obj.__class__.__name__.lower()
+        if family == "collection":
+            summary_raw = getattr(obj, "description", "") or getattr(obj, "title", "") or ""
+            description = summary_raw.strip()
+        else:
+            description = _extract_summary(family, obj)
+
+    image_url = None
+    social_img = getattr(obj, "social_image", None)
+    if not social_img:
+        social_img = getattr(obj, "featured_image", None) or getattr(obj, "cover_media", None)
+    if social_img:
+        request = context.get("request") if context else None
+        ref = public_media_ref(social_img, request, locale=getattr(obj, "locale", None))
+        if isinstance(ref, dict):
+            image_url = ref.get("url")
+        elif hasattr(ref, "url"):
+            image_url = ref.url
+
+    return PublicSeoOut(
+        title=title,
+        description=description,
+        image=image_url,
+    )
+
+
+PUBLIC_RESOLVER_FAMILIES: dict[str, type] = {
+    **RESOLVER_FAMILIES,
+    "lesson": Lesson,
+    "collection": Collection,
+}
+
+PUBLIC_ROUTE_FAMILY_MAP: dict[str, str] = {
+    **ROUTE_FAMILY_MAP,
+    "lesson": "education",
+    "collection": "collections",
+}
+
+
+def _entity_key_for_family(family_str: str) -> str:
+    """Map a public family name to the snapshot entity key (A04)."""
+    return FAMILY_TO_ENTITY_KEY.get(family_str, family_str)
+
+
+def _resolve_public_alternates(obj) -> list[AlternateLocaleOut]:
+    translation_key = getattr(obj, "translation_key", None)
+    if not translation_key:
+        return []
+
+    model = obj.__class__
+    public_mgr = getattr(model.objects, "public", None)
+    if public_mgr is None:
+        return []
+
+    siblings = list(
+        public_mgr()
+        .filter(translation_key=translation_key)
+        .exclude(pk=obj.pk)
+        .order_by("locale")
+    )
+    family = model.__name__.lower()
+    route_family = PUBLIC_ROUTE_FAMILY_MAP.get(family, family)
+    entity_key = _entity_key_for_family(family)
+
+    alternates: list[AlternateLocaleOut] = []
+    seen_locales: set[str] = set()
+
+    def _append_alternate(sibling) -> None:
+        if sibling.locale in seen_locales:
+            return
+        seen_locales.add(sibling.locale)
+        course_slug = None
+        if hasattr(sibling, "course"):
+            course_slug = getattr(getattr(sibling, "course", None), "slug", None)
+        alternates.append(
+            AlternateLocaleOut(
+                locale=sibling.locale,
+                slug=sibling.slug,
+                routeFamily=route_family,
+                courseSlug=course_slug,
+            )
+        )
+
+    for sibling in siblings:
+        _append_alternate(sibling)
+    # A04: still-published (snapshot-backed) translations stay linked.
+    live_ids = {s.pk for s in siblings} | {obj.pk}
+    for other_locale in ("fa", "en"):
+        if other_locale == getattr(obj, "locale", None):
+            continue
+        for extra in published_list_extras(model, entity_key, other_locale, live_ids):
+            if getattr(extra, "translation_key", None) == translation_key:
+                _append_alternate(extra)
+                live_ids.add(extra.pk)
+    alternates.sort(key=lambda a: a.locale)
+    return alternates
+
+
+def _resolve_public_related_records(obj) -> list[WorkRefOut]:
+    raw_refs = getattr(obj, "related_records", None)
+    if not raw_refs or not isinstance(raw_refs, list):
+        return []
+
+    locale = getattr(obj, "locale", None)
+    if not locale:
+        return []
+
+    results: list[WorkRefOut] = []
+    for ref in raw_refs:
+        if not isinstance(ref, dict):
+            continue
+        family = ref.get("family")
+        raw_id = ref.get("id")
+        if not family or not raw_id:
+            continue
+        family_str = str(family).lower()
+        model = PUBLIC_RESOLVER_FAMILIES.get(family_str)
+        if model is None:
+            continue
+        raw_id_str = str(raw_id)
+        if not _ID_RE.match(raw_id_str):
+            continue
+        try:
+            pk = int(raw_id_str)
+            if pk > MAX_ID:
+                continue
+        except (TypeError, ValueError):
+            continue
+
+        public_mgr = getattr(model.objects, "public", None)
+        if public_mgr is None:
+            continue
+        target = resolve_published_target(
+            model, _entity_key_for_family(family_str), pk, locale
+        )
+        if target is None:
+            continue
+
+        route_family = PUBLIC_ROUTE_FAMILY_MAP.get(family_str, family_str)
+        if family_str == "lesson":
+            summary = (getattr(target, "summary", "") or getattr(target, "title", "") or "").strip()
+            course_slug = getattr(getattr(target, "course", None), "slug", None)
+        elif family_str == "collection":
+            summary_raw = getattr(target, "description", "") or getattr(target, "title", "") or ""
+            summary = summary_raw.strip()
+            course_slug = None
+        else:
+            summary = _extract_summary(family_str, target)
+            course_slug = None
+        results.append(
+            WorkRefOut(
+                family=family_str,
+                id=str(target.pk),
+                locale=target.locale,
+                slug=target.slug,
+                title=target.title,
+                summary=summary,
+                routeFamily=route_family,
+                courseSlug=course_slug,
+            )
+        )
+    return results
+
+
+class PublicPublicationMetadataMixinOut(Schema):
+    """Shared publication metadata projection: SEO, translation alternates, related records."""
+
+    seo: PublicSeoOut | None = None
+    alternates: list[AlternateLocaleOut] = Field(default_factory=list)
+    relatedRecords: list[WorkRefOut] = Field(default_factory=list)
+
+    @staticmethod
+    def resolve_seo(obj, context) -> PublicSeoOut:
+        return _resolve_public_seo(obj, context)
+
+    @staticmethod
+    def resolve_alternates(obj) -> list[AlternateLocaleOut]:
+        return _resolve_public_alternates(obj)
+
+    @staticmethod
+    def resolve_relatedRecords(obj) -> list[WorkRefOut]:
+        return _resolve_public_related_records(obj)
+
+
+class ArticleDetailOut(ArticleListOut, PublicPublicationMetadataMixinOut):
     """Public article detail including sanitized rich-text body and optional story."""
 
     body: str
@@ -292,13 +526,54 @@ def get_public_site_settings(request) -> PublicSiteSettingsOut:
     )
 
 
+class LocalizedSiteSettingsPublicOut(Schema):
+    """Published localized site settings (PRODUCT-V2 §I04)."""
+
+    locale: str
+    revision: str
+    brandName: str
+    tagline: str
+    footerText: str
+    seo: LocalizedSiteSeoOut
+    navLinks: list[LocalizedNavLinkOut] = Field(default_factory=list)
+    audienceLinks: list[LocalizedAudienceLinkOut] = Field(default_factory=list)
+    scene: LocalizedSceneOut
+    updatedAt: str
+
+
+@api.get(
+    "/v1/site/{locale}",
+    response={200: LocalizedSiteSettingsPublicOut, 404: ErrorEnvelopeOut},
+    summary="Published localized site settings for a locale (fail-closed, no fallback).",
+)
+def get_localized_site_settings(request, locale: str):
+    """Serve published localized site settings for a locale (fail-closed, no fallback)."""
+    if locale not in ("fa", "en"):
+        return _error_response(
+            request, 404, "NOT_FOUND", f"Locale '{locale}' not supported."
+        )
+    item = LocalizedSiteSettings.objects.filter(locale=locale).first()
+    if item is None or item.status != "published" or not item.published_payload:
+        return _error_response(
+            request,
+            404,
+            "NOT_FOUND",
+            f"Published site settings not found for locale '{locale}'.",
+        )
+    return item.published_payload
+
+
 @api.get(
     "/landings/{locale}",
     response=list[LandingOut],
     summary="List published landing pages for a locale",
 )
 def list_landings(request, locale: str) -> list[Landing]:
-    return list(published_for_locale(Landing.objects, locale))
+    items = list(published_for_locale(Landing.objects, locale))
+    items.extend(
+        published_list_extras(Landing, "landing", locale, {o.pk for o in items})
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -307,7 +582,8 @@ def list_landings(request, locale: str) -> list[Landing]:
     summary="Get one published landing page by slug",
 )
 def get_landing(request, locale: str, slug: str) -> Landing:
-    landing = published_for_locale(Landing.objects, locale).filter(slug=slug).first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    landing = resolve_published_detail(Landing, "landing", locale, slug)
     if landing is None:
         raise HttpError(404, "landing not found")
     return landing
@@ -319,7 +595,11 @@ def get_landing(request, locale: str, slug: str) -> Landing:
     summary="List published profile pages for a locale",
 )
 def list_profiles(request, locale: str) -> list[Profile]:
-    return list(published_for_locale(Profile.objects, locale))
+    items = list(published_for_locale(Profile.objects, locale))
+    items.extend(
+        published_list_extras(Profile, "profile", locale, {o.pk for o in items})
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -328,7 +608,8 @@ def list_profiles(request, locale: str) -> list[Profile]:
     summary="Get one published profile page by slug",
 )
 def get_profile(request, locale: str, slug: str) -> Profile:
-    profile = published_for_locale(Profile.objects, locale).filter(slug=slug).first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    profile = resolve_published_detail(Profile, "profile", locale, slug)
     if profile is None:
         raise HttpError(404, "profile not found")
     return profile
@@ -358,7 +639,25 @@ def list_articles(
     if series:
         published_series = Series.objects.public().filter(locale=locale, slug=series)
         qs = qs.filter(series__in=published_series)
-    return qs.distinct()
+    items = list(qs.distinct())
+    # A04: still-published (snapshot-backed) records stay listed.
+    extras = published_list_extras(Article, "article", locale, {a.pk for a in items})
+    if tag:
+        extras = [
+            e for e in extras if e.topic_tags.filter(locale=locale, slug=tag).exists()
+        ]
+    if series:
+        series_ids = set(
+            Series.objects.public()
+            .filter(locale=locale, slug=series)
+            .values_list("pk", flat=True)
+        )
+        extras = [
+            e
+            for e in extras
+            if set(e.series.values_list("pk", flat=True)) & series_ids
+        ]
+    return order_like(items + extras, "-published_at", "slug")
 
 
 @api.get(
@@ -367,12 +666,15 @@ def list_articles(
     summary="Get one published article by slug",
 )
 def get_article(request, locale: str, slug: str) -> Article:
-    article = (
-        Article.objects.public()
-        .filter(locale=locale, slug=slug)
+    # A04: fall back to the publication snapshot while the row is a draft.
+    article = resolve_published_detail(
+        Article,
+        "article",
+        locale,
+        slug,
+        base_qs=Article.objects.public()
         .select_related("story", "featured_image")
-        .prefetch_related("topic_tags", "series", "story__sections__blocks")
-        .first()
+        .prefetch_related("topic_tags", "series", "story__sections__blocks"),
     )
     if article is None:
         raise HttpError(404, "article not found")
@@ -385,9 +687,14 @@ def get_article(request, locale: str, slug: str) -> Article:
     summary="List published series for a locale",
 )
 def list_series(request, locale: str) -> list[Series]:
-    return list(
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
         Series.objects.public().filter(locale=locale).order_by("ordering", "slug")
     )
+    items.extend(
+        published_list_extras(Series, "series", locale, {o.pk for o in items})
+    )
+    return order_like(items, "ordering", "slug")
 
 
 @api.get(
@@ -494,7 +801,7 @@ class ResearchTopicListOut(Schema):
     updated_at: datetime | None
 
 
-class ResearchTopicDetailOut(ResearchTopicListOut):
+class ResearchTopicDetailOut(ResearchTopicListOut, PublicPublicationMetadataMixinOut):
     """Public research topic detail with related public projects/publications."""
 
     motivation: str
@@ -511,24 +818,43 @@ class ResearchTopicDetailOut(ResearchTopicListOut):
         return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
+    def _published_topic_projects(obj: ResearchTopic) -> list:
+        # A04: still-published (snapshot-backed) projects stay linked.
+        live = list(obj.projects.public().filter(locale=obj.locale))
+        seen = {p.pk for p in live}
+        extras = []
+        for rel in obj.projects.filter(locale=obj.locale).only("pk"):
+            if rel.pk in seen:
+                continue
+            target = resolve_published_target(Project, "project", rel.pk, obj.locale)
+            if target is not None:
+                extras.append(target)
+                seen.add(rel.pk)
+        return order_like(live + extras, "slug")
+
+    @staticmethod
     def resolve_projects(obj: ResearchTopic) -> list[RelatedSlugOut]:
         return [
             RelatedSlugOut(slug=p.slug, title=p.title)
-            for p in obj.projects.public().filter(locale=obj.locale).order_by("slug")
+            for p in ResearchTopicDetailOut._published_topic_projects(obj)
         ]
 
     @staticmethod
     def resolve_publications(obj: ResearchTopic) -> list[RelatedSlugOut]:
+        projects = ResearchTopicDetailOut._published_topic_projects(obj)
         pubs = (
             Publication.objects.public()
-            .filter(projects__in=obj.projects.public(), locale=obj.locale)
+            .filter(
+                projects__in=[p.pk for p in projects] or [0],
+                locale=obj.locale,
+            )
             .distinct()
             .order_by("slug")
         )
         return [RelatedSlugOut(slug=p.slug, title=p.title) for p in pubs]
 
 
-class ResearchStatementOut(Schema):
+class ResearchStatementOut(PublicPublicationMetadataMixinOut):
     """Public research statement (sanitized rich text + optional active PDF)."""
 
     locale: str
@@ -587,7 +913,7 @@ class ProjectListOut(Schema):
             return None
 
 
-class ProjectDetailOut(ProjectListOut):
+class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
     """Public project detail with redacted evidence/collaborators/funding/URLs."""
 
     methods_summary: str
@@ -625,20 +951,79 @@ class ProjectDetailOut(ProjectListOut):
 
     @staticmethod
     def resolve_topics(obj: Project) -> list[RelatedSlugOut]:
+        # A04: still-published (snapshot-backed) topics stay linked.
+        live = list(obj.topics.public().filter(locale=obj.locale))
+        seen = {t.pk for t in live}
+        extras = []
+        for rel in obj.topics.filter(locale=obj.locale).only("pk"):
+            if rel.pk in seen:
+                continue
+            target = resolve_published_target(
+                ResearchTopic, "research-topic", rel.pk, obj.locale
+            )
+            if target is not None:
+                extras.append(target)
+                seen.add(rel.pk)
         return [
             RelatedSlugOut(slug=t.slug, title=t.title)
-            for t in obj.topics.public().filter(locale=obj.locale).order_by("slug")
+            for t in order_like(live + extras, "slug")
         ]
 
     @staticmethod
     def resolve_publications(obj: Project) -> list[RelatedSlugOut]:
+        # A04: still-published (snapshot-backed) publications stay linked.
+        live = list(obj.publications.public().filter(locale=obj.locale))
+        seen = {p.pk for p in live}
+        extras = []
+        for rel in obj.publications.filter(locale=obj.locale).only("pk"):
+            if rel.pk in seen:
+                continue
+            target = resolve_published_target(
+                Publication, "publication", rel.pk, obj.locale
+            )
+            if target is not None:
+                extras.append(target)
+                seen.add(rel.pk)
         return [
             RelatedSlugOut(slug=p.slug, title=p.title)
-            for p in obj.publications.public().filter(locale=obj.locale).order_by("slug")
+            for p in order_like(live + extras, "slug")
         ]
 
     @staticmethod
     def resolve_evidence(obj: Project) -> list[EvidenceOut]:
+        # A04: when materialized from a publication snapshot, serve frozen
+        # approved relations instead of live draft managers.
+        pcs = getattr(obj, "_published_project_case_study", None)
+        if isinstance(pcs, dict):
+            rows = pcs.get("evidence") or []
+            result: list[EvidenceOut] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if str(row.get("visibility", "") or "") != "public":
+                    continue
+                if not str(row.get("source", "") or "").strip():
+                    continue
+                raw_verified = row.get("last_verified", row.get("lastVerified", None))
+                parsed = None
+                if isinstance(raw_verified, str) and raw_verified.strip():
+                    try:
+                        parsed = date.fromisoformat(raw_verified.strip()[:10])
+                    except ValueError:
+                        parsed = None
+                elif isinstance(raw_verified, date) and not isinstance(
+                    raw_verified, datetime
+                ):
+                    parsed = raw_verified
+                result.append(
+                    EvidenceOut(
+                        label=str(row.get("label", "") or ""),
+                        value=str(row.get("value", "") or ""),
+                        source=str(row.get("source", "") or ""),
+                        last_verified=parsed,
+                    )
+                )
+            return result
         return [
             EvidenceOut(
                 label=row.label,
@@ -652,6 +1037,21 @@ class ProjectDetailOut(ProjectListOut):
 
     @staticmethod
     def resolve_collaborators(obj: Project) -> list[CollaboratorOut]:
+        pcs = getattr(obj, "_published_project_case_study", None)
+        if isinstance(pcs, dict):
+            rows = pcs.get("collaborators") or []
+            return [
+                CollaboratorOut(
+                    name=str(row.get("name", "") or ""),
+                    role=str(row.get("role", "") or ""),
+                )
+                for row in rows
+                if isinstance(row, dict)
+                and bool(
+                    row.get("publication_approved", row.get("publicationApproved", False))
+                )
+                and str(row.get("name", "") or "").strip()
+            ]
         return [
             CollaboratorOut(name=row.name, role=row.role)
             for row in obj.collaborators.filter(publication_approved=True)
@@ -659,6 +1059,23 @@ class ProjectDetailOut(ProjectListOut):
 
     @staticmethod
     def resolve_funding(obj: Project) -> list[FundingOut]:
+        pcs = getattr(obj, "_published_project_case_study", None)
+        if isinstance(pcs, dict):
+            rows = pcs.get("funding") or []
+            return [
+                FundingOut(
+                    funder=str(row.get("funder", "") or ""),
+                    grant_id=str(
+                        row.get("grant_id", row.get("grantId", "") or "") or ""
+                    ),
+                )
+                for row in rows
+                if isinstance(row, dict)
+                and bool(
+                    row.get("publication_approved", row.get("publicationApproved", False))
+                )
+                and str(row.get("funder", "") or "").strip()
+            ]
         return [
             FundingOut(funder=row.funder, grant_id=row.grant_id)
             for row in obj.funding_items.filter(publication_approved=True)
@@ -666,6 +1083,29 @@ class ProjectDetailOut(ProjectListOut):
 
     @staticmethod
     def resolve_case_study(obj: Project):
+        pcs = getattr(obj, "_published_project_case_study", None)
+        if isinstance(pcs, dict):
+            details = pcs.get("details")
+            if not isinstance(details, dict):
+                return None
+            from types import SimpleNamespace
+
+            def _pick(snake: str, camel: str) -> str:
+                value = details.get(snake, None)
+                if value is None:
+                    value = details.get(camel, None)
+                return str(value) if value is not None else ""
+
+            return SimpleNamespace(
+                depth=str(details.get("depth", "") or "standard"),
+                problem=_pick("problem", "problem"),
+                constraints=_pick("constraints", "constraints"),
+                technical_decisions=_pick("technical_decisions", "technicalDecisions"),
+                trade_offs=_pick("trade_offs", "tradeOffs"),
+                outcomes_summary=_pick("outcomes_summary", "outcomesSummary"),
+                lessons_learned=_pick("lessons_learned", "lessonsLearned"),
+                testing_summary=_pick("testing_summary", "testingSummary"),
+            )
         try:
             return obj.case_study
         except Exception:
@@ -729,7 +1169,10 @@ def _project_detail_queryset():
 
 
 def _get_public_project(locale: str, slug: str) -> Project:
-    project = _project_detail_queryset().filter(locale=locale, slug=slug).first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    project = resolve_published_detail(
+        Project, "project", locale, slug, base_qs=_project_detail_queryset()
+    )
     if project is None:
         raise HttpError(404, "project not found")
     return project
@@ -753,7 +1196,7 @@ class PublicationListOut(Schema):
     updated_at: datetime | None
 
 
-class PublicationDetailOut(PublicationListOut):
+class PublicationDetailOut(PublicationListOut, PublicPublicationMetadataMixinOut):
     """Public publication detail with citation and access gates."""
 
     url: str
@@ -767,6 +1210,11 @@ class PublicationDetailOut(PublicationListOut):
     citation_count: int | None
     citation_text: str | None
     pdf: dict | None = None
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: Publication) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_url(obj: Publication) -> str:
@@ -806,11 +1254,16 @@ class BookListOut(Schema):
     updated_at: datetime | None
 
 
-class BookDetailOut(BookListOut):
+class BookDetailOut(BookListOut, PublicPublicationMetadataMixinOut):
     description: str
     url: str
     accessibility_notes: str
     cover: dict | None = None
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: Book) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_cover(obj: Book, context) -> dict | None:
@@ -834,12 +1287,17 @@ class TalkListOut(Schema):
     updated_at: datetime | None
 
 
-class TalkDetailOut(TalkListOut):
+class TalkDetailOut(TalkListOut, PublicPublicationMetadataMixinOut):
     abstract: str
     video_url: str
     slides_url: str
     accessibility_notes: str
     slides: dict | None = None
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: Talk) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_video_url(obj: Talk) -> str:
@@ -870,11 +1328,16 @@ class DownloadListOut(Schema):
     updated_at: datetime | None
 
 
-class DownloadDetailOut(DownloadListOut):
+class DownloadDetailOut(DownloadListOut, PublicPublicationMetadataMixinOut):
     accessibility_notes: str
     file: dict | None = None
     mime: str | None = None
     size_bytes: int | None = None
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: Download) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_file(obj: Download, context) -> dict | None:
@@ -911,12 +1374,17 @@ class CourseListOut(Schema):
     updated_at: datetime | None
 
 
-class CourseDetailOut(CourseListOut):
+class CourseDetailOut(CourseListOut, PublicPublicationMetadataMixinOut):
     body: str
     prerequisites: str
     outcomes: str
     accessibility_notes: str
     cover: dict | None = None
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: Course) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_body(obj: Course) -> str:
@@ -930,6 +1398,41 @@ class CourseDetailOut(CourseListOut):
     def resolve_cover(obj: Course, context) -> dict | None:
         request = context.get("request") if context else None
         return public_media_ref(getattr(obj, "cover_media", None), request, locale=obj.locale)
+
+
+class LessonCardOut(Schema):
+    """Public lesson card projection for course lesson list (§I05)."""
+
+    locale: str
+    slug: str
+    title: str
+    summary: str
+    courseSlug: str
+    position: int
+
+
+class LessonListOut(Schema):
+    """Paginated/counted lesson list for a course (§I05)."""
+
+    count: int
+    items: list[LessonCardOut]
+
+
+class LessonDetailOut(Schema):
+    """Independent course lesson detail projection with ordered neighbors (§I05)."""
+
+    locale: str
+    slug: str
+    title: str
+    summary: str
+    courseSlug: str
+    position: int
+    story: StoryDocumentOut | None = None
+    resources: list[WorkRefOut] = Field(default_factory=list)
+    previous: WorkRefOut | None = None
+    next: WorkRefOut | None = None
+    seo: PublicSeoOut | None = None
+    alternates: list[AlternateLocaleOut] = Field(default_factory=list)
 
 
 class GalleryImageOut(Schema):
@@ -956,12 +1459,17 @@ class CreativeWorkListOut(Schema):
     updated_at: datetime | None
 
 
-class CreativeWorkDetailOut(CreativeWorkListOut):
+class CreativeWorkDetailOut(CreativeWorkListOut, PublicPublicationMetadataMixinOut):
     body: str
     rights_statement: str
     accessibility_notes: str
     cover: dict | None = None
     gallery: list[GalleryImageOut] = Field(default_factory=list)
+    story: StoryDocumentOut | None = None
+
+    @staticmethod
+    def resolve_story(obj: CreativeWork) -> dict | None:
+        return public_story_document(getattr(obj, "story", None), obj.locale)
 
     @staticmethod
     def resolve_body(obj: CreativeWork) -> str:
@@ -1016,11 +1524,16 @@ class CreativeWorkDetailOut(CreativeWorkListOut):
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_research_topics(request, locale: str):
-    return (
-        ResearchTopic.objects.public()
-        .filter(locale=locale)
-        .order_by("slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        ResearchTopic.objects.public().filter(locale=locale).order_by("slug")
     )
+    items.extend(
+        published_list_extras(
+            ResearchTopic, "research-topic", locale, {o.pk for o in items}
+        )
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1029,12 +1542,15 @@ def list_research_topics(request, locale: str):
     summary="Get one published research topic by slug",
 )
 def get_research_topic(request, locale: str, slug: str) -> ResearchTopic:
-    topic = (
-        ResearchTopic.objects.public()
-        .filter(locale=locale, slug=slug)
+    # A04: fall back to the publication snapshot while the row is a draft.
+    topic = resolve_published_detail(
+        ResearchTopic,
+        "research-topic",
+        locale,
+        slug,
+        base_qs=ResearchTopic.objects.public()
         .select_related("story")
-        .prefetch_related("projects", "story__sections__blocks")
-        .first()
+        .prefetch_related("projects", "story__sections__blocks"),
     )
     if topic is None:
         raise HttpError(404, "research topic not found")
@@ -1047,13 +1563,20 @@ def get_research_topic(request, locale: str, slug: str) -> ResearchTopic:
     summary="List published research statements for a locale",
 )
 def list_research_statements(request, locale: str) -> list[ResearchStatement]:
-    return list(
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
         ResearchStatement.objects.public()
         .filter(locale=locale)
         .select_related("story", "statement_pdf")
         .prefetch_related("story__sections__blocks")
         .order_by("slug")
     )
+    items.extend(
+        published_list_extras(
+            ResearchStatement, "research-statement", locale, {o.pk for o in items}
+        )
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1062,12 +1585,15 @@ def list_research_statements(request, locale: str) -> list[ResearchStatement]:
     summary="Get one published research statement by slug",
 )
 def get_research_statement(request, locale: str, slug: str) -> ResearchStatement:
-    statement = (
-        ResearchStatement.objects.public()
-        .filter(locale=locale, slug=slug)
+    # A04: fall back to the publication snapshot while the row is a draft.
+    statement = resolve_published_detail(
+        ResearchStatement,
+        "research-statement",
+        locale,
+        slug,
+        base_qs=ResearchStatement.objects.public()
         .select_related("story", "statement_pdf")
-        .prefetch_related("story__sections__blocks")
-        .first()
+        .prefetch_related("story__sections__blocks"),
     )
     if statement is None:
         raise HttpError(404, "research statement not found")
@@ -1081,6 +1607,7 @@ def get_research_statement(request, locale: str, slug: str) -> ResearchStatement
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_projects(request, locale: str, has_case_study: bool = False):
+    # A04: still-published (snapshot-backed) records stay listed.
     qs = (
         Project.objects.public()
         .filter(locale=locale, show_on_projects=True)
@@ -1088,7 +1615,19 @@ def list_projects(request, locale: str, has_case_study: bool = False):
     )
     if has_case_study:
         qs = qs.filter(case_study__isnull=False).select_related("case_study")
-    return qs
+    items = list(qs)
+    for extra in published_list_extras(Project, "project", locale, {o.pk for o in items}):
+        if not getattr(extra, "show_on_projects", False):
+            continue
+        if has_case_study:
+            try:
+                has_cs = extra.case_study is not None
+            except Project.case_study.RelatedObjectDoesNotExist:
+                has_cs = False
+            if not has_cs:
+                continue
+        items.append(extra)
+    return order_like(items, "-published_at", "slug")
 
 
 @api.get(
@@ -1110,12 +1649,17 @@ def get_project(request, locale: str, slug: str) -> Project:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_research_projects(request, locale: str):
-    return (
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
         Project.objects.public()
         .filter(locale=locale)
         .select_related("case_study")
         .order_by("-published_at", "slug")
     )
+    items.extend(
+        published_list_extras(Project, "project", locale, {o.pk for o in items})
+    )
+    return order_like(items, "-published_at", "slug")
 
 
 @api.get(
@@ -1134,11 +1678,14 @@ def get_research_project(request, locale: str, slug: str) -> Project:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_research_publications(request, locale: str):
-    return (
-        Publication.objects.public()
-        .filter(locale=locale)
-        .order_by("-date", "slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        Publication.objects.public().filter(locale=locale).order_by("-date", "slug")
     )
+    items.extend(
+        published_list_extras(Publication, "publication", locale, {o.pk for o in items})
+    )
+    return order_like(items, "-date", "slug")
 
 
 @api.get(
@@ -1147,11 +1694,13 @@ def list_research_publications(request, locale: str):
     summary="Get one published publication by slug",
 )
 def get_research_publication(request, locale: str, slug: str) -> Publication:
-    publication = (
-        Publication.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("pdf_media")
-        .first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    publication = resolve_published_detail(
+        Publication,
+        "publication",
+        locale,
+        slug,
+        base_qs=Publication.objects.public().select_related("pdf_media"),
     )
     if publication is None:
         raise HttpError(404, "publication not found")
@@ -1165,11 +1714,14 @@ def get_research_publication(request, locale: str, slug: str) -> Publication:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_publications(request, locale: str):
-    return (
-        Publication.objects.public()
-        .filter(locale=locale)
-        .order_by("-date", "slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        Publication.objects.public().filter(locale=locale).order_by("-date", "slug")
     )
+    items.extend(
+        published_list_extras(Publication, "publication", locale, {o.pk for o in items})
+    )
+    return order_like(items, "-date", "slug")
 
 
 @api.get(
@@ -1188,7 +1740,14 @@ def get_publication(request, locale: str, slug: str) -> Publication:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_books(request, locale: str):
-    return Book.objects.public().filter(locale=locale).order_by("-publication_date", "slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        Book.objects.public()
+        .filter(locale=locale)
+        .order_by("-publication_date", "slug")
+    )
+    items.extend(published_list_extras(Book, "book", locale, {o.pk for o in items}))
+    return order_like(items, "-publication_date", "slug")
 
 
 @api.get(
@@ -1197,11 +1756,15 @@ def list_books(request, locale: str):
     summary="Get one published book by slug",
 )
 def get_book(request, locale: str, slug: str) -> Book:
-    book = (
-        Book.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("cover_media")
-        .first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    book = resolve_published_detail(
+        Book,
+        "book",
+        locale,
+        slug,
+        base_qs=Book.objects.public().select_related(
+            "cover_media", "story", "social_image"
+        ),
     )
     if book is None:
         raise HttpError(404, "book not found")
@@ -1215,7 +1778,12 @@ def get_book(request, locale: str, slug: str) -> Book:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_talks(request, locale: str):
-    return Talk.objects.public().filter(locale=locale).order_by("-event_date", "slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        Talk.objects.public().filter(locale=locale).order_by("-event_date", "slug")
+    )
+    items.extend(published_list_extras(Talk, "talk", locale, {o.pk for o in items}))
+    return order_like(items, "-event_date", "slug")
 
 
 @api.get(
@@ -1224,11 +1792,15 @@ def list_talks(request, locale: str):
     summary="Get one published talk by slug",
 )
 def get_talk(request, locale: str, slug: str) -> Talk:
-    talk = (
-        Talk.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("slides_media")
-        .first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    talk = resolve_published_detail(
+        Talk,
+        "talk",
+        locale,
+        slug,
+        base_qs=Talk.objects.public().select_related(
+            "slides_media", "story", "social_image"
+        ),
     )
     if talk is None:
         raise HttpError(404, "talk not found")
@@ -1242,7 +1814,16 @@ def get_talk(request, locale: str, slug: str) -> Talk:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_downloads(request, locale: str):
-    return Download.objects.public().filter(locale=locale).order_by("-published_at", "slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        Download.objects.public()
+        .filter(locale=locale)
+        .order_by("-published_at", "slug")
+    )
+    items.extend(
+        published_list_extras(Download, "download", locale, {o.pk for o in items})
+    )
+    return order_like(items, "-published_at", "slug")
 
 
 @api.get(
@@ -1251,11 +1832,15 @@ def list_downloads(request, locale: str):
     summary="Get one published download by slug",
 )
 def get_download(request, locale: str, slug: str) -> Download:
-    download = (
-        Download.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("media")
-        .first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    download = resolve_published_detail(
+        Download,
+        "download",
+        locale,
+        slug,
+        base_qs=Download.objects.public().select_related(
+            "media", "story", "social_image"
+        ),
     )
     if download is None:
         raise HttpError(404, "download not found")
@@ -1267,11 +1852,13 @@ def get_download(request, locale: str, slug: str) -> Download:
     summary="Stream a published public download file (active media only)",
 )
 def download_file(request, locale: str, slug: str):
-    download = (
-        Download.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("media")
-        .first()
+    # A04: the published file stays downloadable while the row is a draft.
+    download = resolve_published_detail(
+        Download,
+        "download",
+        locale,
+        slug,
+        base_qs=Download.objects.public().select_related("media"),
     )
     if download is None or not download.public_media_is_downloadable():
         raise HttpError(404, "download not found")
@@ -1295,7 +1882,12 @@ def download_file(request, locale: str, slug: str):
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_courses(request, locale: str):
-    return Course.objects.public().filter(locale=locale).order_by("slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(Course.objects.public().filter(locale=locale).order_by("slug"))
+    items.extend(
+        published_list_extras(Course, "course", locale, {o.pk for o in items})
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1304,11 +1896,13 @@ def list_courses(request, locale: str):
     summary="Get one published course by slug",
 )
 def get_course(request, locale: str, slug: str) -> Course:
-    course = (
-        Course.objects.public()
-        .filter(locale=locale, slug=slug)
-        .select_related("cover_media")
-        .first()
+    # A04: fall back to the publication snapshot while the row is a draft.
+    course = resolve_published_detail(
+        Course,
+        "course",
+        locale,
+        slug,
+        base_qs=Course.objects.public().select_related("cover_media"),
     )
     if course is None:
         raise HttpError(404, "course not found")
@@ -1323,7 +1917,12 @@ def get_course(request, locale: str, slug: str) -> Course:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_teaching(request, locale: str):
-    return Course.objects.public().filter(locale=locale).order_by("slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(Course.objects.public().filter(locale=locale).order_by("slug"))
+    items.extend(
+        published_list_extras(Course, "course", locale, {o.pk for o in items})
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1336,13 +1935,449 @@ def get_teaching_course(request, locale: str, slug: str) -> Course:
 
 
 @api.get(
+    "/v1/lessons/{locale}",
+    response=LessonListOut,
+    summary="List published course lessons for a locale",
+)
+def list_lessons(request, locale: str, course: str | None = None) -> LessonListOut:
+    """List published lessons for a course ordered by position, id.
+
+    Guard: Both parent course and lesson must be published in the requested locale.
+    If parent course is not published or does not exist, returns count 0.
+    """
+    if not course:
+        return LessonListOut(count=0, items=[])
+
+    # A04: the published parent keeps serving while it is a draft.
+    parent_course = resolve_published_detail(Course, "course", locale, course)
+    if parent_course is None:
+        return LessonListOut(count=0, items=[])
+
+    lessons = list(
+        Lesson.objects.public()
+        .filter(course_id=parent_course.pk, locale=locale)
+        .order_by("position", "id")
+    )
+    # A04: still-published lessons stay listed under a published parent.
+    for extra in published_list_extras(
+        Lesson, "lesson", locale, {item.pk for item in lessons}
+    ):
+        if getattr(extra, "course_id", None) != parent_course.pk:
+            continue
+        lessons.append(extra)
+    lessons = order_like(lessons, "position", "id")
+    items = [
+        LessonCardOut(
+            locale=item.locale,
+            slug=item.slug,
+            title=item.title,
+            summary=item.summary or "",
+            courseSlug=parent_course.slug,
+            position=item.position,
+        )
+        for item in lessons
+    ]
+    return LessonListOut(count=len(items), items=items)
+
+
+@api.get(
+    "/v1/lessons/{locale}/{courseSlug}/{lessonSlug}",
+    response=LessonDetailOut,
+    summary="Get one published course lesson with ordered neighbors",
+)
+def get_lesson_detail(
+    request, locale: str, courseSlug: str, lessonSlug: str
+) -> LessonDetailOut:
+    """Get published lesson detail with previous/next neighbors.
+
+    Guards:
+    - Parent course must exist and be published in locale (or 404).
+    - Lesson must exist and be published in locale and belong to course (or 404).
+    - Draft lessons are excluded from neighbors.
+    """
+    parent_course = resolve_published_detail(Course, "course", locale, courseSlug)
+    if parent_course is None:
+        raise HttpError(404, "Course not found")
+
+    # A04: the published lesson keeps serving while it is a draft.
+    lesson = resolve_published_detail(
+        Lesson,
+        "lesson",
+        locale,
+        lessonSlug,
+        base_qs=Lesson.objects.public()
+        .filter(course_id=parent_course.pk)
+        .select_related("course", "story", "social_image"),
+    )
+    if lesson is None or getattr(lesson, "course_id", None) != parent_course.pk:
+        raise HttpError(404, "Lesson not found")
+
+    published_siblings = list(
+        Lesson.objects.public()
+        .filter(course_id=parent_course.pk, locale=locale)
+        .order_by("position", "id")
+    )
+    for extra in published_list_extras(
+        Lesson, "lesson", locale, {sib.pk for sib in published_siblings}
+    ):
+        if getattr(extra, "course_id", None) != parent_course.pk:
+            continue
+        published_siblings.append(extra)
+    published_siblings = order_like(published_siblings, "position", "id")
+    current_idx = -1
+    for idx, sib in enumerate(published_siblings):
+        if sib.pk == lesson.pk:
+            current_idx = idx
+            break
+
+    prev_ref = None
+    next_ref = None
+    if current_idx > 0:
+        prev_item = published_siblings[current_idx - 1]
+        prev_ref = WorkRefOut(
+            family="lesson",
+            id=str(prev_item.pk),
+            locale=prev_item.locale,
+            slug=prev_item.slug,
+            title=prev_item.title,
+            summary=(prev_item.summary or prev_item.title or "").strip(),
+            routeFamily="education",
+            courseSlug=parent_course.slug,
+        )
+    if current_idx >= 0 and current_idx < len(published_siblings) - 1:
+        next_item = published_siblings[current_idx + 1]
+        next_ref = WorkRefOut(
+            family="lesson",
+            id=str(next_item.pk),
+            locale=next_item.locale,
+            slug=next_item.slug,
+            title=next_item.title,
+            summary=(next_item.summary or next_item.title or "").strip(),
+            routeFamily="education",
+            courseSlug=parent_course.slug,
+        )
+
+    story_doc = public_story_document(getattr(lesson, "story", None), lesson.locale)
+    resources = _resolve_public_related_records(lesson)
+    seo = _resolve_public_seo(lesson, context={"request": request})
+    alternates = _resolve_public_alternates(lesson)
+
+    return LessonDetailOut(
+        locale=lesson.locale,
+        slug=lesson.slug,
+        title=lesson.title,
+        summary=lesson.summary or "",
+        courseSlug=parent_course.slug,
+        position=lesson.position,
+        story=story_doc,
+        resources=resources,
+        previous=prev_ref,
+        next=next_ref,
+        seo=seo,
+        alternates=alternates,
+    )
+
+
+def _resolve_collection_items(collection: Collection) -> list[WorkRefOut]:
+    raw_members = getattr(collection, "members", None)
+    if not raw_members or not isinstance(raw_members, list):
+        return []
+    locale = collection.locale
+    sorted_members = sorted(
+        [m for m in raw_members if isinstance(m, dict)],
+        key=lambda m: (m.get("position", 0), str(m.get("id", ""))),
+    )
+    resolved: list[WorkRefOut] = []
+    for m in sorted_members:
+        family = m.get("family")
+        raw_id = m.get("id")
+        if not family or not raw_id:
+            continue
+        family_str = str(family).lower()
+        model = PUBLIC_RESOLVER_FAMILIES.get(family_str)
+        if model is None:
+            continue
+        try:
+            pk = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        public_mgr = getattr(model.objects, "public", None)
+        if public_mgr is None:
+            continue
+        target = resolve_published_target(
+            model, _entity_key_for_family(family_str), pk, locale
+        )
+        if target is None:
+            continue
+        route_family = PUBLIC_ROUTE_FAMILY_MAP.get(family_str, family_str)
+        if family_str == "lesson":
+            summary = (getattr(target, "summary", "") or getattr(target, "title", "") or "").strip()
+            course_slug = getattr(getattr(target, "course", None), "slug", None)
+        elif family_str == "collection":
+            summary_raw = getattr(target, "description", "") or getattr(target, "title", "") or ""
+            summary = summary_raw.strip()
+            course_slug = None
+        else:
+            summary = _extract_summary(family_str, target)
+            course_slug = None
+        resolved.append(
+            WorkRefOut(
+                family=family_str,
+                id=str(target.pk),
+                locale=target.locale,
+                slug=target.slug,
+                title=target.title,
+                summary=summary,
+                routeFamily=route_family,
+                courseSlug=course_slug,
+            )
+        )
+    return resolved
+
+
+class CollectionCardOut(Schema):
+    locale: str
+    slug: str
+    title: str
+    description: str
+    curatorName: str
+    criteria: str
+    curatedDate: date | None = None
+    curatorTitle: str | None = None
+    cover: dict | None = None
+    seo: PublicSeoOut | None = None
+    alternates: list[AlternateLocaleOut] = Field(default_factory=list)
+
+
+class CollectionListOut(Schema):
+    count: int
+    items: list[CollectionCardOut] = Field(default_factory=list)
+
+
+class CollectionDetailOut(CollectionCardOut):
+    story: StoryDocumentOut | None = None
+    items: list[WorkRefOut] = Field(default_factory=list)
+
+
+@api.get(
+    "/v1/collections/{locale}",
+    response=CollectionListOut,
+    summary="List published collections for a locale (paginated)",
+)
+def list_collections(
+    request, locale: str, page: int = 1, pageSize: int = 20
+) -> CollectionListOut:
+    """List published collections with pagination (1-based, default 20, max 50)."""
+    if locale not in Locale.values:
+        raise HttpError(404, "collection not found")
+    page_num = max(1, page)
+    page_size = max(1, min(50, pageSize))
+    live = list(
+        Collection.objects.public()
+        .filter(locale=locale)
+        .select_related("cover_media", "social_image")
+        .order_by("-published_at", "slug")
+    )
+    # A04: still-published (snapshot-backed) records stay listed.
+    live.extend(
+        published_list_extras(Collection, "collection", locale, {c.pk for c in live})
+    )
+    merged = order_like(live, "-published_at", "slug")
+    total = len(merged)
+    collections = merged[(page_num - 1) * page_size : page_num * page_size]
+    items = [
+        CollectionCardOut(
+            locale=c.locale,
+            slug=c.slug,
+            title=c.title,
+            description=c.description or "",
+            curatorName=(c.curator_name or "").strip(),
+            curatorTitle=(c.curator_title or "").strip() or None,
+            criteria=(c.criteria or "").strip(),
+            curatedDate=c.curated_date,
+            cover=public_media_ref(getattr(c, "cover_media", None), request, locale=c.locale),
+            seo=_resolve_public_seo(c, context={"request": request}),
+            alternates=_resolve_public_alternates(c),
+        )
+        for c in collections
+    ]
+    return CollectionListOut(count=total, items=items)
+
+
+@api.get(
+    "/v1/collections/{locale}/{slug}",
+    response=CollectionDetailOut,
+    summary="Get one published collection by slug with ordered items",
+)
+def get_collection_detail(request, locale: str, slug: str) -> CollectionDetailOut:
+    """Get published collection detail with ordered members and story."""
+    if locale not in Locale.values:
+        raise HttpError(404, "collection not found")
+    # A04: fall back to the publication snapshot while the row is a draft.
+    collection = resolve_published_detail(
+        Collection,
+        "collection",
+        locale,
+        slug,
+        base_qs=Collection.objects.public().select_related(
+            "cover_media", "story", "social_image"
+        ),
+    )
+    if collection is None:
+        raise HttpError(404, "collection not found")
+
+    story_doc = public_story_document(getattr(collection, "story", None), collection.locale)
+    items = _resolve_collection_items(collection)
+    seo = _resolve_public_seo(collection, context={"request": request})
+    alternates = _resolve_public_alternates(collection)
+    cover = public_media_ref(
+        getattr(collection, "cover_media", None), request, locale=collection.locale
+    )
+
+    return CollectionDetailOut(
+        locale=collection.locale,
+        slug=collection.slug,
+        title=collection.title,
+        description=collection.description or "",
+        curatorName=(collection.curator_name or "").strip(),
+        curatorTitle=(collection.curator_title or "").strip() or None,
+        criteria=(collection.criteria or "").strip(),
+        curatedDate=collection.curated_date,
+        cover=cover,
+        story=story_doc,
+        items=items,
+        seo=seo,
+        alternates=alternates,
+    )
+
+
+def _resolve_series_items(series: Series) -> list[WorkRefOut]:
+    raw_members = getattr(series, "members", None)
+    locale = series.locale
+    resolved: list[WorkRefOut] = []
+
+    if raw_members and isinstance(raw_members, list):
+        sorted_members = sorted(
+            [m for m in raw_members if isinstance(m, dict)],
+            key=lambda m: (m.get("position", 0), str(m.get("id", ""))),
+        )
+        for m in sorted_members:
+            family = m.get("family")
+            raw_id = m.get("id")
+            if not family or not raw_id or str(family).lower() != "article":
+                continue
+            try:
+                pk = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            art = resolve_published_target(Article, "article", pk, locale)
+            if art is None:
+                continue
+            resolved.append(
+                WorkRefOut(
+                    family="article",
+                    id=str(art.pk),
+                    locale=art.locale,
+                    slug=art.slug,
+                    title=art.title,
+                    summary=_extract_summary("article", art),
+                    routeFamily=PUBLIC_ROUTE_FAMILY_MAP.get("article", "blog"),
+                    courseSlug=None,
+                )
+            )
+    else:
+        candidates = list(
+            series.articles.filter(locale=locale).order_by("published_at", "id")
+        )
+        targets = []
+        for art in candidates:
+            target = resolve_published_target(Article, "article", art.pk, locale)
+            if target is None:
+                continue
+            targets.append(target)
+        for art in order_like(targets, "published_at", "id"):
+            resolved.append(
+                WorkRefOut(
+                    family="article",
+                    id=str(art.pk),
+                    locale=art.locale,
+                    slug=art.slug,
+                    title=art.title,
+                    summary=_extract_summary("article", art),
+                    routeFamily=PUBLIC_ROUTE_FAMILY_MAP.get("article", "blog"),
+                    courseSlug=None,
+                )
+            )
+    return resolved
+
+
+class SeriesDetailOut(Schema):
+    """Public series detail projection with ordered article items and story."""
+
+    locale: str
+    slug: str
+    title: str
+    description: str = ""
+    story: StoryDocumentOut | None = None
+    items: list[WorkRefOut] = Field(default_factory=list)
+    seo: PublicSeoOut | None = None
+    alternates: list[AlternateLocaleOut] = Field(default_factory=list)
+
+
+@api.get(
+    "/v1/series/{locale}/{slug}",
+    response=SeriesDetailOut,
+    summary="Get one published series by slug with ordered article items",
+)
+def get_series_detail(request, locale: str, slug: str) -> SeriesDetailOut:
+    """Get published series detail with ordered article members and story."""
+    if locale not in Locale.values:
+        raise HttpError(404, "series not found")
+    # A04: fall back to the publication snapshot while the row is a draft.
+    series = resolve_published_detail(
+        Series,
+        "series",
+        locale,
+        slug,
+        base_qs=Series.objects.public().select_related("story", "social_image"),
+    )
+    if series is None:
+        raise HttpError(404, "series not found")
+
+    story_doc = public_story_document(getattr(series, "story", None), series.locale)
+    items = _resolve_series_items(series)
+    seo = _resolve_public_seo(series, context={"request": request})
+    alternates = _resolve_public_alternates(series)
+
+    return SeriesDetailOut(
+        locale=series.locale,
+        slug=series.slug,
+        title=series.title,
+        description=series.description or "",
+        story=story_doc,
+        items=items,
+        seo=seo,
+        alternates=alternates,
+    )
+
+
+@api.get(
     "/creative-works/{locale}",
     response=list[CreativeWorkListOut],
     summary="List published creative works for a locale (paginated)",
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_creative_works(request, locale: str):
-    return CreativeWork.objects.public().filter(locale=locale).order_by("slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        CreativeWork.objects.public().filter(locale=locale).order_by("slug")
+    )
+    items.extend(
+        published_list_extras(
+            CreativeWork, "creative-work", locale, {o.pk for o in items}
+        )
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1351,12 +2386,15 @@ def list_creative_works(request, locale: str):
     summary="Get one published creative work by slug",
 )
 def get_creative_work(request, locale: str, slug: str) -> CreativeWork:
-    work = (
-        CreativeWork.objects.public()
-        .filter(locale=locale, slug=slug)
+    # A04: fall back to the publication snapshot while the row is a draft.
+    work = resolve_published_detail(
+        CreativeWork,
+        "creative-work",
+        locale,
+        slug,
+        base_qs=CreativeWork.objects.public()
         .select_related("cover_media")
-        .prefetch_related("gallery_images__media")
-        .first()
+        .prefetch_related("gallery_images__media"),
     )
     if work is None:
         raise HttpError(404, "creative work not found")
@@ -1370,7 +2408,16 @@ def get_creative_work(request, locale: str, slug: str) -> CreativeWork:
 )
 @paginate(PageNumberPagination, page_size=10)
 def list_creative(request, locale: str):
-    return CreativeWork.objects.public().filter(locale=locale).order_by("slug")
+    # A04: still-published (snapshot-backed) records stay listed.
+    items = list(
+        CreativeWork.objects.public().filter(locale=locale).order_by("slug")
+    )
+    items.extend(
+        published_list_extras(
+            CreativeWork, "creative-work", locale, {o.pk for o in items}
+        )
+    )
+    return order_like(items, "slug")
 
 
 @api.get(
@@ -1575,7 +2622,28 @@ def get_graph(request, locale: str) -> GraphPayloadOut:
     return payload
 
 
+from apps.analytics.api import (  # noqa: E402
+    analytics_public_router,
+    analytics_validation_envelope,
+)
 from apps.api.public_contact import contact_router  # noqa: E402
+from apps.api.record_resolver import record_resolver_router  # noqa: E402
 
 api.add_router("", contact_router)
+api.add_router("", record_resolver_router)
+api.add_router("", analytics_public_router)
+
+
+@api.exception_handler(NinjaValidationError)
+def _analytics_scoped_validation_error(request, exc):
+    """A09: I08 envelope for analytics schema-shape (422) rejections only.
+
+    Every other path keeps ninja's default 422 shape untouched
+    (ERROR-COMPATIBILITY until explicitly migrated).
+    """
+    if (getattr(request, "path", "") or "").startswith("/api/v1/analytics/"):
+        return api.create_response(
+            request, analytics_validation_envelope(request, exc.errors), status=422
+        )
+    return api.create_response(request, {"detail": exc.errors}, status=422)
 

@@ -1,4 +1,11 @@
 {
+  "seo": {
+    "title": "Sample project",
+    "description": "Objective copy",
+    "image": null
+  },
+  "alternates": [],
+  "relatedRecords": [],
   "locale": "en",
   "slug": "sample-project",
   "title": "Sample project",

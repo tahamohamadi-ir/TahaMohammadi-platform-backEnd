@@ -2,22 +2,35 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
 from apps.content.models import (
     Article,
+    Book,
+    Collection,
     ContentSeedRecord,
+    Course,
+    CreativeWork,
+    Download,
     Landing,
+    Lesson,
     LifecycleStatus,
     Profile,
     Project,
     Publication,
     ResearchStatement,
     ResearchTopic,
+    Series,
+    Talk,
 )
-from apps.rebuild.services import invoke_static_rebuild
+from apps.rebuild.services import (
+    compute_affected_paths,
+    enqueue_publication_job,
+)
 from apps.security.models import AuditLog
 
 # Keep in sync with apps.api.admin_content.ENTITY_MODELS (avoid importing the router).
@@ -25,10 +38,18 @@ ENTITY_MODELS = {
     "landing": Landing,
     "profile": Profile,
     "article": Article,
+    "series": Series,
     "research-topic": ResearchTopic,
     "research-statement": ResearchStatement,
     "project": Project,
     "publication": Publication,
+    "book": Book,
+    "talk": Talk,
+    "download": Download,
+    "course": Course,
+    "creative-work": CreativeWork,
+    "lesson": Lesson,
+    "collection": Collection,
 }
 
 
@@ -49,7 +70,13 @@ class Command(BaseCommand):
         dry_run = bool(options["dry_run"])
         now = timezone.now()
         published_count = 0
+        published_items: list[tuple[str, Any]] = []
         failures: list[str] = []
+
+        # Deferred import: the admin router is not imported at module load.
+        # A04: scheduled publication records the same publication snapshot as
+        # the admin transition, so later draft edits keep serving this version.
+        from apps.api.admin_content import _record_publication_snapshot
 
         for entity, model in ENTITY_MODELS.items():
             due_ids = list(
@@ -108,6 +135,8 @@ class Command(BaseCommand):
                             ip="",
                             detail="reason=publish_scheduled_content",
                         )
+                        _record_publication_snapshot(item, entity, user=None)
+                        published_items.append((entity, item))
                     published_count += 1
                     self.stdout.write(self.style.SUCCESS(f"published {label}"))
                 except Exception as exc:  # noqa: BLE001 — report and continue
@@ -115,7 +144,17 @@ class Command(BaseCommand):
                     self.stderr.write(self.style.ERROR(f"failed {label}: {exc}"))
 
         if published_count and not dry_run:
-            invoke_static_rebuild()
+            paths_by_locale: dict[str, list[str]] = {}
+            for ent, it in published_items:
+                loc = getattr(it, "locale", "en") or "en"
+                paths_by_locale.setdefault(loc, []).extend(compute_affected_paths(ent, it))
+            for loc, paths in paths_by_locale.items():
+                # A03: each enqueue dispatches its own runner trigger on commit.
+                enqueue_publication_job(
+                    locale=loc,
+                    affected_paths=list(dict.fromkeys(paths)),
+                    removal_state="not_requested",
+                )
 
         self.stdout.write(
             f"publish_scheduled_content done published={published_count} "

@@ -22,8 +22,12 @@ from django.middleware.csrf import InvalidTokenFormat, _unmask_cipher_token
 from apps.content.models import (
     Article,
     Book,
+    Collection,
+    Course,
+    CreativeWork,
     Download,
     Landing,
+    Lesson,
     Profile,
     Project,
     Publication,
@@ -269,6 +273,15 @@ GRAPH_RELATED_FAMILIES: dict[str, type] = {
     "book": Book,
     "talk": Talk,
     "download": Download,
+}
+
+# Extended registry for content relation resolution (§I03)
+CONTENT_RELATED_FAMILIES: dict[str, type] = {
+    **GRAPH_RELATED_FAMILIES,
+    "course": Course,
+    "creativework": CreativeWork,
+    "lesson": Lesson,
+    "collection": Collection,
 }
 
 

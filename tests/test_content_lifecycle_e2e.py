@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from django.core.cache import cache
-from django.test import Client
+from django.test import Client, TestCase
 
 
 @pytest.fixture(autouse=True)
@@ -74,14 +74,18 @@ def test_article_create_edit_publish_public_json_fa_en(admin_api_client):
             HTTP_IF_MATCH=f'"{detail["updatedAt"]}"',
         )
         assert updated.status_code == 200
-        with patch("apps.api.admin_content.invoke_static_rebuild") as mocked:
-            published = _post_json(
-                admin_api_client,
-                f"/api/v1/admin/content/article/{detail['id']}/transition",
-                {"to": "published", "reason": "lifecycle e2e"},
-            )
-            assert published.status_code == 200
+        # A03: dispatch fires on transaction commit carrying the job UUID.
+        with patch("apps.rebuild.services.invoke_static_rebuild") as mocked:
+            with TestCase.captureOnCommitCallbacks(execute=True):
+                published = _post_json(
+                    admin_api_client,
+                    f"/api/v1/admin/content/article/{detail['id']}/transition",
+                    {"to": "published", "reason": "lifecycle e2e"},
+                )
+                assert published.status_code == 200
+                mocked.assert_not_called()
             mocked.assert_called_once()
+            assert mocked.call_args.kwargs.get("job_id")
         public = anonymous.get(f"/api/articles/{locale}/lifecycle-e2e")
         assert public.status_code == 200
         body = public.json()

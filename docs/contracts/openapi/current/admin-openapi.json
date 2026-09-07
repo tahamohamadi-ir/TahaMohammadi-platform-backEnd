@@ -47,6 +47,86 @@
         "title": "AdminUserOut",
         "type": "object"
       },
+      "AnalyticsReportOut": {
+        "description": "Admin received events report payload (§I07).",
+        "properties": {
+          "from_": {
+            "title": "From",
+            "type": "string"
+          },
+          "metric": {
+            "default": "received_events",
+            "title": "Metric",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "timezone": {
+            "default": "UTC",
+            "title": "Timezone",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_",
+          "to",
+          "updatedAt"
+        ],
+        "title": "AnalyticsReportOut",
+        "type": "object"
+      },
+      "AnalyticsRowOut": {
+        "description": "Single aggregate event counter row.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "event": {
+            "title": "Event",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "pagePath": {
+            "title": "Pagepath",
+            "type": "string"
+          },
+          "target": {
+            "default": "",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "pagePath",
+          "locale",
+          "event",
+          "count"
+        ],
+        "title": "AnalyticsRowOut",
+        "type": "object"
+      },
       "ApprovalQueueCountsOut": {
         "description": "Counts over every seed record, independent of the ``state`` filter.",
         "properties": {
@@ -147,6 +227,21 @@
       },
       "BlockFieldSpecOut": {
         "properties": {
+          "itemFields": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemfields"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -154,6 +249,28 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "maxItems": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxitems"
+          },
+          "minItems": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minitems"
           },
           "options": {
             "anyOf": [
@@ -212,6 +329,322 @@
           "labelFa"
         ],
         "title": "BlockTypeOut",
+        "type": "object"
+      },
+      "CaseStudyCollaboratorIn": {
+        "description": "Collaborator credit update row; id is optional for new rows.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publication_approved": {
+            "default": false,
+            "title": "Publication Approved",
+            "type": "boolean"
+          },
+          "role": {
+            "default": "",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CaseStudyCollaboratorIn",
+        "type": "object"
+      },
+      "CaseStudyCollaboratorOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "publication_approved": {
+            "default": false,
+            "title": "Publication Approved",
+            "type": "boolean"
+          },
+          "role": {
+            "default": "",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CaseStudyCollaboratorOut",
+        "type": "object"
+      },
+      "CaseStudyDetailsIn": {
+        "description": "Case study narrative extension fields.",
+        "properties": {
+          "constraints": {
+            "default": "",
+            "title": "Constraints",
+            "type": "string"
+          },
+          "depth": {
+            "default": "standard",
+            "title": "Depth",
+            "type": "string"
+          },
+          "lessons_learned": {
+            "default": "",
+            "title": "Lessons Learned",
+            "type": "string"
+          },
+          "outcomes_summary": {
+            "default": "",
+            "title": "Outcomes Summary",
+            "type": "string"
+          },
+          "problem": {
+            "default": "",
+            "title": "Problem",
+            "type": "string"
+          },
+          "technical_decisions": {
+            "default": "",
+            "title": "Technical Decisions",
+            "type": "string"
+          },
+          "testing_summary": {
+            "default": "",
+            "title": "Testing Summary",
+            "type": "string"
+          },
+          "trade_offs": {
+            "default": "",
+            "title": "Trade Offs",
+            "type": "string"
+          }
+        },
+        "title": "CaseStudyDetailsIn",
+        "type": "object"
+      },
+      "CaseStudyDetailsOut": {
+        "properties": {
+          "constraints": {
+            "default": "",
+            "title": "Constraints",
+            "type": "string"
+          },
+          "depth": {
+            "default": "standard",
+            "title": "Depth",
+            "type": "string"
+          },
+          "lessons_learned": {
+            "default": "",
+            "title": "Lessons Learned",
+            "type": "string"
+          },
+          "outcomes_summary": {
+            "default": "",
+            "title": "Outcomes Summary",
+            "type": "string"
+          },
+          "problem": {
+            "default": "",
+            "title": "Problem",
+            "type": "string"
+          },
+          "technical_decisions": {
+            "default": "",
+            "title": "Technical Decisions",
+            "type": "string"
+          },
+          "testing_summary": {
+            "default": "",
+            "title": "Testing Summary",
+            "type": "string"
+          },
+          "trade_offs": {
+            "default": "",
+            "title": "Trade Offs",
+            "type": "string"
+          }
+        },
+        "title": "CaseStudyDetailsOut",
+        "type": "object"
+      },
+      "CaseStudyEvidenceIn": {
+        "description": "Evidence update row; id is optional for new rows.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_verified": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "internal",
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "CaseStudyEvidenceIn",
+        "type": "object"
+      },
+      "CaseStudyEvidenceOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_verified": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "title": "Value",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "internal",
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "CaseStudyEvidenceOut",
+        "type": "object"
+      },
+      "CaseStudyFundingIn": {
+        "description": "Funding disclosure update row; id is optional for new rows.",
+        "properties": {
+          "funder": {
+            "title": "Funder",
+            "type": "string"
+          },
+          "grant_id": {
+            "default": "",
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "publication_approved": {
+            "default": false,
+            "title": "Publication Approved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "funder"
+        ],
+        "title": "CaseStudyFundingIn",
+        "type": "object"
+      },
+      "CaseStudyFundingOut": {
+        "properties": {
+          "funder": {
+            "title": "Funder",
+            "type": "string"
+          },
+          "grant_id": {
+            "default": "",
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "publication_approved": {
+            "default": false,
+            "title": "Publication Approved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "funder"
+        ],
+        "title": "CaseStudyFundingOut",
         "type": "object"
       },
       "CompositionBlockOut": {
@@ -1833,6 +2266,323 @@
         "title": "LocaleTranslationOut",
         "type": "object"
       },
+      "LocalizedAudienceLinkOut": {
+        "description": "One audience link for research or employment audiences.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "href"
+        ],
+        "title": "LocalizedAudienceLinkOut",
+        "type": "object"
+      },
+      "LocalizedNavLinkOut": {
+        "description": "One navigation link for localized site settings.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ],
+        "title": "LocalizedNavLinkOut",
+        "type": "object"
+      },
+      "LocalizedSceneOut": {
+        "description": "Scene presets and motion/density configuration (§I04).",
+        "properties": {
+          "density": {
+            "default": "standard",
+            "title": "Density",
+            "type": "string"
+          },
+          "graphPreset": {
+            "default": "atlas-v2",
+            "title": "Graphpreset",
+            "type": "string"
+          },
+          "motion": {
+            "default": "full",
+            "title": "Motion",
+            "type": "string"
+          },
+          "portalPreset": {
+            "default": "arch-v2",
+            "title": "Portalpreset",
+            "type": "string"
+          }
+        },
+        "title": "LocalizedSceneOut",
+        "type": "object"
+      },
+      "LocalizedSitePublishOut": {
+        "description": "Result of publishing draft localized site settings.",
+        "properties": {
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "publishedAt": {
+            "format": "date-time",
+            "title": "Publishedat",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "revision",
+          "publishedAt"
+        ],
+        "title": "LocalizedSitePublishOut",
+        "type": "object"
+      },
+      "LocalizedSiteSeoIn": {
+        "description": "SEO input for localized site settings.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "LocalizedSiteSeoIn",
+        "type": "object"
+      },
+      "LocalizedSiteSeoOut": {
+        "description": "SEO title and description for localized site settings.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "LocalizedSiteSeoOut",
+        "type": "object"
+      },
+      "LocalizedSiteSettingsAdminOut": {
+        "description": "Admin projection of localized site settings with draft/published status.",
+        "properties": {
+          "audienceLinks": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedAudienceLinkOut"
+            },
+            "title": "Audiencelinks",
+            "type": "array"
+          },
+          "brandName": {
+            "title": "Brandname",
+            "type": "string"
+          },
+          "footerText": {
+            "title": "Footertext",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "navLinks": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedNavLinkOut"
+            },
+            "title": "Navlinks",
+            "type": "array"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "scene": {
+            "$ref": "#/components/schemas/LocalizedSceneOut"
+          },
+          "seo": {
+            "$ref": "#/components/schemas/LocalizedSiteSeoOut"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tagline": {
+            "title": "Tagline",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "revision",
+          "brandName",
+          "tagline",
+          "footerText",
+          "seo",
+          "scene",
+          "status",
+          "updatedAt"
+        ],
+        "title": "LocalizedSiteSettingsAdminOut",
+        "type": "object"
+      },
+      "LocalizedSiteSettingsUpdateIn": {
+        "description": "Partial update payload for localized site settings (optimistically locked).",
+        "properties": {
+          "audienceLinks": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audiencelinks"
+          },
+          "brandName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brandname"
+          },
+          "footerText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footertext"
+          },
+          "navLinks": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Navlinks"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedSiteSeoIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tagline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          }
+        },
+        "title": "LocalizedSiteSettingsUpdateIn",
+        "type": "object"
+      },
       "LoginIn": {
         "description": "Admin login request — email (username), password, optional OTP/recovery code.",
         "properties": {
@@ -2366,6 +3116,93 @@
         "title": "ProjectCaseMediaOut",
         "type": "object"
       },
+      "ProjectCaseStudyIn": {
+        "description": "Full-aggregate case-study payload for atomic PUT.",
+        "properties": {
+          "collaborators": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyCollaboratorIn"
+            },
+            "title": "Collaborators",
+            "type": "array"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseStudyDetailsIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyEvidenceIn"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "funding": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyFundingIn"
+            },
+            "title": "Funding",
+            "type": "array"
+          }
+        },
+        "title": "ProjectCaseStudyIn",
+        "type": "object"
+      },
+      "ProjectCaseStudyOut": {
+        "properties": {
+          "collaborators": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyCollaboratorOut"
+            },
+            "title": "Collaborators",
+            "type": "array"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseStudyDetailsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyEvidenceOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "funding": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyFundingOut"
+            },
+            "title": "Funding",
+            "type": "array"
+          },
+          "projectId": {
+            "title": "Projectid",
+            "type": "integer"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "updatedAt"
+        ],
+        "title": "ProjectCaseStudyOut",
+        "type": "object"
+      },
       "ProjectDiagramImageIn": {
         "description": "Assign or clear a diagram Media FK.",
         "properties": {
@@ -2505,6 +3342,136 @@
         "title": "ProjectScreenshotOut",
         "type": "object"
       },
+      "PublicationJobListOut": {
+        "description": "Paged collection of publication jobs.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationJobOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "items"
+        ],
+        "title": "PublicationJobListOut",
+        "type": "object"
+      },
+      "PublicationJobOut": {
+        "description": "Publication job representation conforming strictly to PRODUCT-INTERFACES-V2 §I06.",
+        "properties": {
+          "affectedPaths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affectedpaths",
+            "type": "array"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "deployedRevision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployedrevision"
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errorcode"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          },
+          "removalState": {
+            "title": "Removalstate",
+            "type": "string"
+          },
+          "requestedRevision": {
+            "title": "Requestedrevision",
+            "type": "string"
+          },
+          "revokedPaths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Revokedpaths",
+            "type": "array"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startedat"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "requestedRevision",
+          "removalState",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "PublicationJobOut",
+        "type": "object"
+      },
       "RecoveryCodesOut": {
         "properties": {
           "codes": {
@@ -2519,6 +3486,12 @@
           "codes"
         ],
         "title": "RecoveryCodesOut",
+        "type": "object"
+      },
+      "RetryJobIn": {
+        "description": "Empty payload for job retry.",
+        "properties": {},
+        "title": "RetryJobIn",
         "type": "object"
       },
       "SectionLayoutOut": {
@@ -3366,6 +4339,75 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/analytics": {
+      "get": {
+        "description": "Admin report of received events aggregate counters (§I07).\n\nAuthentication: Staff session + verified OTP required.\nWindow: Maximum 366 days.",
+        "operationId": "apps_analytics_api_get_analytics_report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsReportOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Retrieve first-party received events report"
+      }
+    },
     "/api/v1/admin/approval-queue": {
       "get": {
         "operationId": "apps_api_admin_approvals_approval_queue",
@@ -3861,6 +4903,72 @@
         "summary": "List project diagrams and screenshots (Media FKs)."
       }
     },
+    "/api/v1/admin/content/project/{id}/case-study": {
+      "get": {
+        "operationId": "apps_api_admin_project_evidence_get_project_case_study",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCaseStudyOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get project case study, evidence, collaborators, and funding."
+      },
+      "put": {
+        "operationId": "apps_api_admin_project_evidence_put_project_case_study",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCaseStudyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCaseStudyOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Atomically update project case study, evidence, collaborators, and funding."
+      }
+    },
     "/api/v1/admin/content/project/{id}/diagrams/{diagram_id}": {
       "put": {
         "operationId": "apps_api_admin_content_project_diagram_set_image",
@@ -4354,6 +5462,53 @@
           }
         },
         "summary": "Create an immutable content snapshot."
+      }
+    },
+    "/api/v1/admin/content/{entity}/{id}/revisions/{revision_id}": {
+      "get": {
+        "operationId": "apps_api_admin_content_content_revisions_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entity",
+            "required": true,
+            "schema": {
+              "title": "Entity",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRevisionOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get an immutable content revision with full snapshot."
       }
     },
     "/api/v1/admin/content/{entity}/{id}/revisions/{revision_id}/restore": {
@@ -5402,6 +6557,177 @@
         "summary": "Per-slug translation queue."
       }
     },
+    "/api/v1/admin/publication-jobs": {
+      "get": {
+        "description": "List publication jobs with pagination and optional state/locale filters.",
+        "operationId": "apps_api_admin_publication_jobs_list_publication_jobs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationJobListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List publication jobs (paged, filterable by state and locale)",
+        "tags": [
+          "publication-jobs"
+        ]
+      }
+    },
+    "/api/v1/admin/publication-jobs/{job_id}": {
+      "get": {
+        "description": "Get single publication job detail.",
+        "operationId": "apps_api_admin_publication_jobs_get_publication_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationJobOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get one publication job by UUID",
+        "tags": [
+          "publication-jobs"
+        ]
+      }
+    },
+    "/api/v1/admin/publication-jobs/{job_id}/retry": {
+      "post": {
+        "description": "Idempotently retry a publication job.\n\nEnforces If-Match preconditions against the target job's updatedAt timestamp.\nReuses existing retry jobs when an identical Idempotency-Key header is presented.",
+        "operationId": "apps_api_admin_publication_jobs_retry_publication_job",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RetryJobIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationJobOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationJobOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Idempotently retry a publication job with If-Match and Idempotency-Key",
+        "tags": [
+          "publication-jobs"
+        ]
+      }
+    },
     "/api/v1/admin/site": {
       "get": {
         "operationId": "apps_api_admin_siteconfig_site_settings_get",
@@ -5446,6 +6772,101 @@
           }
         },
         "summary": "Update site settings (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/site/{locale}": {
+      "get": {
+        "operationId": "apps_api_admin_siteconfig_localized_site_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalizedSiteSettingsAdminOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get localized site settings for admin (draft state)."
+      },
+      "put": {
+        "operationId": "apps_api_admin_siteconfig_localized_site_settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalizedSiteSettingsUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalizedSiteSettingsAdminOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update localized site settings (optimistic locking)."
+      }
+    },
+    "/api/v1/admin/site/{locale}/publish": {
+      "post": {
+        "operationId": "apps_api_admin_siteconfig_localized_site_settings_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalizedSitePublishOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Publish draft snapshot for localized site settings (PRODUCT-V2 §I04)."
       }
     },
     "/api/v1/admin/tags": {

@@ -1,6 +1,38 @@
 # Backend Task List
 
-Detailed execution queue. Cross-repo board: `../../Docs/05-delivery/MULTI-AGENT-TASK-BOARD.md` (IDs prefixed `BACKEND-`).
+<!-- PRODUCT-V2.1 -->
+## Active V2.1 packets — BACKEND
+
+Parent groups and retired CA IDs are not assignments. Dependencies and exact files: `../Docs/05-delivery/concept-alignment-v2/execution-tasks.json`. Implementation/visual/publication gates remain open.
+
+| Packet | State | Specification |
+|---|---|---|
+| PU-03-resolver | ACCEPTED_LOCAL | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-03-resolver.md` |
+| PU-03-settings | ACCEPTED_LOCAL | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-03-settings.md` |
+| PU-04-catalog | REVISE | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-catalog.md` |
+| PU-04-metadata | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-metadata.md` |
+| PU-04-publication | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-publication.md` |
+| PU-04-course | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-course.md` |
+| PU-04-creative | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-creative.md` |
+| PU-05-lessons | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-05-lessons.md` |
+| PU-06-book | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-06-book.md` |
+| PU-06-talk | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-06-talk.md` |
+| PU-06-resource | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-06-resource.md` |
+| PU-06-collection | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-06-collection.md` |
+| PU-06-series | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-06-series.md` |
+| PU-04-project-evidence | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-project-evidence.md` |
+| PU-07-revisions | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-07-revisions.md` |
+| PU-07-preview | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-07-preview.md` |
+| PU-07-jobs | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-07-jobs.md` |
+| PU-23-invalidation | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-23-invalidation.md` |
+| PU-20-events | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-20-events.md` |
+
+## Historical milestones
+
+Rows below preserve their original evidence and are not reverified by this documentation delivery.
+<!-- /PRODUCT-V2.1 -->
+
+Historical milestone register. Current dispatch queue: `../Docs/05-delivery/concept-alignment-v2/EXECUTION.md`; filter repository `BACKEND`.
 
 Status: `[x]` done, `[ ]` open, `[~]` in progress.
 

@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.rebuild",
     "apps.composition",
     "apps.siteconfig",
+    "apps.analytics",
     "django_otp",
     "django_otp.plugins.otp_totp",
 ]
@@ -79,6 +80,10 @@ LOGIN_REDIRECT_URL = "/admin/"
 REBUILD_TRIGGER_ENABLED = False
 REBUILD_TRIGGER_SECRET = ""
 REBUILD_SCRIPT_PATH = ""
+# A03: standalone product-runner dispatch (Infra/staging/rebuild-product.py).
+# List of argv parts; the job UUID is appended. Empty disables runner dispatch
+# (the job stays queued for an explicit operator invocation).
+PUBLICATION_RUNNER_ARGV: list = []
 
 # Admin feature flags (S4) — default off; enable via env / settings override.
 FEATURE_ADMIN_BULK_ARCHIVE = False

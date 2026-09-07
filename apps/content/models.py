@@ -132,12 +132,29 @@ def compute_reading_time_minutes(
     return max(1, math.ceil(len(words) / wpm))
 
 
-class Landing(LocalizedContentMixin, LifecycleMixin):
+class ContentPublicationMetadataMixin(models.Model):
+    """Shared publication metadata: SEO, social image, translation key, and related records."""
+
+    seo_title = models.CharField(max_length=200, blank=True, default="")
+    seo_description = models.TextField(blank=True, default="")
+    social_image = models.ForeignKey(
+        "media.Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    translation_key = models.UUIDField(null=True, blank=True, db_index=True)
+    related_records = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        abstract = True
+
+
+class Landing(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Localized landing page content (one row per locale)."""
 
     body = models.TextField(blank=True)
-    seo_title = models.CharField(max_length=200, blank=True)
-    seo_description = models.TextField(blank=True)
 
     class Meta:
         db_table = "content_landing"
@@ -170,6 +187,14 @@ class Profile(LocalizedContentMixin, LifecycleMixin):
     short_bio = models.TextField(blank=True)
     long_bio = models.TextField(blank=True)
     availability = models.TextField(blank=True)
+    social_image = models.ForeignKey(
+        "media.Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    related_records = models.JSONField(default=list, blank=True)
 
     class Meta:
         db_table = "content_profile"
@@ -363,11 +388,23 @@ class TopicTag(models.Model):
         return f"{self.name} ({self.locale})"
 
 
-class Series(LocalizedContentMixin, LifecycleMixin):
+class Series(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Locale-aware article series with manual ordering within a locale."""
 
     description = models.TextField(blank=True)
     ordering = models.PositiveIntegerField(default=0)
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_series",
+    )
+    members = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered series members: [{family: 'article', id, position}].",
+    )
 
     class Meta:
         db_table = "content_series"
@@ -389,7 +426,7 @@ class Series(LocalizedContentMixin, LifecycleMixin):
         return f"{self.title} ({self.locale})"
 
 
-class Article(LocalizedContentMixin, LifecycleMixin):
+class Article(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Published writing unit — rich text body, tags, series, license (P4)."""
 
     body = models.TextField(blank=True)
@@ -534,7 +571,7 @@ class DownloadType(models.TextChoices):
     OTHER = "other", "Other"
 
 
-class ResearchTopic(LocalizedContentMixin, LifecycleMixin):
+class ResearchTopic(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Research domain / agenda area (distinct from blog TopicTag)."""
 
     summary = models.TextField(blank=True)
@@ -571,7 +608,7 @@ class ResearchTopic(LocalizedContentMixin, LifecycleMixin):
         return f"{self.title} ({self.locale})"
 
 
-class ResearchStatement(LocalizedContentMixin, LifecycleMixin):
+class ResearchStatement(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Independent research agenda statement (HTML text + optional PDF)."""
 
     body = models.TextField(blank=True)
@@ -629,7 +666,7 @@ class ResearchStatement(LocalizedContentMixin, LifecycleMixin):
             )
 
 
-class Publication(LocalizedContentMixin, LifecycleMixin):
+class Publication(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Publication core (P5) extended for P8 abstract/identifiers/access."""
 
     authors = models.TextField(blank=True)
@@ -682,6 +719,13 @@ class Publication(LocalizedContentMixin, LifecycleMixin):
         max_length=20,
         choices=EvidenceVisibility.choices,
         default=EvidenceVisibility.INTERNAL,
+    )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_publications",
     )
 
     class Meta:
@@ -737,7 +781,7 @@ class Publication(LocalizedContentMixin, LifecycleMixin):
         return (self.url or "").strip()
 
 
-class Project(LocalizedContentMixin, LifecycleMixin):
+class Project(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Canonical project entity (research/engineering/ai/…); no ResearchProject twin."""
 
     project_type = models.CharField(
@@ -1107,7 +1151,7 @@ class ProjectFunding(models.Model):
         return self.funder
 
 
-class Book(LocalizedContentMixin, LifecycleMixin):
+class Book(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Typed book catalog entity (P8)."""
 
     authors = models.TextField(blank=True)
@@ -1134,6 +1178,13 @@ class Book(LocalizedContentMixin, LifecycleMixin):
         on_delete=models.SET_NULL,
         related_name="+",
     )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_books",
+    )
 
     class Meta:
         db_table = "content_book"
@@ -1158,7 +1209,7 @@ class Book(LocalizedContentMixin, LifecycleMixin):
         return self.access_state == AccessState.PUBLIC
 
 
-class Talk(LocalizedContentMixin, LifecycleMixin):
+class Talk(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Typed talk / presentation catalog entity (P8)."""
 
     speakers = models.TextField(blank=True)
@@ -1185,6 +1236,13 @@ class Talk(LocalizedContentMixin, LifecycleMixin):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
+    )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_talks",
     )
 
     class Meta:
@@ -1220,7 +1278,7 @@ class Talk(LocalizedContentMixin, LifecycleMixin):
         return (self.slides_url or "").strip()
 
 
-class Download(LocalizedContentMixin, LifecycleMixin):
+class Download(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Media-backed download catalog entry (P8) — never a bare external URL."""
 
     description = models.TextField(blank=True)
@@ -1249,6 +1307,13 @@ class Download(LocalizedContentMixin, LifecycleMixin):
         max_length=32,
         choices=License.choices,
         default=License.ALL_RIGHTS_RESERVED,
+    )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_downloads",
     )
 
     class Meta:
@@ -1283,7 +1348,7 @@ class Download(LocalizedContentMixin, LifecycleMixin):
         )
 
 
-class Collection(LocalizedContentMixin, LifecycleMixin):
+class Collection(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Curated collection (P10-03) — explicit editorial set with curator/criteria/date.
 
     Members are curated via M2M to published public projections only
@@ -1343,6 +1408,18 @@ class Collection(LocalizedContentMixin, LifecycleMixin):
         related_name="collections",
         help_text="Curated publications (editorial only).",
     )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_collections",
+    )
+    members = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered collection members: [{family, id, position}].",
+    )
 
     class Meta:
         db_table = "content_collection"
@@ -1391,7 +1468,7 @@ class CourseLanguage(models.TextChoices):
     BILINGUAL = "bilingual", "Bilingual"
 
 
-class Course(LocalizedContentMixin, LifecycleMixin):
+class Course(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Teaching course catalog entity (P9-01) — no LMS/payment."""
 
     description = models.TextField(blank=True, help_text="Short summary for list cards.")
@@ -1435,6 +1512,13 @@ class Course(LocalizedContentMixin, LifecycleMixin):
         on_delete=models.SET_NULL,
         related_name="+",
     )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_courses",
+    )
 
     class Meta:
         db_table = "content_course"
@@ -1466,6 +1550,54 @@ class Course(LocalizedContentMixin, LifecycleMixin):
         return bool(self.cover_media and self.cover_media.is_active)
 
 
+class Lesson(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
+    """Course lesson catalog entity (P9-01 / §I05) — independent published lessons."""
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="lessons",
+    )
+    position = models.PositiveIntegerField(default=0)
+    summary = models.TextField(blank=True, help_text="Short lesson summary.")
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_lessons",
+    )
+
+    class Meta:
+        db_table = "content_lesson"
+        ordering = ["locale", "course", "position", "slug"]
+        indexes = [
+            models.Index(
+                fields=["locale", "course", "status", "position"],
+                name="lesson_loc_crs_st_pos_idx",
+            ),
+            models.Index(
+                fields=["course", "locale", "slug"],
+                name="lesson_crs_loc_slug_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course", "locale", "slug"],
+                name="content_lesson_unique_course_locale_slug",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.course.slug}:{self.slug} ({self.locale})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.course_id and hasattr(self, "course") and self.course:
+            if self.locale != self.course.locale:
+                raise ValidationError({"locale": "Lesson locale must match parent Course locale."})
+
+
 class CreativeWorkType(models.TextChoices):
     """Creative work category (P9-02)."""
 
@@ -1476,7 +1608,7 @@ class CreativeWorkType(models.TextChoices):
     OTHER = "other", "Other"
 
 
-class CreativeWork(LocalizedContentMixin, LifecycleMixin):
+class CreativeWork(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Creative work catalog entity (P9-02) — no student PII."""
 
     description = models.TextField(blank=True, help_text="Short summary for list cards.")
@@ -1514,6 +1646,13 @@ class CreativeWork(LocalizedContentMixin, LifecycleMixin):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
+    )
+    story = models.ForeignKey(
+        "composition.CompositionPage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attached_creative_works",
     )
 
     class Meta:
@@ -1612,6 +1751,50 @@ class ContentRevision(models.Model):
 
     def __str__(self) -> str:
         return f"{self.entity_key}:{self.object_id}@{self.pk}"
+
+
+class PublicationSnapshot(models.Model):
+    """Immutable snapshot of published content, attached story, and relations (PU-07).
+
+    Preserves the published document when draft edits occur, ensuring
+    'A draft edit must not change the currently published document until explicit publication.'
+    """
+
+    entity_key = models.CharField(max_length=64, db_index=True)
+    object_id = models.PositiveIntegerField(db_index=True)
+    locale = models.CharField(max_length=10, db_index=True, blank=True, default="")
+    slug = models.CharField(max_length=200, db_index=True, blank=True, default="")
+    snapshot = models.JSONField(
+        help_text=(
+            "Complete published snapshot including parent fields, relations, and attached story."
+        )
+    )
+    published_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="publication_snapshots",
+    )
+
+    class Meta:
+        db_table = "content_publication_snapshot"
+        ordering = ["-published_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["entity_key", "object_id", "-published_at"],
+                name="content_pubsnap_ent_obj_pub",
+            ),
+            models.Index(
+                fields=["locale", "slug"],
+                name="content_pubsnap_locale_slug",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.entity_key}:{self.object_id} published@{self.published_at.isoformat()}"
 
 
 class HomeModuleKey(models.TextChoices):

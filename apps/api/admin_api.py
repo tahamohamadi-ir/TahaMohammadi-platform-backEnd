@@ -296,3 +296,13 @@ from apps.api.admin_graph import graph_router  # noqa: E402
 
 admin_api.add_router("/graph", graph_router)
 # [ADMIN-API] Track AB end
+
+# PU-07-jobs: publication jobs administration router.
+from apps.api.admin_publication_jobs import publication_jobs_router  # noqa: E402
+
+admin_api.add_router("/publication-jobs", publication_jobs_router)
+
+# PU-20-events: aggregate analytics reporting router.
+from apps.analytics.api import analytics_admin_router  # noqa: E402
+
+admin_api.add_router("/analytics", analytics_admin_router)

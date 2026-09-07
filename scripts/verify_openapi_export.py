@@ -1,11 +1,14 @@
-"""CI gate: fresh OpenAPI re-export must match the accepted provenance record.
+"""CI gate: fresh OpenAPI re-export must match the accepted record.
 
 Re-runs ``scripts/export_openapi.py`` against the current source tree, then
 compares the freshly written artifacts with the SHA-256 values recorded in
-``docs/contracts/openapi/current/PROVENANCE.json``. The accepted record was
-hashed over CRLF-encoded bytes, so both sides are compared through the same
-CRLF re-encoding rule used by ``tests/test_openapi_hash_drift.py`` and
-documented in ``Docs/03-contracts/OPENAPI-ARTIFACT-CONTRACT.md``.
+``docs/contracts/openapi/current/ACCEPTANCE.json`` (the stable hash-based
+acceptance record). ``PROVENANCE.json`` is generation evidence only — the
+export rewrites it with a fresh timestamp on every run — so acceptance is
+never asserted from it. The accepted record was hashed over CRLF-encoded
+bytes, so both sides are compared through the same CRLF re-encoding rule used
+by ``tests/test_openapi_hash_drift.py`` and documented in
+``Docs/03-contracts/OPENAPI-ARTIFACT-CONTRACT.md``.
 """
 
 from __future__ import annotations
@@ -28,18 +31,20 @@ def crlf_sha256(path: Path) -> str:
 
 
 def main() -> int:
-    provenance_path = OUTPUT_DIRECTORY / "PROVENANCE.json"
-    accepted = json.loads(provenance_path.read_text(encoding="utf-8"))
+    acceptance_path = OUTPUT_DIRECTORY / "ACCEPTANCE.json"
+    accepted = json.loads(acceptance_path.read_text(encoding="utf-8"))
     if accepted.get("status") != ACCEPTED_STATUS:
         print(
-            f"FAIL: {provenance_path} status is {accepted.get('status')!r}, "
+            f"FAIL: {acceptance_path} status is {accepted.get('status')!r}, "
             f"expected {ACCEPTED_STATUS!r}; there is no accepted record to gate against."
         )
         return 1
 
-    # export_openapi.py rewrites the artifacts AND the provenance record (as
-    # "source-generated-unaccepted"). Snapshot every tracked file it touches so
-    # a local verification run leaves the accepted working tree byte-identical.
+    provenance_path = OUTPUT_DIRECTORY / "PROVENANCE.json"
+    # export_openapi.py rewrites the artifacts AND the generation-evidence
+    # PROVENANCE.json (as "source-generated-unaccepted"). Snapshot every
+    # tracked file it touches so a local verification run leaves the accepted
+    # working tree byte-identical.
     restore: dict[Path, bytes | None] = {}
     for candidate in (provenance_path, *(
         OUTPUT_DIRECTORY / name for name in accepted["artifacts"]
@@ -88,11 +93,11 @@ def main() -> int:
         return result.returncode
     if failures:
         print(
-            "Fresh export drifted from the accepted provenance; reopen PS-05 per "
+            "Fresh export drifted from the accepted record; reopen PS-05 per "
             "Docs/03-contracts/OPENAPI-ACCEPTANCE.md before adopting new artifacts."
         )
         return 1
-    print("OpenAPI export matches accepted provenance.")
+    print("OpenAPI export matches the accepted record.")
     return 0
 
 

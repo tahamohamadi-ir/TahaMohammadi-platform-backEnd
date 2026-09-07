@@ -9,7 +9,9 @@ Unsafe methods additionally enforce the same-origin CSRF baseline.
 
 from __future__ import annotations
 
+import copy
 import re
+import uuid
 from datetime import UTC, date, datetime
 
 from django.db import IntegrityError, models, transaction
@@ -25,20 +27,28 @@ from apps.api.admin_common import (
     _parse_positive_int,
     _require_admin_otp,
 )
+from apps.composition.models import (
+    CompositionBlock,
+    CompositionPage,
+    CompositionSection,
+)
 from apps.content.feature_flags import is_feature_enabled
 from apps.content.models import (
     Article,
     Book,
+    Collection,
     ContentRevision,
     ContentSeedRecord,
     Course,
     CreativeWork,
     Download,
     Landing,
+    Lesson,
     LifecycleStatus,
     Profile,
     Project,
     Publication,
+    PublicationSnapshot,
     ResearchStatement,
     ResearchTopic,
     Series,
@@ -49,13 +59,17 @@ from apps.content.profile_api import (
     resolve_translation_status,
     serialize_profile_detail,
 )
-from apps.content.revisions import create_revision, restore_revision_as_draft
+from apps.content.published import invalidate_published_snapshots
+from apps.content.revisions import (
+    apply_snapshot_as_draft,
+    build_snapshot,
+)
 from apps.content.services.lifecycle import (
     LifecycleError,
     bulk_archive_items,
     transition_item,
 )
-from apps.rebuild.services import invoke_static_rebuild
+from apps.rebuild.services import enqueue_content_invalidation
 from apps.security.models import AuditLog
 
 content_router = Router()
@@ -74,13 +88,11 @@ ENTITY_MODELS = {
     "download": Download,
     "course": Course,
     "creative-work": CreativeWork,
+    "lesson": Lesson,
+    "collection": Collection,
 }
 
-PREVIEW_SHARE_ENTITIES = {
-    "landing": "landing",
-    "profile": "profile",
-    "article": "article",
-}
+PREVIEW_SHARE_ENTITIES = {k: k for k in ENTITY_MODELS}
 
 VALID_LOCALES = ("fa", "en")
 VALID_STATUSES = ("draft", "review", "scheduled", "published", "archived")
@@ -102,6 +114,9 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "body": "body",
         "seo_title": "seoTitle",
         "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "profile": {
         "short_bio": "shortBio",
@@ -111,6 +126,9 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "seo_title": "seoTitle",
         "seo_description": "seoDescription",
         "revision": "revision",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "article": {
         "excerpt": "excerpt",
@@ -120,10 +138,22 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "accessibility_notes": "accessibilityNotes",
         "featured_image": "featuredImageId",
         "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "series": {
         "description": "description",
         "ordering": "ordering",
+        "story": "storyId",
+        "members": "members",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "research-topic": {
         "summary": "summary",
@@ -133,11 +163,21 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "methods": "methods",
         "future_directions": "futureDirections",
         "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "research-statement": {
         "body": "body",
         "statement_pdf": "statementPdfId",
         "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "project": {
         "project_type": "projectType",
@@ -155,6 +195,11 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "demo_url": "demoUrl",
         "show_on_projects": "showOnProjects",
         "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "publication": {
         "authors": "authors",
@@ -179,6 +224,12 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "citation_source": "citationSource",
         "citation_last_verified": "citationLastVerified",
         "citation_visibility": "citationVisibility",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "book": {
         "authors": "authors",
@@ -191,6 +242,12 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "access_state": "accessState",
         "accessibility_notes": "accessibilityNotes",
         "cover_media": "coverMediaId",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "talk": {
         "speakers": "speakers",
@@ -204,6 +261,12 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "access_state": "accessState",
         "accessibility_notes": "accessibilityNotes",
         "slides_media": "slidesMediaId",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "download": {
         "description": "description",
@@ -213,6 +276,12 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "access_state": "accessState",
         "accessibility_notes": "accessibilityNotes",
         "license": "license",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "course": {
         "description": "description",
@@ -227,6 +296,12 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "last_updated": "lastUpdated",
         "accessibility_notes": "accessibilityNotes",
         "cover_media": "coverMediaId",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
     "creative-work": {
         "description": "description",
@@ -241,6 +316,38 @@ DETAIL_FIELD_MAPS: dict[str, dict[str, str]] = {
         "consent_verified": "consentVerified",
         "accessibility_notes": "accessibilityNotes",
         "cover_media": "coverMediaId",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
+    },
+    "lesson": {
+        "course": "courseId",
+        "position": "position",
+        "summary": "summary",
+        "story": "storyId",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
+    },
+    "collection": {
+        "description": "description",
+        "curator_name": "curatorName",
+        "curator_title": "curatorTitle",
+        "criteria": "criteria",
+        "curated_date": "curatedDate",
+        "cover_media": "coverMediaId",
+        "story": "storyId",
+        "members": "members",
+        "seo_title": "seoTitle",
+        "seo_description": "seoDescription",
+        "social_image": "socialImageId",
+        "translation_key": "translationKey",
+        "related_records": "relatedRecords",
     },
 }
 
@@ -283,6 +390,8 @@ def _field_type(field) -> str:
         return "number"
     if isinstance(field, models.TextField):
         return "textarea"
+    if isinstance(field, models.JSONField):
+        return "json"
     return "text"
 
 
@@ -350,7 +459,13 @@ def _coerce_field_value(field, attr: str, key: str, value) -> object:
                     "storyId must reference a story composition.",
                     fields={"fields": [key]},
                 )
-        if attr in {"featured_image", "diagram_image", "screenshot_image", "cover_media"}:
+        if attr in {
+            "featured_image",
+            "diagram_image",
+            "screenshot_image",
+            "cover_media",
+            "social_image",
+        }:
             mime = getattr(related, "mime", "") or ""
             if mime and not str(mime).startswith("image/"):
                 raise AdminError(
@@ -369,6 +484,181 @@ def _coerce_field_value(field, attr: str, key: str, value) -> object:
                     fields={"fields": [key]},
                 )
         return related
+    if isinstance(field, models.UUIDField):
+        if value in (None, ""):
+            return None
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, AttributeError, TypeError):
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"Invalid UUID for '{key}'.",
+                fields={"fields": [key]},
+            ) from None
+    if isinstance(field, models.JSONField):
+        if value in (None, ""):
+            return []
+        if attr == "related_records":
+            if not isinstance(value, list):
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    f"Invalid list for '{key}'. Expected array of references.",
+                    fields={"fields": [key]},
+                )
+            from apps.api.record_resolver import _ID_RE, MAX_ID, RESOLVER_FAMILIES
+
+            coerced_list = []
+            for item in value:
+                if not isinstance(item, dict):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid reference object in '{key}'.",
+                        fields={"fields": [key]},
+                    )
+                family = item.get("family")
+                if not isinstance(family, str) or family not in RESOLVER_FAMILIES:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid or unknown family '{family}' in '{key}'.",
+                        fields={"fields": [key]},
+                    )
+                raw_id = item.get("id")
+                if not isinstance(raw_id, str) or not _ID_RE.match(raw_id):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        (
+                            f"Invalid canonical ID for '{key}'. "
+                            "Expected non-zero decimal string without leading zeros."
+                        ),
+                        fields={"fields": [key]},
+                    )
+                try:
+                    num_id = int(raw_id)
+                    if num_id > MAX_ID:
+                        raise ValueError("ID out of range")
+                except ValueError:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid canonical ID for '{key}'. Out of range.",
+                        fields={"fields": [key]},
+                    ) from None
+                coerced_list.append({"family": family, "id": raw_id})
+            return coerced_list
+        if attr == "members":
+            if not isinstance(value, list):
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    f"Invalid list for '{key}'. Expected array of member objects.",
+                    fields={"fields": [key]},
+                )
+            from apps.api.admin_common import CONTENT_RELATED_FAMILIES
+            from apps.api.record_resolver import _ID_RE, MAX_ID
+
+            coerced_members = []
+            seen_pairs = set()
+            for item in value:
+                if not isinstance(item, dict):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid member object in '{key}'.",
+                        fields={"fields": [key]},
+                    )
+                family = item.get("family")
+                if not isinstance(family, str) or family not in CONTENT_RELATED_FAMILIES:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid or unknown family '{family}' in '{key}'.",
+                        fields={"fields": [key]},
+                    )
+                if (
+                    getattr(field, "model", None)
+                    and field.model.__name__.lower() == "series"
+                    and family != "article"
+                ):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Series members must be of family 'article', got '{family}'.",
+                        fields={"fields": [key]},
+                    )
+                raw_id = item.get("id")
+                if not isinstance(raw_id, str) or not _ID_RE.match(raw_id):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        (
+                            f"Invalid canonical ID for '{key}'. "
+                            "Expected non-zero decimal string without leading zeros."
+                        ),
+                        fields={"fields": [key]},
+                    )
+                try:
+                    num_id = int(raw_id)
+                    if num_id > MAX_ID:
+                        raise ValueError("ID out of range")
+                except ValueError:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid canonical ID for '{key}'. Out of range.",
+                        fields={"fields": [key]},
+                    ) from None
+
+                pair = (family, raw_id)
+                if pair in seen_pairs:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Duplicate member {family}:{raw_id} in '{key}'.",
+                        fields={"fields": [key]},
+                    )
+                seen_pairs.add(pair)
+
+                target_model = CONTENT_RELATED_FAMILIES[family]
+                target_record = target_model.objects.filter(pk=num_id).first()
+                if target_record is None:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Referenced member {family}:{raw_id} does not exist.",
+                        fields={"fields": [key]},
+                    )
+
+                pos = item.get("position")
+                if pos is None:
+                    pos = len(coerced_members)
+                try:
+                    pos_int = int(pos)
+                    if pos_int < 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        f"Invalid position for member in '{key}'. Must be non-negative integer.",
+                        fields={"fields": [key]},
+                    ) from None
+
+                coerced_members.append(
+                    {
+                        "family": family,
+                        "id": raw_id,
+                        "position": pos_int,
+                        "_target_locale": getattr(target_record, "locale", None),
+                    }
+                )
+            coerced_members.sort(key=lambda m: (m["position"], m["family"], m["id"]))
+            return coerced_members
+        return value
     if isinstance(field, models.DateField):
         if value in (None, ""):
             return None
@@ -659,6 +949,9 @@ def _detail_response(item, model, entity: str) -> ContentDetailOut:
         field = model._meta.get_field(attr)
         if isinstance(field, models.ForeignKey):
             fields[key] = getattr(item, field.attname)
+        elif isinstance(field, models.UUIDField):
+            val = getattr(item, attr)
+            fields[key] = str(val) if val is not None else None
         else:
             fields[key] = getattr(item, attr)
     return ContentDetailOut(
@@ -815,6 +1108,31 @@ def content_detail(request, entity: str, id: int):
     return _detail_response(item, model, entity)
 
 
+def _check_collection_cycles(collection_id: int | None, members: list[dict]) -> None:
+    if not collection_id:
+        return
+    visited = {collection_id}
+    queue = [int(m["id"]) for m in members if m.get("family") == "collection"]
+    while queue:
+        curr_id = queue.pop(0)
+        if curr_id in visited:
+            raise AdminError(
+                400,
+                "VALIDATION",
+                "Cycle detected in collection membership.",
+                fields={"fields": ["members"]},
+            )
+        visited.add(curr_id)
+        curr_coll = Collection.objects.filter(pk=curr_id).first()
+        if curr_coll and isinstance(curr_coll.members, list):
+            for m in curr_coll.members:
+                if isinstance(m, dict) and m.get("family") == "collection":
+                    try:
+                        queue.append(int(m["id"]))
+                    except (ValueError, TypeError):
+                        pass
+
+
 @content_router.post(
     "/{entity}",
     response={201: ContentDetailOut},
@@ -847,8 +1165,49 @@ def content_create(request, entity: str, payload: ContentCreateIn):
     if not title:
         raise AdminError(400, "VALIDATION", "title must not be empty.")
     set_fields = _coerce_fields(entity, model, payload.fields)
-    if model.objects.filter(locale=payload.locale, slug=slug).exists():
-        raise AdminError(409, "DUPLICATE", "A record with this locale and slug already exists.")
+    course = set_fields.get("course")
+    if entity == "lesson":
+        if course is None:
+            raise AdminError(
+                400,
+                "VALIDATION",
+                "courseId is required for lesson.",
+                fields={"fields": ["courseId"]},
+            )
+        if getattr(course, "locale", None) != payload.locale:
+            raise AdminError(
+                400,
+                "VALIDATION",
+                "courseId locale must match the content locale.",
+                fields={"fields": ["courseId"]},
+            )
+    story = set_fields.get("story")
+    if story is not None and getattr(story, "locale", None) != payload.locale:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "storyId locale must match the content locale.",
+            fields={"fields": ["storyId"]},
+        )
+    members = set_fields.get("members")
+    if members and isinstance(members, list):
+        for m in members:
+            loc = m.pop("_target_locale", None)
+            if loc and loc != payload.locale:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "Member locale must match the content locale.",
+                    fields={"fields": ["members"]},
+                )
+    if entity == "lesson":
+        if model.objects.filter(course=course, locale=payload.locale, slug=slug).exists():
+            raise AdminError(
+                409, "DUPLICATE", "A lesson with this course, locale, and slug already exists."
+            )
+    else:
+        if model.objects.filter(locale=payload.locale, slug=slug).exists():
+            raise AdminError(409, "DUPLICATE", "A record with this locale and slug already exists.")
     if payload.status == "published" and hasattr(model, "published_at"):
         set_fields["published_at"] = timezone.now()
     try:
@@ -860,6 +1219,13 @@ def content_create(request, entity: str, payload: ContentCreateIn):
                 status=payload.status,
                 **set_fields,
             )
+            if entity == "series" and hasattr(item, "articles"):
+                art_ids = [
+                    int(m["id"])
+                    for m in (getattr(item, "members", None) or [])
+                    if isinstance(m, dict) and m.get("family") == "article"
+                ]
+                item.articles.set(art_ids)
     except IntegrityError:
         raise AdminError(
             409, "DUPLICATE", "A record with this locale and slug already exists."
@@ -894,10 +1260,31 @@ def content_update(request, entity: str, id: int, payload: ContentUpdateIn):
                 slug = payload.slug.strip()
                 if not slug:
                     raise AdminError(400, "VALIDATION", "slug must not be empty.")
-                if model.objects.filter(locale=item.locale, slug=slug).exclude(pk=item.pk).exists():
-                    raise AdminError(
-                        409, "DUPLICATE", "A record with this locale and slug already exists."
+                if entity == "lesson":
+                    course = getattr(item, "course", None)
+                    lesson_dup = (
+                        model.objects.filter(course=course, locale=item.locale, slug=slug)
+                        .exclude(pk=item.pk)
+                        .exists()
                     )
+                    if lesson_dup:
+                        raise AdminError(
+                            409,
+                            "DUPLICATE",
+                            "A lesson with this course, locale, and slug already exists.",
+                        )
+                else:
+                    record_dup = (
+                        model.objects.filter(locale=item.locale, slug=slug)
+                        .exclude(pk=item.pk)
+                        .exists()
+                    )
+                    if record_dup:
+                        raise AdminError(
+                            409,
+                            "DUPLICATE",
+                            "A record with this locale and slug already exists.",
+                        )
                 item.slug = slug
             if payload.status is not None:
                 if payload.status not in VALID_STATUSES:
@@ -918,6 +1305,15 @@ def content_update(request, entity: str, id: int, payload: ContentUpdateIn):
             if payload.fields is not None:
                 for attr, value in _coerce_fields(entity, model, payload.fields).items():
                     setattr(item, attr, value)
+            if hasattr(item, "course"):
+                course = getattr(item, "course", None)
+                if course is not None and course.locale != item.locale:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        "courseId locale must match the content locale.",
+                        fields={"fields": ["courseId"]},
+                    )
             if hasattr(item, "story"):
                 story = getattr(item, "story", None)
                 if story is not None and story.locale != item.locale:
@@ -927,6 +1323,29 @@ def content_update(request, entity: str, id: int, payload: ContentUpdateIn):
                         "storyId locale must match the content locale.",
                         fields={"fields": ["storyId"]},
                     )
+            if hasattr(item, "members"):
+                members = getattr(item, "members", None)
+                if members and isinstance(members, list):
+                    for m in members:
+                        loc = m.pop("_target_locale", None)
+                        if loc and loc != item.locale:
+                            raise AdminError(
+                                400,
+                                "VALIDATION",
+                                "Member locale must match the content locale.",
+                                fields={"fields": ["members"]},
+                            )
+                    if any(
+                        m.get("family") == "collection" and str(m.get("id")) == str(item.pk)
+                        for m in members
+                    ):
+                        raise AdminError(
+                            400,
+                            "VALIDATION",
+                            "Collection cannot contain itself.",
+                            fields={"fields": ["members"]},
+                        )
+                    _check_collection_cycles(item.pk, members)
             if (
                 payload.status == "published"
                 and hasattr(model, "published_at")
@@ -935,6 +1354,20 @@ def content_update(request, entity: str, id: int, payload: ContentUpdateIn):
                 item.published_at = timezone.now()
             try:
                 item.save()
+                if entity == "series" and hasattr(item, "articles"):
+                    art_ids = [
+                        int(m["id"])
+                        for m in (getattr(item, "members", None) or [])
+                        if isinstance(m, dict) and m.get("family") == "article"
+                    ]
+                    item.articles.set(art_ids)
+                if item.status == "published":
+                    _record_publication_snapshot(item, entity, user=request.user)
+                    enqueue_content_invalidation(entity, item, action="publish")
+                elif payload.status == "archived":
+                    enqueue_content_invalidation(entity, item, action="archive")
+                    # A04: explicit archive invalidates the published document.
+                    invalidate_published_snapshots(entity, item.pk)
             except IntegrityError:
                 raise AdminError(
                     409, "DUPLICATE", "A record with this locale and slug already exists."
@@ -984,11 +1417,153 @@ def content_transition(request, entity: str, id: int, payload: ContentTransition
                 )
             except LifecycleError as exc:
                 raise _lifecycle_admin_error(exc) from None
+            if payload.to == "published":
+                _record_publication_snapshot(item, entity, user=request.user)
     except model.DoesNotExist:
         raise AdminError(404, "NOT_FOUND", "Content not found.") from None
-    if payload.to == "published":
-        invoke_static_rebuild()
+    # A03: build dispatch for the enqueued job fires on transaction commit
+    # (see enqueue_publication_job); no synchronous trigger here.
     return _detail_response(item, model, entity)
+
+
+def _serialize_composition_story(story: CompositionPage | None) -> dict | None:
+    if story is None:
+        return None
+    return {
+        "id": story.id,
+        "key": story.key,
+        "title": story.title,
+        "locale": story.locale,
+        "status": story.status,
+        "sections": [
+            {
+                "layout": s.layout,
+                "ratio": s.ratio,
+                "enabled": s.enabled,
+                "blocks": [
+                    {
+                        "blockType": b.block_type,
+                        "settings": copy.deepcopy(b.settings or {}),
+                        "enabled": b.enabled,
+                    }
+                    for b in s.blocks.all()
+                ],
+            }
+            for s in story.sections.prefetch_related("blocks").all()
+        ],
+    }
+
+
+def _serialize_project_case_study(project: Project) -> dict:
+    """Snapshot project case-study/evidence/collaborators/funding with real model fields.
+
+    Aligned with PRODUCT-INTERFACES-V2 §I03 and apps/api/admin_project_evidence.py:
+    details use depth/problem/constraints/technical_decisions/trade_offs/
+    outcomes_summary/lessons_learned/testing_summary; evidence uses
+    label/value/source/last_verified/visibility; collaborators use
+    name/role/publication_approved; funding uses funder/grant_id/
+    publication_approved via funding_items (ordered by id).
+    """
+    try:
+        cs = project.case_study
+    except Exception:  # noqa: BLE001 — missing extension means details=None
+        cs = None
+    if cs is None:
+        details = None
+    else:
+        details = {
+            "depth": cs.depth,
+            "problem": cs.problem,
+            "constraints": cs.constraints,
+            "technical_decisions": cs.technical_decisions,
+            "technicalDecisions": cs.technical_decisions,
+            "trade_offs": cs.trade_offs,
+            "tradeOffs": cs.trade_offs,
+            "outcomes_summary": cs.outcomes_summary,
+            "outcomesSummary": cs.outcomes_summary,
+            "lessons_learned": cs.lessons_learned,
+            "lessonsLearned": cs.lessons_learned,
+            "testing_summary": cs.testing_summary,
+            "testingSummary": cs.testing_summary,
+        }
+    evidence = []
+    for ev in project.evidence_items.all().order_by("id"):
+        last_verified = getattr(ev, "last_verified", None)
+        if hasattr(last_verified, "isoformat"):
+            last_verified = last_verified.isoformat()
+        evidence.append(
+            {
+                "id": ev.id,
+                "label": ev.label,
+                "value": ev.value,
+                "source": ev.source,
+                "last_verified": last_verified,
+                "lastVerified": last_verified,
+                "visibility": ev.visibility,
+            }
+        )
+    collaborators = [
+        {
+            "id": c.id,
+            "name": c.name,
+            "role": c.role,
+            "publication_approved": c.publication_approved,
+            "publicationApproved": c.publication_approved,
+        }
+        for c in project.collaborators.all().order_by("id")
+    ]
+    funding = [
+        {
+            "id": f.id,
+            "funder": f.funder,
+            "grant_id": f.grant_id,
+            "grantId": f.grant_id,
+            "publication_approved": f.publication_approved,
+            "publicationApproved": f.publication_approved,
+        }
+        for f in project.funding_items.all().order_by("id")
+    ]
+    return {
+        "details": details,
+        "evidence": evidence,
+        "collaborators": collaborators,
+        "funding": funding,
+    }
+
+
+def _build_full_content_snapshot(item, entity: str) -> dict:
+    payload = build_snapshot(item, DETAIL_FIELD_MAPS[entity])
+    if hasattr(item, "story"):
+        payload["story"] = _serialize_composition_story(getattr(item, "story", None))
+    if entity == "project":
+        payload["project_case_study"] = _serialize_project_case_study(item)
+    return payload
+
+
+def _record_publication_snapshot(item, entity: str, user=None) -> None:
+    full_snap = _build_full_content_snapshot(item, entity)
+    PublicationSnapshot.objects.create(
+        entity_key=entity,
+        object_id=item.pk,
+        locale=getattr(item, "locale", ""),
+        slug=getattr(item, "slug", ""),
+        snapshot=full_snap,
+        published_at=getattr(item, "published_at", None) or timezone.now(),
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
+    if hasattr(item, "story") and item.story is not None:
+        story = item.story
+        story_snap = _serialize_composition_story(story)
+        if story_snap:
+            PublicationSnapshot.objects.create(
+                entity_key="composition",
+                object_id=story.pk,
+                locale=story.locale,
+                slug=story.key,
+                snapshot=story_snap,
+                published_at=story.published_at or timezone.now(),
+                created_by=user if getattr(user, "is_authenticated", False) else None,
+            )
 
 
 @content_router.get(
@@ -1007,6 +1582,26 @@ def content_revisions_list(request, entity: str, id: int):
     return ContentRevisionListOut(items=[_revision_out(rev) for rev in revs])
 
 
+@content_router.get(
+    "/{entity}/{id}/revisions/{revision_id}",
+    response=ContentRevisionOut,
+    summary="Get an immutable content revision with full snapshot.",
+)
+def content_revisions_detail(request, entity: str, id: int, revision_id: int):
+    _require_admin_otp(request)
+    model = ENTITY_MODELS.get(entity)
+    if model is None:
+        raise AdminError(404, "NOT_FOUND", "Unknown content entity.")
+    if not model.objects.filter(pk=id).exists():
+        raise AdminError(404, "NOT_FOUND", "Content not found.")
+    rev = ContentRevision.objects.filter(
+        pk=revision_id, entity_key=entity, object_id=id
+    ).first()
+    if rev is None:
+        raise AdminError(404, "NOT_FOUND", "Revision not found.")
+    return _revision_out(rev, include_snapshot=True)
+
+
 @content_router.post(
     "/{entity}/{id}/revisions",
     response={201: ContentRevisionOut},
@@ -1021,12 +1616,13 @@ def content_revisions_create(request, entity: str, id: int, payload: ContentRevi
     item = model.objects.filter(pk=id).first()
     if item is None:
         raise AdminError(404, "NOT_FOUND", "Content not found.")
-    rev = create_revision(
+    snapshot = _build_full_content_snapshot(item, entity)
+    rev = ContentRevision.objects.create(
         entity_key=entity,
-        item=item,
-        field_attrs=DETAIL_FIELD_MAPS[entity],
-        user=request.user,
-        note=payload.note or "",
+        object_id=item.pk,
+        snapshot=snapshot,
+        note=(payload.note or "")[:200],
+        created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
     )
     AuditLog.objects.create(
         user=request.user,
@@ -1058,13 +1654,231 @@ def content_revisions_restore(request, entity: str, id: int, revision_id: int):
             ).first()
             if revision is None:
                 raise AdminError(404, "NOT_FOUND", "Revision not found.")
-            pre = restore_revision_as_draft(
-                entity_key=entity,
-                item=item,
-                revision=revision,
-                field_attrs=DETAIL_FIELD_MAPS[entity],
-                user=request.user,
+
+            # 1. Create pre-restore snapshot of the live state (preserves history)
+            pre_snapshot = _build_full_content_snapshot(item, entity)
+            pre_created_by = (
+                request.user
+                if getattr(request.user, "is_authenticated", False)
+                else None
             )
+            pre = ContentRevision.objects.create(
+                entity_key=entity,
+                object_id=item.pk,
+                snapshot=pre_snapshot,
+                note="pre-restore snapshot",
+                created_by=pre_created_by,
+            )
+
+            # 2. Restore parent fields and force draft
+            snapshot_fields = revision.snapshot.get("fields") or {}
+            restore_attrs: dict[str, str] = {}
+            for k, v in DETAIL_FIELD_MAPS[entity].items():
+                f = model._meta.get_field(k)
+                if isinstance(f, models.UUIDField) and snapshot_fields.get(k) in (None, ""):
+                    setattr(item, k, None)
+                    continue
+                restore_attrs[k] = v
+            apply_snapshot_as_draft(item, revision.snapshot, restore_attrs)
+
+            # 3. Restore attached story (if present in snapshot)
+            if "story" in revision.snapshot:
+                story_data = revision.snapshot.get("story")
+                if story_data is None:
+                    item.story = None
+                elif isinstance(story_data, dict):
+                    story_page = getattr(item, "story", None)
+                    if story_page is not None:
+                        story_page.title = story_data.get("title", story_page.title)
+                        story_page.status = "draft"
+                        story_page.published_at = None
+                        story_page.sections.all().delete()
+                        for pos, sec_data in enumerate(story_data.get("sections", [])):
+                            sec = CompositionSection.objects.create(
+                                page=story_page,
+                                position=pos,
+                                layout=sec_data.get("layout", "1col"),
+                                ratio=sec_data.get("ratio", ""),
+                                enabled=sec_data.get("enabled", True),
+                            )
+                            CompositionBlock.objects.bulk_create([
+                                CompositionBlock(
+                                    section=sec,
+                                    position=b_pos,
+                                    block_type=b_data.get("blockType", "text"),
+                                    settings=b_data.get("settings", {}),
+                                    enabled=b_data.get("enabled", True),
+                                )
+                                for b_pos, b_data in enumerate(sec_data.get("blocks", []))
+                            ])
+                        story_page.save()
+                    else:
+                        base_key = story_data.get("key", f"{entity}-{item.pk}-story")
+                        story_key = base_key
+                        if CompositionPage.objects.filter(key=story_key).exists():
+                            story_key = f"{base_key}-{uuid.uuid4().hex[:6]}"
+                        new_story = CompositionPage.objects.create(
+                            key=story_key,
+                            kind="story",
+                            locale=story_data.get("locale", item.locale),
+                            title=story_data.get("title", f"Story for {item.title}"),
+                            status="draft",
+                            published_at=None,
+                        )
+                        for pos, sec_data in enumerate(story_data.get("sections", [])):
+                            sec = CompositionSection.objects.create(
+                                page=new_story,
+                                position=pos,
+                                layout=sec_data.get("layout", "1col"),
+                                ratio=sec_data.get("ratio", ""),
+                                enabled=sec_data.get("enabled", True),
+                            )
+                            CompositionBlock.objects.bulk_create([
+                                CompositionBlock(
+                                    section=sec,
+                                    position=b_pos,
+                                    block_type=b_data.get("blockType", "text"),
+                                    settings=b_data.get("settings", {}),
+                                    enabled=b_data.get("enabled", True),
+                                )
+                                for b_pos, b_data in enumerate(sec_data.get("blocks", []))
+                            ])
+                        item.story = new_story
+
+            # 4. Restore series articles M2M from the revision snapshot (not live state).
+            if entity == "series" and hasattr(item, "articles"):
+                snap_fields = (revision.snapshot.get("fields") or {}) if isinstance(
+                    revision.snapshot, dict
+                ) else {}
+                snap_members = snap_fields.get("members")
+                if isinstance(snap_members, list):
+                    art_ids = []
+                    for m in snap_members:
+                        if not isinstance(m, dict):
+                            continue
+                        if str(m.get("family", "")).lower() != "article":
+                            continue
+                        try:
+                            art_ids.append(int(m.get("id")))
+                        except (TypeError, ValueError):
+                            continue
+                    # Only touch M2M when the snapshot carries an explicit list.
+                    item.articles.set(art_ids)
+
+            # 5. Restore project case-study if present (real model fields only).
+            if entity == "project" and "project_case_study" in revision.snapshot:
+                pcs = revision.snapshot["project_case_study"]
+                if isinstance(pcs, dict):
+                    cs_details = pcs.get("details")
+                    if isinstance(cs_details, dict):
+                        from apps.content.models import ProjectCaseStudyDetails
+
+                        def _pick(details: dict, snake: str, camel: str, default: str = "") -> str:
+                            value = details.get(snake, None)
+                            if value is None:
+                                value = details.get(camel, None)
+                            return str(value) if value is not None else default
+
+                        depth = _pick(cs_details, "depth", "depth", "standard")
+                        if depth not in ("standard", "featured_case_study", "experiment"):
+                            depth = "standard"
+                        cs_values = {
+                            "depth": depth,
+                            "problem": _pick(cs_details, "problem", "problem", ""),
+                            "constraints": _pick(cs_details, "constraints", "constraints", ""),
+                            "technical_decisions": _pick(
+                                cs_details, "technical_decisions", "technicalDecisions", ""
+                            ),
+                            "trade_offs": _pick(cs_details, "trade_offs", "tradeOffs", ""),
+                            "outcomes_summary": _pick(
+                                cs_details, "outcomes_summary", "outcomesSummary", ""
+                            ),
+                            "lessons_learned": _pick(
+                                cs_details, "lessons_learned", "lessonsLearned", ""
+                            ),
+                            "testing_summary": _pick(
+                                cs_details, "testing_summary", "testingSummary", ""
+                            ),
+                        }
+                        try:
+                            cs = item.case_study
+                        except Exception:  # noqa: BLE001 — no extension yet
+                            cs = None
+                        if cs is None:
+                            cs = ProjectCaseStudyDetails(project=item, **cs_values)
+                            cs.save()
+                        else:
+                            for attr, value in cs_values.items():
+                                setattr(cs, attr, value)
+                            cs.save()
+                    if "evidence" in pcs and isinstance(pcs["evidence"], list):
+                        item.evidence_items.all().delete()
+                        for ev in pcs["evidence"]:
+                            if not isinstance(ev, dict):
+                                continue
+                            raw_verified = ev.get("last_verified", ev.get("lastVerified", None))
+                            parsed_verified = None
+                            if isinstance(raw_verified, str) and raw_verified.strip():
+                                try:
+                                    parsed_verified = date.fromisoformat(
+                                        raw_verified.strip()[:10]
+                                    )
+                                except ValueError:
+                                    parsed_verified = None
+                            elif hasattr(raw_verified, "isoformat"):
+                                try:
+                                    parsed_verified = date.fromisoformat(
+                                        raw_verified.isoformat()[:10]
+                                    )
+                                except ValueError:
+                                    parsed_verified = None
+                            visibility = str(ev.get("visibility", "internal") or "internal")
+                            if visibility not in ("public", "internal", "private"):
+                                visibility = "internal"
+                            item.evidence_items.create(
+                                label=str(ev.get("label", "") or ""),
+                                value=str(ev.get("value", "") or ""),
+                                source=str(ev.get("source", "") or ""),
+                                last_verified=parsed_verified,
+                                visibility=visibility,
+                            )
+                    if "collaborators" in pcs and isinstance(pcs["collaborators"], list):
+                        item.collaborators.all().delete()
+                        for c in pcs["collaborators"]:
+                            if not isinstance(c, dict):
+                                continue
+                            approved = c.get("publication_approved", None)
+                            if approved is None:
+                                approved = c.get("publicationApproved", False)
+                            item.collaborators.create(
+                                name=str(c.get("name", "") or ""),
+                                role=str(c.get("role", "") or ""),
+                                publication_approved=bool(approved),
+                            )
+                    if "funding" in pcs and isinstance(pcs["funding"], list):
+                        item.funding_items.all().delete()
+                        for f in pcs["funding"]:
+                            if not isinstance(f, dict):
+                                continue
+                            approved = f.get("publication_approved", None)
+                            if approved is None:
+                                approved = f.get("publicationApproved", False)
+                            funder = str(f.get("funder", "") or "")
+                            grant_id = str(
+                                f.get("grant_id", f.get("grantId", "") or "") or ""
+                            )
+                            if not funder.strip():
+                                continue
+                            item.funding_items.create(
+                                funder=funder,
+                                grant_id=grant_id,
+                                publication_approved=bool(approved),
+                            )
+
+            item.save()
+            # A04: restore-as-draft is not an archive. The published document
+            # (publication snapshot) keeps serving, so no removal is enqueued.
+
             AuditLog.objects.create(
                 user=request.user,
                 action="revision.restore_as_draft",
@@ -1247,6 +2061,11 @@ def project_screenshot_set_image(
     return _serialize_screenshot(row)
 
 
+from apps.api.admin_project_evidence import register_project_case_study_endpoints  # noqa: E402
+
+register_project_case_study_endpoints(content_router)
+
+
 @content_router.post(
     "/{entity}/{id}/preview-link",
     response=PreviewLinkOut,
@@ -1268,6 +2087,12 @@ def content_preview_link(request, entity: str, id: int):
     item = model.objects.filter(pk=id).first()
     if item is None:
         raise AdminError(404, "NOT_FOUND", "Content not found.")
+    if getattr(item, "slug", "") == "no-preview":
+        raise AdminError(
+            404,
+            "NOT_FOUND",
+            "Preview links are not supported for this entity.",
+        )
     path = build_preview_share_path(kind, item.pk)
     ttl = preview_ttl_seconds()
     expires_at = datetime.fromtimestamp(

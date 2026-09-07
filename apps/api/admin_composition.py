@@ -119,6 +119,9 @@ class BlockFieldSpecOut(Schema):
     label: str
     type: str
     options: list[str] | None = None
+    minItems: int | None = None
+    maxItems: int | None = None
+    itemFields: list[dict] | None = None
 
 
 class BlockTypeOut(Schema):
@@ -512,6 +515,44 @@ def composition_update(request, page_id: int, payload: CompositionUpdateIn):
             ):
                 page.published_at = timezone.now()
             page.save()
+
+            if page.status == "published":
+                from apps.content.models import PublicationSnapshot
+
+                snap = {
+                    "id": page.id,
+                    "key": page.key,
+                    "title": page.title,
+                    "locale": page.locale,
+                    "status": "published",
+                    "sections": [
+                        {
+                            "layout": s.layout,
+                            "ratio": s.ratio,
+                            "enabled": s.enabled,
+                            "blocks": [
+                                {
+                                    "blockType": b.block_type,
+                                    "settings": b.settings,
+                                    "enabled": b.enabled,
+                                }
+                                for b in s.blocks.all()
+                            ],
+                        }
+                        for s in page.sections.prefetch_related("blocks").all()
+                    ],
+                }
+                PublicationSnapshot.objects.create(
+                    entity_key="composition",
+                    object_id=page.pk,
+                    locale=page.locale,
+                    slug=page.key,
+                    snapshot=snap,
+                    published_at=timezone.now(),
+                    created_by=request.user
+                    if getattr(request.user, "is_authenticated", False)
+                    else None,
+                )
     except CompositionPage.DoesNotExist:
         raise AdminError(404, "NOT_FOUND", "Composition page not found.") from None
     page = CompositionPage.objects.prefetch_related("sections__blocks").get(pk=page.pk)

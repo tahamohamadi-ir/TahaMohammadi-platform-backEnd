@@ -89,3 +89,41 @@ class FeaturedItem(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+
+class LocalizedSiteSettings(models.Model):
+    """Localized draft/published site settings (PRODUCT-V2 §I04, PU-03-settings)."""
+
+    locale = models.CharField(
+        max_length=10,
+        unique=True,
+        choices=[("fa", "Persian"), ("en", "English")],
+    )
+    revision = models.CharField(max_length=64, blank=True, default="")
+    brand_name = models.CharField(max_length=200, blank=True, default="")
+    tagline = models.CharField(max_length=500, blank=True, default="")
+    footer_text = models.TextField(blank=True, default="")
+    seo_title = models.CharField(max_length=200, blank=True, default="")
+    seo_description = models.TextField(blank=True, default="")
+    nav_links = models.JSONField(default=list, blank=True)
+    audience_links = models.JSONField(default=list, blank=True)
+    graph_preset = models.CharField(max_length=50, default="atlas-v2")
+    portal_preset = models.CharField(max_length=50, default="arch-v2")
+    scene_motion = models.CharField(max_length=20, default="full")
+    scene_density = models.CharField(max_length=20, default="standard")
+    status = models.CharField(
+        max_length=20,
+        choices=[("draft", "Draft"), ("published", "Published")],
+        default="draft",
+    )
+    published_payload = models.JSONField(null=True, blank=True, default=None)
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Localized site settings"
+        verbose_name_plural = "Localized site settings"
+
+    def __str__(self) -> str:
+        return f"LocalizedSiteSettings({self.locale}, status={self.status})"

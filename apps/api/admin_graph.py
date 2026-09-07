@@ -95,6 +95,7 @@ from apps.content.models import (
     GraphVersionStatus,
     Locale,
 )
+from apps.rebuild.services import enqueue_publication_job
 
 graph_router = Router()
 
@@ -538,6 +539,12 @@ def graph_version_activate(request, version_id: int):
         ).exclude(pk=version.pk).update(status=GraphVersionStatus.DRAFT)
         version.status = GraphVersionStatus.ACTIVE
         version.save(update_fields=["status", "updated_at"])
+        enqueue_publication_job(
+            locale=version.locale,
+            requested_revision=f"graph-{version.pk}-{version.updated_at.isoformat()}",
+            affected_paths=[f"/{version.locale}/", f"/{version.locale}/graph/"],
+            removal_state="not_requested",
+        )
     _audit(
         request,
         action="graph.activate",

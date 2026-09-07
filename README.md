@@ -1,5 +1,9 @@
 # Taha Mohammadi Platform — Backend
 
+<!-- PRODUCT-V2.1 -->
+Current execution target: research-first bilingual portfolio, independently publishable detail pages and broad CMS editing under ADR-0010. Dispatch only this repository's packets from `../Docs/05-delivery/concept-alignment-v2/EXECUTION.md` (paths here are repository-relative). Older scaffold/phase status below is a dated baseline, not current feature acceptance. Preserve current endpoints until the additive target contract is implemented and exported.
+<!-- /PRODUCT-V2.1 -->
+
 Independent Django 5.2 and Django Ninja backend for the platform. The usable backend was copied from `D:\Project\Taha-personal-platform\apps\cms` at source commit `cdaa283fac9da57c6d88e22aa0751be6214b6cf6`. All 198 tracked backend files were verified against the source with SHA-256 before this repository's development baseline was created.
 
 ## Status

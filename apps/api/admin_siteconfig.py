@@ -10,6 +10,7 @@ spotlights). Unsafe methods additionally enforce the same-origin CSRF baseline.
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import UTC, datetime
 
 from django.db import IntegrityError, transaction
@@ -17,7 +18,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.text import slugify
-from ninja import Router, Schema
+from ninja import Field, Router, Schema
 from ninja.responses import Status
 
 from apps.api.admin_common import (
@@ -29,7 +30,8 @@ from apps.api.admin_common import (
 from apps.api.admin_content import ENTITY_MODELS
 from apps.content.models import Article, TopicTag
 from apps.media.models import Media
-from apps.siteconfig.models import FeaturedItem, SiteSettings
+from apps.rebuild.services import enqueue_publication_job
+from apps.siteconfig.models import FeaturedItem, LocalizedSiteSettings, SiteSettings
 
 siteconfig_router = Router()
 
@@ -740,6 +742,553 @@ def site_settings_put(request, payload: SiteSettingsUpdateIn):
         .first()
     )
     return _serialize_site_settings(item)
+
+
+class LocalizedSiteSeoOut(Schema):
+    """SEO title and description for localized site settings."""
+
+    title: str = ""
+    description: str = ""
+
+
+class LocalizedSiteSeoIn(Schema):
+    """SEO input for localized site settings."""
+
+    title: str | None = None
+    description: str | None = None
+
+
+class LocalizedNavLinkOut(Schema):
+    """One navigation link for localized site settings."""
+
+    label: str
+    href: str
+
+
+class LocalizedAudienceLinkOut(Schema):
+    """One audience link for research or employment audiences."""
+
+    kind: str
+    label: str
+    href: str
+
+
+class LocalizedSceneOut(Schema):
+    """Scene presets and motion/density configuration (§I04)."""
+
+    graphPreset: str = "atlas-v2"
+    portalPreset: str = "arch-v2"
+    motion: str = "full"
+    density: str = "standard"
+
+
+class LocalizedSiteSettingsAdminOut(Schema):
+    """Admin projection of localized site settings with draft/published status."""
+
+    locale: str
+    revision: str
+    brandName: str
+    tagline: str
+    footerText: str
+    seo: LocalizedSiteSeoOut
+    navLinks: list[LocalizedNavLinkOut] = Field(default_factory=list)
+    audienceLinks: list[LocalizedAudienceLinkOut] = Field(default_factory=list)
+    scene: LocalizedSceneOut
+    status: str
+    publishedAt: datetime | None = None
+    updatedAt: datetime
+
+
+class LocalizedSiteSettingsUpdateIn(Schema):
+    """Partial update payload for localized site settings (optimistically locked)."""
+
+    brandName: str | None = None
+    tagline: str | None = None
+    footerText: str | None = None
+    seo: LocalizedSiteSeoIn | None = None
+    navLinks: list[dict] | None = None
+    audienceLinks: list[dict] | None = None
+    scene: dict | None = None
+
+
+class LocalizedSitePublishOut(Schema):
+    """Result of publishing draft localized site settings."""
+
+    ok: bool = True
+    locale: str
+    revision: str
+    publishedAt: datetime
+
+
+REGISTERED_SITE_PATHS = {
+    "",
+    "about",
+    "blog",
+    "contact",
+    "creative",
+    "cv",
+    "education",
+    "gallery",
+    "projects",
+    "publications",
+    "research",
+    "search",
+    "teaching",
+    "writing",
+    "books",
+    "talks",
+    "resources",
+    "collections",
+    "series",
+    "lessons",
+}
+HTTPS_URL_RE = re.compile(r"^https://[^\s]+$")
+VALID_GRAPH_PRESETS = ("atlas-v2",)
+VALID_PORTAL_PRESETS = ("arch-v2",)
+VALID_MOTIONS = ("off", "reduced", "full")
+VALID_DENSITIES = ("low", "standard")
+
+
+def _validate_link_href(href: str, field_name: str) -> str:
+    if not isinstance(href, str) or not href.strip():
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"{field_name} href must not be empty.",
+            fields={field_name: [f"{field_name} href must not be empty."]},
+        )
+    href = href.strip()
+    if len(href) > 500:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"{field_name} href must not exceed 500 characters.",
+            fields={field_name: [f"{field_name} href must not exceed 500 characters."]},
+        )
+    lower = href.lower()
+    if lower.startswith("javascript:") or lower.startswith("data:") or lower.startswith("http:"):
+        msg = (
+            f"{field_name} href has an invalid scheme. Only registered "
+            "site-relative paths or https:// links are permitted."
+        )
+        raise AdminError(
+            400,
+            "VALIDATION",
+            msg,
+            fields={field_name: [f"{field_name} href has an invalid scheme."]},
+        )
+    if lower.startswith("https://"):
+        if not HTTPS_URL_RE.fullmatch(href):
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"{field_name} href is not a valid https URL.",
+                fields={field_name: [f"{field_name} href is not a valid https URL."]},
+            )
+        return href
+
+    if not href.startswith("/") or href.startswith("//"):
+        msg = (
+            f"{field_name} href must be a registered site-relative path starting with '/' "
+            "or an https:// link."
+        )
+        raise AdminError(
+            400,
+            "VALIDATION",
+            msg,
+            fields={field_name: [f"{field_name} href must be site-relative or https."]},
+        )
+
+    path_clean = href.split("?")[0].split("#")[0].strip("/")
+    parts = path_clean.split("/") if path_clean else []
+    if parts and parts[0] in ("fa", "en"):
+        parts = parts[1:]
+    base_segment = parts[0] if parts else ""
+    if base_segment not in REGISTERED_SITE_PATHS:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"{field_name} href references an unknown local route '{href}'.",
+            fields={field_name: [f"Unknown local route: {href}"]},
+        )
+    return href
+
+
+def _validate_localized_nav_links(value) -> list[dict]:
+    if not isinstance(value, list):
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "navLinks must be a list.",
+            fields={"navLinks": ["navLinks must be a list."]},
+        )
+    if len(value) > 20:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "navLinks must not exceed 20 items.",
+            fields={"navLinks": ["navLinks must not exceed 20 items."]},
+        )
+    cleaned = []
+    for index, link in enumerate(value):
+        if not isinstance(link, dict):
+            if hasattr(link, "dict"):
+                link = link.dict()
+            elif hasattr(link, "model_dump"):
+                link = link.model_dump()
+            else:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "Invalid navLink entry.",
+                    fields={f"navLinks[{index}]": ["Invalid navLink entry."]},
+                )
+        label = link.get("label")
+        href = link.get("href")
+        if not isinstance(label, str) or not 1 <= len(label.strip()) <= 200:
+            raise AdminError(
+                400,
+                "VALIDATION",
+                "Invalid navLink label.",
+                fields={f"navLinks[{index}].label": ["Invalid navLink label."]},
+            )
+        validated_href = _validate_link_href(href, f"navLinks[{index}].href")
+        cleaned.append({"label": label.strip(), "href": validated_href})
+    return cleaned
+
+
+def _validate_localized_audience_links(value) -> list[dict]:
+    if not isinstance(value, list):
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "audienceLinks must be a list.",
+            fields={"audienceLinks": ["audienceLinks must be a list."]},
+        )
+    if len(value) > 2:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "audienceLinks must not exceed 2 items.",
+            fields={"audienceLinks": ["audienceLinks must not exceed 2 items."]},
+        )
+    cleaned = []
+    for index, link in enumerate(value):
+        if not isinstance(link, dict):
+            if hasattr(link, "dict"):
+                link = link.dict()
+            elif hasattr(link, "model_dump"):
+                link = link.model_dump()
+            else:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "Invalid audienceLink entry.",
+                    fields={f"audienceLinks[{index}]": ["Invalid audienceLink entry."]},
+                )
+        kind = link.get("kind")
+        label = link.get("label")
+        href = link.get("href")
+        if kind not in ("research", "employment"):
+            msg = "audienceLink kind must be 'research' or 'employment'."
+            raise AdminError(
+                400,
+                "VALIDATION",
+                msg,
+                fields={f"audienceLinks[{index}].kind": [msg]},
+            )
+        if not isinstance(label, str) or not 1 <= len(label.strip()) <= 200:
+            raise AdminError(
+                400,
+                "VALIDATION",
+                "Invalid audienceLink label.",
+                fields={f"audienceLinks[{index}].label": ["Invalid audienceLink label."]},
+            )
+        validated_href = _validate_link_href(href, f"audienceLinks[{index}].href")
+        cleaned.append({"kind": kind, "label": label.strip(), "href": validated_href})
+    return cleaned
+
+
+def _validate_localized_scene(item: LocalizedSiteSettings, scene_data: dict) -> None:
+    if not isinstance(scene_data, dict):
+        raise AdminError(
+            400,
+            "VALIDATION",
+            "scene must be an object.",
+            fields={"scene": ["scene must be an object."]},
+        )
+    graph_preset = scene_data.get("graphPreset")
+    portal_preset = scene_data.get("portalPreset")
+    motion = scene_data.get("motion")
+    density = scene_data.get("density")
+
+    if graph_preset is not None:
+        if graph_preset not in VALID_GRAPH_PRESETS:
+            choices = ", ".join(VALID_GRAPH_PRESETS)
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"Invalid graphPreset '{graph_preset}'. Expected one of: {choices}.",
+                fields={"scene.graphPreset": [f"Invalid graphPreset: {graph_preset}"]},
+            )
+        item.graph_preset = graph_preset
+
+    if portal_preset is not None:
+        if portal_preset not in VALID_PORTAL_PRESETS:
+            choices = ", ".join(VALID_PORTAL_PRESETS)
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"Invalid portalPreset '{portal_preset}'. Expected one of: {choices}.",
+                fields={"scene.portalPreset": [f"Invalid portalPreset: {portal_preset}"]},
+            )
+        item.portal_preset = portal_preset
+
+    if motion is not None:
+        if motion not in VALID_MOTIONS:
+            choices = ", ".join(VALID_MOTIONS)
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"Invalid motion '{motion}'. Expected one of: {choices}.",
+                fields={"scene.motion": [f"Invalid motion: {motion}"]},
+            )
+        item.scene_motion = motion
+
+    if density is not None:
+        if density not in VALID_DENSITIES:
+            choices = ", ".join(VALID_DENSITIES)
+            raise AdminError(
+                400,
+                "VALIDATION",
+                f"Invalid density '{density}'. Expected one of: {choices}.",
+                fields={"scene.density": [f"Invalid density: {density}"]},
+            )
+        item.scene_density = density
+
+
+def _serialize_localized_site_settings_admin(
+    item: LocalizedSiteSettings,
+) -> LocalizedSiteSettingsAdminOut:
+    return LocalizedSiteSettingsAdminOut(
+        locale=item.locale,
+        revision=item.revision or "",
+        brandName=item.brand_name,
+        tagline=item.tagline,
+        footerText=item.footer_text,
+        seo=LocalizedSiteSeoOut(
+            title=item.seo_title,
+            description=item.seo_description,
+        ),
+        navLinks=[LocalizedNavLinkOut(**lnk) for lnk in (item.nav_links or [])],
+        audienceLinks=[
+            LocalizedAudienceLinkOut(**lnk) for lnk in (item.audience_links or [])
+        ],
+        scene=LocalizedSceneOut(
+            graphPreset=item.graph_preset,
+            portalPreset=item.portal_preset,
+            motion=item.scene_motion,
+            density=item.scene_density,
+        ),
+        status=item.status or "draft",
+        publishedAt=item.published_at,
+        updatedAt=item.updated_at,
+    )
+
+
+def _build_public_settings_payload(item: LocalizedSiteSettings, revision: str) -> dict:
+    return {
+        "locale": item.locale,
+        "revision": revision,
+        "brandName": item.brand_name,
+        "tagline": item.tagline,
+        "footerText": item.footer_text,
+        "seo": {
+            "title": item.seo_title,
+            "description": item.seo_description,
+        },
+        "navLinks": item.nav_links or [],
+        "audienceLinks": item.audience_links or [],
+        "scene": {
+            "graphPreset": item.graph_preset,
+            "portalPreset": item.portal_preset,
+            "motion": item.scene_motion,
+            "density": item.scene_density,
+        },
+        "updatedAt": _serialize_updated_at(item.updated_at),
+    }
+
+
+@siteconfig_router.get(
+    "/site/{locale}",
+    response=LocalizedSiteSettingsAdminOut,
+    summary="Get localized site settings for admin (draft state).",
+)
+def localized_site_settings_get(request, locale: str):
+    _require_admin_otp(request)
+    if locale not in VALID_LOCALES:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"Invalid locale. Expected one of: {', '.join(VALID_LOCALES)}.",
+        )
+    item = LocalizedSiteSettings.objects.filter(locale=locale).first()
+    if item is None:
+        item = LocalizedSiteSettings.objects.create(
+            locale=locale,
+            revision=f"rev-{uuid.uuid4().hex[:12]}",
+        )
+    return _serialize_localized_site_settings_admin(item)
+
+
+@siteconfig_router.put(
+    "/site/{locale}",
+    response=LocalizedSiteSettingsAdminOut,
+    summary="Update localized site settings (optimistic locking).",
+)
+def localized_site_settings_put(
+    request, locale: str, payload: LocalizedSiteSettingsUpdateIn
+):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    if locale not in VALID_LOCALES:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"Invalid locale. Expected one of: {', '.join(VALID_LOCALES)}.",
+        )
+    with transaction.atomic():
+        item = (
+            LocalizedSiteSettings.objects.select_for_update()
+            .filter(locale=locale)
+            .first()
+        )
+        if item is None:
+            item = LocalizedSiteSettings.objects.create(
+                locale=locale,
+                revision=f"rev-{uuid.uuid4().hex[:12]}",
+            )
+        if not _if_match_matches(request.headers.get("If-Match"), item):
+            raise AdminConflictError(_serialize_updated_at(item.updated_at))
+
+        if payload.brandName is not None:
+            brand_name = payload.brandName.strip()
+            if len(brand_name) > 200:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "brandName must not exceed 200 characters.",
+                    fields={"brandName": ["brandName must not exceed 200 characters."]},
+                )
+            item.brand_name = brand_name
+
+        if payload.tagline is not None:
+            tagline = payload.tagline.strip()
+            if len(tagline) > 500:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "tagline must not exceed 500 characters.",
+                    fields={"tagline": ["tagline must not exceed 500 characters."]},
+                )
+            item.tagline = tagline
+
+        if payload.footerText is not None:
+            footer_text = payload.footerText.strip()
+            if len(footer_text) > 5000:
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "footerText must not exceed 5000 characters.",
+                    fields={"footerText": ["footerText must not exceed 5000 characters."]},
+                )
+            item.footer_text = footer_text
+
+        if payload.seo is not None:
+            if payload.seo.title is not None:
+                title = payload.seo.title.strip()
+                if len(title) > 200:
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        "seo.title must not exceed 200 characters.",
+                        fields={"seo.title": ["seo.title must not exceed 200 characters."]},
+                    )
+                item.seo_title = title
+            if payload.seo.description is not None:
+                desc = payload.seo.description.strip()
+                if len(desc) > 1000:
+                    msg = "seo.description must not exceed 1000 characters."
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        msg,
+                        fields={"seo.description": [msg]},
+                    )
+                item.seo_description = desc
+
+        if payload.navLinks is not None:
+            item.nav_links = _validate_localized_nav_links(payload.navLinks)
+
+        if payload.audienceLinks is not None:
+            item.audience_links = _validate_localized_audience_links(
+                payload.audienceLinks
+            )
+
+        if payload.scene is not None:
+            _validate_localized_scene(item, payload.scene)
+
+        item.save()
+
+    return _serialize_localized_site_settings_admin(item)
+
+
+@siteconfig_router.post(
+    "/site/{locale}/publish",
+    response=LocalizedSitePublishOut,
+    summary="Publish draft snapshot for localized site settings (PRODUCT-V2 §I04).",
+)
+def localized_site_settings_publish(request, locale: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    if locale not in VALID_LOCALES:
+        raise AdminError(
+            400,
+            "VALIDATION",
+            f"Invalid locale. Expected one of: {', '.join(VALID_LOCALES)}.",
+        )
+    with transaction.atomic():
+        item = (
+            LocalizedSiteSettings.objects.select_for_update()
+            .filter(locale=locale)
+            .first()
+        )
+        if item is None:
+            raise AdminError(
+                404,
+                "NOT_FOUND",
+                f"Localized site settings for '{locale}' not found.",
+            )
+        new_revision = f"rev-{uuid.uuid4().hex[:12]}"
+        item.revision = new_revision
+        item.published_at = timezone.now()
+        item.status = "published"
+        item.save()
+        item.published_payload = _build_public_settings_payload(item, new_revision)
+        item.save(update_fields=["published_payload"])
+        enqueue_publication_job(
+            locale=item.locale,
+            requested_revision=new_revision,
+            affected_paths=[f"/{item.locale}/", f"/{item.locale}/site/"],
+            removal_state="not_requested",
+        )
+
+    return LocalizedSitePublishOut(
+        ok=True,
+        locale=item.locale,
+        revision=new_revision,
+        publishedAt=item.published_at,
+    )
 
 
 @siteconfig_router.get("/tags", response=TagListOut, summary="List topic tags.")

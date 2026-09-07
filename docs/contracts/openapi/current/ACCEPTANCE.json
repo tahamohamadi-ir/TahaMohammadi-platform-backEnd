@@ -1,0 +1,30 @@
+{
+  "acceptanceAddendum": "Addendum 2026-09-06 — product-v2 packet endpoints and audit-fix schema reconciliation (A01/A03/A04/A09)",
+  "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
+  "accessEvidence": {
+    "admin": "Back-End/tests/test_admin_openapi.py",
+    "public": "Back-End/tests/test_public_openapi.py",
+    "result": "9 passed (verified staff-plus-OTP admin and anonymous public access)"
+  },
+  "artifacts": {
+    "admin-openapi.json": {
+      "paths": 57,
+      "sha256": "1176c0696222f9ac4c86495446d1f00988bdfde19dd147e93ece29a61e973564",
+      "version": "0.1.0"
+    },
+    "endpoint-inventory.md": {
+      "operations": 124,
+      "sha256": "154a2c1bf950978f9a8332571098e4bfb2b815c9308a38426976e08dc002e4eb"
+    },
+    "public-openapi.json": {
+      "paths": 48,
+      "sha256": "47980f8f1992d885398676cf984b80e7068c7aa8e8b8f76a856565ffc9033681",
+      "version": "0.4.0"
+    }
+  },
+  "djangoSettingsModule": "config.settings.development",
+  "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md.",
+  "sourceCommit": "bd6682ea9dae7e5bf6957c36691dc3a94a00ea37",
+  "status": "scaffold-accepted",
+  "supersedes": "The former PROVENANCE.json-embedded acceptance pointer (status scaffold-accepted plus acceptanceRecord), retired because every export regenerates PROVENANCE.json with a fresh timestamp, which made identical-snapshot acceptance ambiguous and broke the drift gate."
+}

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 from django.core.cache import cache
 from django.core.management import call_command
-from django.test import Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from apps.content.models import ContentRevision, Landing, LifecycleStatus
@@ -132,10 +132,12 @@ def test_publish_scheduled_command_publishes_due_rows(db):
     future.save()
 
     with patch(
-        "apps.content.management.commands.publish_scheduled_content.invoke_static_rebuild"
+        "apps.rebuild.services.invoke_static_rebuild"
     ) as mocked:
-        call_command("publish_scheduled_content")
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            call_command("publish_scheduled_content")
         mocked.assert_called_once()
+        assert mocked.call_args.kwargs.get("job_id")
 
     due.refresh_from_db()
     future.refresh_from_db()
@@ -160,10 +162,11 @@ def test_publish_scheduled_command_idempotent(db):
     landing.save()
 
     with patch(
-        "apps.content.management.commands.publish_scheduled_content.invoke_static_rebuild"
+        "apps.rebuild.services.invoke_static_rebuild"
     ):
-        call_command("publish_scheduled_content")
-        call_command("publish_scheduled_content")
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            call_command("publish_scheduled_content")
+            call_command("publish_scheduled_content")
 
     landing.refresh_from_db()
     assert landing.status == LifecycleStatus.PUBLISHED

@@ -12,6 +12,13 @@ from datetime import datetime
 from django.db import IntegrityError
 from django.utils import timezone
 
+from apps.content.published import invalidate_published_snapshots
+from apps.rebuild.services import (
+    compute_affected_paths,
+    compute_revoked_paths,
+    enqueue_content_invalidation,
+    enqueue_publication_job,
+)
 from apps.security.models import AuditLog
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
@@ -106,6 +113,16 @@ def transition_item(
         ip=ip,
         detail=detail,
     )
+    if to_status in ("published", "archived"):
+        enqueue_content_invalidation(
+            entity=entity,
+            item=item,
+            action="publish" if to_status == "published" else "archive",
+        )
+    if to_status == "archived":
+        # A04: explicit archive invalidates the published document so the
+        # snapshot fallback can never resurrect revoked content.
+        invalidate_published_snapshots(entity, item.pk)
     return old_status
 
 
@@ -134,6 +151,7 @@ def bulk_archive_items(
 
     clipped = (reason or "").strip()[:TRANSITION_REASON_MAX]
     archived_ids: list[int] = []
+    archived_items: list = []
     skipped = 0
 
     for pk in unique_ids:
@@ -166,6 +184,27 @@ def bulk_archive_items(
             detail=f"reason={clipped}; bulk=1",
         )
         archived_ids.append(pk)
+        archived_items.append(item)
+        # A04: explicit archive invalidates the published document.
+        invalidate_published_snapshots(entity, item.pk)
+
+    if archived_items:
+        # A08: one publication job per locale so paths are never attributed
+        # to the wrong locale (previously a single job took the last item's
+        # locale for all paths). Group deterministically by locale.
+        paths_by_locale: dict[str | None, list[str]] = {}
+        revoked_by_locale: dict[str | None, list[str]] = {}
+        for it in archived_items:
+            loc = getattr(it, "locale", None)
+            paths_by_locale.setdefault(loc, []).extend(compute_affected_paths(entity, it))
+            revoked_by_locale.setdefault(loc, []).extend(compute_revoked_paths(entity, it))
+        for loc in sorted(paths_by_locale, key=lambda v: (v is None, v or "")):
+            enqueue_publication_job(
+                locale=loc,
+                affected_paths=list(dict.fromkeys(paths_by_locale[loc])),
+                revoked_paths=list(dict.fromkeys(revoked_by_locale.get(loc, []))),
+                removal_state="pending",
+            )
 
     AuditLog.objects.create(
         user=user,

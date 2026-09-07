@@ -1,5 +1,9 @@
 # Backend Agent Contract
 
+<!-- PRODUCT-V2.1 -->
+Current product work: read `../Docs/09-decisions/ADR-0010-UNIFIED-EXECUTION-CONTRACTS.md`, `../Docs/05-delivery/concept-alignment-v2/EXECUTION.md`, and the assigned **BACKEND** leaf packet. New target interfaces live in `../Docs/03-contracts/PRODUCT-INTERFACES-V2.md`; generated OpenAPI remains current implementation evidence. Old prefix-only task selection and family freezes are superseded for this queue. CA-09–16 must not be dispatched separately.
+<!-- /PRODUCT-V2.1 -->
+
 ## Read order
 
 1. `README.md`
@@ -8,7 +12,7 @@
 4. `../Docs/03-contracts/`
 5. `docs/architecture/ARCHITECTURE.md`
 6. `TASK-LIST.md`
-7. `../Docs/05-delivery/MULTI-AGENT-TASK-BOARD.md` (pick one `BACKEND-*` task)
+7. `../Docs/05-delivery/MULTI-AGENT-TASK-BOARD.md` (select one active BACKEND packet from execution-tasks.json)
 
 ## Rules
 
