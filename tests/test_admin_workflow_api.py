@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, override_settings
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from apps.content.models import (
@@ -118,14 +118,18 @@ def test_transition_draft_to_review_then_published(admin_api_client):
 @override_settings(REBUILD_TRIGGER_ENABLED=True)
 def test_publish_invokes_rebuild_hook(admin_api_client):
     landing = _make_landing(locale="en", slug="rebuild-hook", title="Rebuild")
-    with patch("apps.api.admin_content.invoke_static_rebuild") as mocked:
-        published = _post_json(
-            admin_api_client,
-            f"/api/v1/admin/content/landing/{landing.pk}/transition",
-            {"to": "published"},
-        )
-        assert published.status_code == 200
+    # A03: dispatch fires on transaction commit carrying the job UUID.
+    with patch("apps.rebuild.services.invoke_static_rebuild") as mocked:
+        with TestCase.captureOnCommitCallbacks(execute=True):
+            published = _post_json(
+                admin_api_client,
+                f"/api/v1/admin/content/landing/{landing.pk}/transition",
+                {"to": "published"},
+            )
+            assert published.status_code == 200
+            mocked.assert_not_called()
         mocked.assert_called_once()
+        assert mocked.call_args.kwargs.get("job_id")
 
 
 def test_transition_published_to_archived_to_draft(admin_api_client):

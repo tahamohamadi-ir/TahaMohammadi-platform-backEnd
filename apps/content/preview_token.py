@@ -63,6 +63,18 @@ def build_preview_share_path(kind: str, pk: int, *, ttl_seconds: int | None = No
     return f"/preview/share/{token}/"
 
 
+def build_preview_share_file_path(kind: str, pk: int, *, ttl_seconds: int | None = None) -> str:
+    token = build_preview_token(kind, pk, ttl_seconds=ttl_seconds)
+    return f"/preview/share/{token}/file/"
+
+
+def build_preview_share_attachment_path(
+    kind: str, pk: int, media_id: int, *, ttl_seconds: int | None = None
+) -> str:
+    token = build_preview_token(kind, pk, ttl_seconds=ttl_seconds)
+    return f"/preview/share/{token}/attachment/{media_id}/"
+
+
 def parse_preview_token(token: str) -> tuple[PreviewTokenStatus, PreviewTokenPayload | None]:
     """Validate ``token`` and return status + payload when valid."""
     secret = _preview_secret()

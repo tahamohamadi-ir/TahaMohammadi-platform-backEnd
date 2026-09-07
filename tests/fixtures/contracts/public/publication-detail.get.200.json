@@ -1,4 +1,11 @@
 {
+  "seo": {
+    "title": "Sample paper",
+    "description": "Sample paper",
+    "image": null
+  },
+  "alternates": [],
+  "relatedRecords": [],
   "locale": "en",
   "slug": "sample-paper",
   "title": "Sample paper",
@@ -22,5 +29,6 @@
   "accessibility_notes": "",
   "citation_count": null,
   "citation_text": null,
-  "pdf": null
+  "pdf": null,
+  "story": null
 }

@@ -9,12 +9,26 @@ from apps.content.admin_api import admin_profile_create_sibling, admin_profile_d
 from apps.content.public_api import public_profile_detail, public_profile_list
 from apps.health.views import health
 from apps.media.views import serve_public_media
-from apps.rebuild.views import rebuild_trigger
+from apps.rebuild.views import (
+    internal_publication_job_detail,
+    internal_publication_job_result,
+    rebuild_trigger,
+)
 
 urlpatterns = [
     path("preview/", include("apps.content.urls_public_preview")),
     path("health/", health, name="health"),
     path("media/<path:name>", serve_public_media, name="public_media"),
+    path(
+        "api/v1/internal/publication-jobs/<uuid:job_id>",
+        internal_publication_job_detail,
+        name="publication_job_internal_detail",
+    ),
+    path(
+        "api/v1/internal/publication-jobs/<uuid:job_id>/result",
+        internal_publication_job_result,
+        name="publication_job_internal_result",
+    ),
     # Custom React admin SPA (ADR-0026, ADM-1 cutover). More specific staff
     # paths under /staff/ — not under /admin/ — so the SPA catch-all stays simple.
     path("admin/", serve_admin_ui, name="admin_spa"),

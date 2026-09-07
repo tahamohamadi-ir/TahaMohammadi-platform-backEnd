@@ -48,6 +48,7 @@ from apps.api.admin_common import (
     _require_if_match,
 )
 from apps.content.models import HomeModule, HomeModuleKey, Locale, SelectionMode
+from apps.rebuild.services import enqueue_publication_job
 
 home_router = Router()
 
@@ -243,7 +244,14 @@ def home_modules_put(request, locale: str, payload: HomeModulesPutIn):
         object_id=locale,
         detail=f"PUT /api/v1/admin/home-modules/{locale} -> 200; modules={len(payload.modules)}",
     )
-    return HomeModulesRevisionOut(revision=_current_revision(fresh))
+    rev = _current_revision(fresh)
+    enqueue_publication_job(
+        locale=locale,
+        requested_revision=rev,
+        affected_paths=[f"/{locale}/"],
+        removal_state="not_requested",
+    )
+    return HomeModulesRevisionOut(revision=rev)
 
 
 @home_router.post(

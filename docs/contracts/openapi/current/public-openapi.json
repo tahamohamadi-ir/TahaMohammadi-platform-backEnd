@@ -1,12 +1,54 @@
 {
   "components": {
     "schemas": {
+      "AlternateLocaleOut": {
+        "description": "Alternate locale route projection resolved via explicit translation key.",
+        "properties": {
+          "courseSlug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Courseslug"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "routeFamily": {
+            "title": "Routefamily",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "routeFamily"
+        ],
+        "title": "AlternateLocaleOut",
+        "type": "object"
+      },
       "ArticleDetailOut": {
         "description": "Public article detail including sanitized rich-text body and optional story.",
         "properties": {
           "accessibility_notes": {
             "title": "Accessibility Notes",
             "type": "string"
+          },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
           },
           "body": {
             "title": "Body",
@@ -49,6 +91,23 @@
           "reading_time_minutes": {
             "title": "Reading Time Minutes",
             "type": "integer"
+          },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "series": {
             "items": {
@@ -233,6 +292,13 @@
             "title": "Accessibility Notes",
             "type": "string"
           },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "authors": {
             "title": "Authors",
             "type": "string"
@@ -293,9 +359,36 @@
             "title": "Publisher",
             "type": "string"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -492,11 +585,235 @@
         "title": "CollaboratorOut",
         "type": "object"
       },
+      "CollectionCardOut": {
+        "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "criteria": {
+            "title": "Criteria",
+            "type": "string"
+          },
+          "curatedDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curateddate"
+          },
+          "curatorName": {
+            "title": "Curatorname",
+            "type": "string"
+          },
+          "curatorTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curatortitle"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title",
+          "description",
+          "curatorName",
+          "criteria"
+        ],
+        "title": "CollectionCardOut",
+        "type": "object"
+      },
+      "CollectionDetailOut": {
+        "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "criteria": {
+            "title": "Criteria",
+            "type": "string"
+          },
+          "curatedDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curateddate"
+          },
+          "curatorName": {
+            "title": "Curatorname",
+            "type": "string"
+          },
+          "curatorTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curatortitle"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title",
+          "description",
+          "curatorName",
+          "criteria"
+        ],
+        "title": "CollectionDetailOut",
+        "type": "object"
+      },
+      "CollectionListOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionCardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "CollectionListOut",
+        "type": "object"
+      },
       "CourseDetailOut": {
         "properties": {
           "accessibility_notes": {
             "title": "Accessibility Notes",
             "type": "string"
+          },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
           },
           "availability": {
             "title": "Availability",
@@ -574,9 +891,36 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -718,6 +1062,13 @@
             "title": "Accessibility Notes",
             "type": "string"
           },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -785,13 +1136,40 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
           "rights_statement": {
             "title": "Rights Statement",
             "type": "string"
           },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -981,6 +1359,13 @@
             "title": "Accessibility Notes",
             "type": "string"
           },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -1036,6 +1421,23 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "size_bytes": {
             "anyOf": [
               {
@@ -1050,6 +1452,16 @@
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -1156,6 +1568,82 @@
           "updated_at"
         ],
         "title": "DownloadListOut",
+        "type": "object"
+      },
+      "ErrorEnvelopeOut": {
+        "description": "Normalized error envelope (PRODUCT-INTERFACES-V2 §I08, ERROR-CONTRACT).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field_errors": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "title": "ErrorEnvelopeOut",
+        "type": "object"
+      },
+      "EventIngestIn": {
+        "additionalProperties": false,
+        "description": "Anonymous aggregate event payload (§I07).\n\nStrict privacy policy:\nextra = 'forbid' rejects any unknown fields (such as email, visitor_id,\ncookie, tokens, full referrers).",
+        "properties": {
+          "event": {
+            "title": "Event",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "pagePath": {
+            "title": "Pagepath",
+            "type": "string"
+          },
+          "target": {
+            "default": "",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "pagePath",
+          "locale"
+        ],
+        "title": "EventIngestIn",
+        "type": "object"
+      },
+      "EventIngestOut": {
+        "description": "Ingest acceptance response.",
+        "properties": {
+          "status": {
+            "default": "accepted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "EventIngestOut",
         "type": "object"
       },
       "EvidenceOut": {
@@ -1572,6 +2060,308 @@
         "title": "LandingOut",
         "type": "object"
       },
+      "LessonCardOut": {
+        "description": "Public lesson card projection for course lesson list (§I05).",
+        "properties": {
+          "courseSlug": {
+            "title": "Courseslug",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title",
+          "summary",
+          "courseSlug",
+          "position"
+        ],
+        "title": "LessonCardOut",
+        "type": "object"
+      },
+      "LessonDetailOut": {
+        "description": "Independent course lesson detail projection with ordered neighbors (§I05).",
+        "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
+          "courseSlug": {
+            "title": "Courseslug",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title",
+          "summary",
+          "courseSlug",
+          "position"
+        ],
+        "title": "LessonDetailOut",
+        "type": "object"
+      },
+      "LessonListOut": {
+        "description": "Paginated/counted lesson list for a course (§I05).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LessonCardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "items"
+        ],
+        "title": "LessonListOut",
+        "type": "object"
+      },
+      "LocalizedAudienceLinkOut": {
+        "description": "One audience link for research or employment audiences.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "href"
+        ],
+        "title": "LocalizedAudienceLinkOut",
+        "type": "object"
+      },
+      "LocalizedNavLinkOut": {
+        "description": "One navigation link for localized site settings.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ],
+        "title": "LocalizedNavLinkOut",
+        "type": "object"
+      },
+      "LocalizedSceneOut": {
+        "description": "Scene presets and motion/density configuration (§I04).",
+        "properties": {
+          "density": {
+            "default": "standard",
+            "title": "Density",
+            "type": "string"
+          },
+          "graphPreset": {
+            "default": "atlas-v2",
+            "title": "Graphpreset",
+            "type": "string"
+          },
+          "motion": {
+            "default": "full",
+            "title": "Motion",
+            "type": "string"
+          },
+          "portalPreset": {
+            "default": "arch-v2",
+            "title": "Portalpreset",
+            "type": "string"
+          }
+        },
+        "title": "LocalizedSceneOut",
+        "type": "object"
+      },
+      "LocalizedSiteSeoOut": {
+        "description": "SEO title and description for localized site settings.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "LocalizedSiteSeoOut",
+        "type": "object"
+      },
+      "LocalizedSiteSettingsPublicOut": {
+        "description": "Published localized site settings (PRODUCT-V2 §I04).",
+        "properties": {
+          "audienceLinks": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedAudienceLinkOut"
+            },
+            "title": "Audiencelinks",
+            "type": "array"
+          },
+          "brandName": {
+            "title": "Brandname",
+            "type": "string"
+          },
+          "footerText": {
+            "title": "Footertext",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "navLinks": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedNavLinkOut"
+            },
+            "title": "Navlinks",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "scene": {
+            "$ref": "#/components/schemas/LocalizedSceneOut"
+          },
+          "seo": {
+            "$ref": "#/components/schemas/LocalizedSiteSeoOut"
+          },
+          "tagline": {
+            "title": "Tagline",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "revision",
+          "brandName",
+          "tagline",
+          "footerText",
+          "seo",
+          "scene",
+          "updatedAt"
+        ],
+        "title": "LocalizedSiteSettingsPublicOut",
+        "type": "object"
+      },
       "PagedArticleListOut": {
         "properties": {
           "count": {
@@ -1816,6 +2606,13 @@
       "ProjectDetailOut": {
         "description": "Public project detail with redacted evidence/collaborators/funding/URLs.",
         "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "case_study": {
             "anyOf": [
               {
@@ -1945,6 +2742,13 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
           "role": {
             "title": "Role",
             "type": "string"
@@ -1955,6 +2759,16 @@
             },
             "title": "Screenshots",
             "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "slug": {
             "title": "Slug",
@@ -2253,6 +3067,36 @@
         "title": "PublicMediaOut",
         "type": "object"
       },
+      "PublicSeoOut": {
+        "description": "Publication metadata SEO projection with title/description/image.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "PublicSeoOut",
+        "type": "object"
+      },
       "PublicSiteSettingsOut": {
         "description": "Public site presentation used by Astro at build time.\n\nOnly ``primaryColor``, active current-document downloads and the public\ncontact block are projected. Inactive media slots are omitted\n(private-by-default).",
         "properties": {
@@ -2324,6 +3168,13 @@
           "accessibility_notes": {
             "title": "Accessibility Notes",
             "type": "string"
+          },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
           },
           "authors": {
             "title": "Authors",
@@ -2423,9 +3274,36 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -2578,6 +3456,27 @@
         "title": "PublicationListOut",
         "type": "object"
       },
+      "RecordResolveOut": {
+        "description": "Batch reference resolution response.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "unresolved": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedRefOut"
+            },
+            "title": "Unresolved",
+            "type": "array"
+          }
+        },
+        "title": "RecordResolveOut",
+        "type": "object"
+      },
       "RelatedSlugOut": {
         "description": "Minimal related entity pointer for list/tree navigation.",
         "properties": {
@@ -2600,6 +3499,13 @@
       "ResearchStatementOut": {
         "description": "Public research statement (sanitized rich text + optional active PDF).",
         "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -2619,6 +3525,23 @@
               }
             ],
             "title": "Published At"
+          },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "slug": {
             "title": "Slug",
@@ -2675,6 +3598,13 @@
       "ResearchTopicDetailOut": {
         "description": "Public research topic detail with related public projects/publications.",
         "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "future_directions": {
             "title": "Future Directions",
             "type": "string"
@@ -2721,9 +3651,26 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
           "research_questions": {
             "title": "Research Questions",
             "type": "string"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "slug": {
             "title": "Slug",
@@ -2865,6 +3812,69 @@
         "title": "ScreenshotOut",
         "type": "object"
       },
+      "SeriesDetailOut": {
+        "description": "Public series detail projection with ordered article items and story.",
+        "properties": {
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale",
+          "slug",
+          "title"
+        ],
+        "title": "SeriesDetailOut",
+        "type": "object"
+      },
       "SeriesOut": {
         "description": "Public series projection (published series only).",
         "properties": {
@@ -2994,6 +4004,13 @@
             "title": "Accessibility Notes",
             "type": "string"
           },
+          "alternates": {
+            "items": {
+              "$ref": "#/components/schemas/AlternateLocaleOut"
+            },
+            "title": "Alternates",
+            "type": "array"
+          },
           "event_date": {
             "anyOf": [
               {
@@ -3034,6 +4051,23 @@
             ],
             "title": "Published At"
           },
+          "relatedRecords": {
+            "items": {
+              "$ref": "#/components/schemas/WorkRefOut"
+            },
+            "title": "Relatedrecords",
+            "type": "array"
+          },
+          "seo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicSeoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "slides": {
             "anyOf": [
               {
@@ -3057,6 +4091,16 @@
           "speakers": {
             "title": "Speakers",
             "type": "string"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryDocumentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "title": {
             "title": "Title",
@@ -3218,6 +4262,80 @@
           "locale"
         ],
         "title": "TopicTagOut",
+        "type": "object"
+      },
+      "UnresolvedRefOut": {
+        "description": "Reference that could not be resolved to a published exact-locale record.",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "id"
+        ],
+        "title": "UnresolvedRefOut",
+        "type": "object"
+      },
+      "WorkRefOut": {
+        "description": "Canonical public reference descriptor for a published record.",
+        "properties": {
+          "courseSlug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Courseslug"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "routeFamily": {
+            "title": "Routefamily",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "id",
+          "locale",
+          "slug",
+          "title",
+          "summary",
+          "routeFamily"
+        ],
+        "title": "WorkRefOut",
         "type": "object"
       }
     }
@@ -4939,6 +6057,418 @@
           }
         },
         "summary": "Get one published teaching course by slug (alias)"
+      }
+    },
+    "/api/v1/analytics/events": {
+      "post": {
+        "description": "Ingest anonymous first-party event and update daily aggregate counters.\n\nA09 validation (§I07, fail-closed, I08 envelope on every rejection):\n\n- Oversized bodies are rejected before anything is stored.\n- Foreign cross-origin posts are rejected.\n- Per-IP rate limits are enforced.\n- ``event`` must be a known enum member; ``locale`` must be fa/en.\n- ``pagePath`` must be a canonical route whose locale matches ``locale``\n  (the locale-neutral gateway ``/`` is accepted for either locale).\n- ``target`` must be a registered action ID for the event (page views\n  carry no target; only ``cv_download`` has shipped sub-targets).\n\nPrivacy & Security: persists zero visitor identifiers; unknown fields are\nrejected by the schema (422 envelope); failed analytics never block\nnavigation or forms.",
+        "operationId": "apps_analytics_api_ingest_event",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIngestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventIngestOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventIngestOut"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Ingest first-party anonymous aggregate event"
+      }
+    },
+    "/api/v1/collections/{locale}": {
+      "get": {
+        "description": "List published collections with pagination (1-based, default 20, max 50).",
+        "operationId": "apps_api_api_list_collections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List published collections for a locale (paginated)"
+      }
+    },
+    "/api/v1/collections/{locale}/{slug}": {
+      "get": {
+        "description": "Get published collection detail with ordered members and story.",
+        "operationId": "apps_api_api_get_collection_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get one published collection by slug with ordered items"
+      }
+    },
+    "/api/v1/lessons/{locale}": {
+      "get": {
+        "description": "List published lessons for a course ordered by position, id.\n\nGuard: Both parent course and lesson must be published in the requested locale.\nIf parent course is not published or does not exist, returns count 0.",
+        "operationId": "apps_api_api_list_lessons",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonListOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List published course lessons for a locale"
+      }
+    },
+    "/api/v1/lessons/{locale}/{courseSlug}/{lessonSlug}": {
+      "get": {
+        "description": "Get published lesson detail with previous/next neighbors.\n\nGuards:\n- Parent course must exist and be published in locale (or 404).\n- Lesson must exist and be published in locale and belong to course (or 404).\n- Draft lessons are excluded from neighbors.",
+        "operationId": "apps_api_api_get_lesson_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "courseSlug",
+            "required": true,
+            "schema": {
+              "title": "Courseslug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lessonSlug",
+            "required": true,
+            "schema": {
+              "title": "Lessonslug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LessonDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get one published course lesson with ordered neighbors"
+      }
+    },
+    "/api/v1/records/{locale}/resolve": {
+      "get": {
+        "description": "Resolve comma-separated family:id pairs to canonical WorkRef objects.\n\nFails closed: 404 for unsupported locales, 400 for malformed input or >50\nunique references. Unresolved records do not disclose existence or status.\nAll errors return normalized error envelope (§I08).",
+        "operationId": "apps_api_record_resolver_resolve_records",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refs",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Refs",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordResolveOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Resolve published graph record IDs to canonical record descriptors"
+      }
+    },
+    "/api/v1/series/{locale}/{slug}": {
+      "get": {
+        "description": "Get published series detail with ordered article members and story.",
+        "operationId": "apps_api_api_get_series_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get one published series by slug with ordered article items"
+      }
+    },
+    "/api/v1/site/{locale}": {
+      "get": {
+        "description": "Serve published localized site settings for a locale (fail-closed, no fallback).",
+        "operationId": "apps_api_api_get_localized_site_settings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalizedSiteSettingsPublicOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Published localized site settings for a locale (fail-closed, no fallback)."
       }
     }
   },

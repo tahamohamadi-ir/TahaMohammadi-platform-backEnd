@@ -18,9 +18,118 @@
   </p>
   <h1>{{ title }}</h1>
   <p class="help"><code>{{ slug }}</code></p>
+
+  {% if attachment %}
+  <section class="preview-attachment">
+    <h2>{% trans "Attachment" %}</h2>
+    <p>
+      <a class="button button-primary" href="{{ attachment.url }}">
+        {% trans "Download" %}: {{ attachment.title }}
+      </a>
+      {% if attachment.is_private %}
+      <span class="badge badge-warning">{% trans "Private / Non-public file" %}</span>
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
+
   <div class="staff-preview-body">
     {{ body_html|safe }}
   </div>
+
+  {% if case_study %}
+  <section class="preview-case-study">
+    <h2>{% trans "Case Study" %}</h2>
+    {% if case_study.problem %}
+    <div class="case-study-item">
+      <h3>{% trans "Problem" %}</h3>
+      <p>{{ case_study.problem }}</p>
+    </div>
+    {% endif %}
+    {% if case_study.technical_decisions %}
+    <div class="case-study-item">
+      <h3>{% trans "Technical Decisions" %}</h3>
+      <p>{{ case_study.technical_decisions }}</p>
+    </div>
+    {% endif %}
+    {% if case_study.outcomes_summary %}
+    <div class="case-study-item">
+      <h3>{% trans "Outcomes" %}</h3>
+      <p>{{ case_study.outcomes_summary }}</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if evidence_items %}
+  <section class="preview-evidence">
+    <h2>{% trans "Evidence & Benchmarks" %}</h2>
+    <ul>
+      {% for item in evidence_items %}
+      <li>
+        <strong>{{ item.label }}</strong>: {{ item.value }}
+        {% if item.source %}<em>({{ item.source }})</em>{% endif %}
+        <span class="badge badge-info">[{{ item.visibility }}]</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if diagrams %}
+  <section class="preview-diagrams">
+    <h2>{% trans "Architecture Diagrams" %}</h2>
+    <div class="diagrams-grid">
+      {% for d in diagrams %}
+      <div class="diagram-card">
+        <h3>{{ d.title }} (v{{ d.version }}) <span class="badge">[{{ d.visibility }}]</span></h3>
+        {% if d.url %}
+        <img src="{{ d.url }}" alt="{{ d.altText }}" />
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if screenshots %}
+  <section class="preview-screenshots">
+    <h2>{% trans "Screenshots" %}</h2>
+    <div class="screenshots-grid">
+      {% for s in screenshots %}
+      <div class="screenshot-card">
+        {% if s.url %}
+        <img src="{{ s.url }}" alt="{{ s.altText }}" />
+        {% endif %}
+        <p>{{ s.caption }} <span class="badge">[{{ s.visibility }}]</span></p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if collaborators %}
+  <section class="preview-collaborators">
+    <h2>{% trans "Collaborators" %}</h2>
+    <ul>
+      {% for c in collaborators %}
+      <li>{{ c.name }} - {{ c.role }} ({{ c.affiliation }})</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if funding %}
+  <section class="preview-funding">
+    <h2>{% trans "Funding" %}</h2>
+    <ul>
+      {% for f in funding %}
+      <li>{{ f.grant_name }} ({{ f.funder_name }})</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   <p>
     <a class="button button-secondary" href="/admin/">{% trans "Back to dashboard" %}</a>
   </p>

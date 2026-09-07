@@ -1,28 +1,27 @@
 {
   "accessEvidence": {
-    "admin": "tests/test_admin_openapi.py - verified staff plus OTP endpoint fixture (9 checks passing on 2026-08-29). 2026-09-02 additions (media delete, profile sibling-locale) verified in tests/test_admin_media_api.py and tests/test_admin_content_api.py. 2026-09-04 additions (approval-queue, publication gate, approvalState, seedPolicy) verified in tests/test_admin_approvals.py and tests/test_admin_seed_policy.py; amendment recorded in Docs/03-contracts/OPENAPI-ACCEPTANCE.md.",
-    "public": "tests/test_public_openapi.py - anonymous endpoint client check (9 checks passing on 2026-08-29). Public surface unchanged by the 2026-09-02 and 2026-09-04 amendments."
+    "admin": "Generated in-process; verified staff plus OTP endpoint fixture pending.",
+    "public": "Generated in-process; anonymous endpoint client check pending."
   },
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 49,
-      "sha256": "38ff4d81d454287bd0e6c437ad84bfada41255e8fa6acc13704144223014fd7a",
+      "paths": 57,
+      "sha256": "1176c0696222f9ac4c86495446d1f00988bdfde19dd147e93ece29a61e973564",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 106,
-      "sha256": "452de5ab13f5e0b9ea57bf22cd7687ef04cadad96edb0fd2057918f7d8ffd7ef"
+      "operations": 124,
+      "sha256": "154a2c1bf950978f9a8332571098e4bfb2b815c9308a38426976e08dc002e4eb"
     },
     "public-openapi.json": {
-      "paths": 40,
-      "sha256": "0f672693de28ed33286789e5119eb3226c062693fb15168b1aba5513c257c0a5",
+      "paths": 48,
+      "sha256": "47980f8f1992d885398676cf984b80e7068c7aa8e8b8f76a856565ffc9033681",
       "version": "0.4.0"
     }
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-04T15:45:08.720081+00:00",
-  "sourceCommit": "f38c3b019b427857b41db7c5903d88cd6125ea87",
-  "status": "scaffold-accepted",
-  "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md"
+  "generatedAtUtc": "2026-09-06T20:06:28.605917+00:00",
+  "sourceCommit": "bd6682ea9dae7e5bf6957c36691dc3a94a00ea37",
+  "status": "source-generated-unaccepted"
 }

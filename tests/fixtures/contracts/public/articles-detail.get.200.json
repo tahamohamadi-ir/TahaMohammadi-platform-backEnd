@@ -1,4 +1,11 @@
 {
+  "seo": {
+    "title": "First post",
+    "description": "Hello",
+    "image": null
+  },
+  "alternates": [],
+  "relatedRecords": [],
   "locale": "en",
   "slug": "first-post",
   "title": "First post",

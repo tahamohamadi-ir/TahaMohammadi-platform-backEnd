@@ -63,7 +63,17 @@ ARTICLE_LIST_FIELDS = {
     "topic_tags",
     "series",
 }
-ARTICLE_DETAIL_FIELDS = ARTICLE_LIST_FIELDS | {"body", "accessibility_notes", "story"}
+# A07 reconciliation: ArticleDetailOut extends the list card with the body,
+# accessibility notes, optional story, and the reviewed I03 publication
+# metadata (seo, alternates, relatedRecords). The set stays exact.
+ARTICLE_DETAIL_FIELDS = ARTICLE_LIST_FIELDS | {
+    "body",
+    "accessibility_notes",
+    "story",
+    "seo",
+    "alternates",
+    "relatedRecords",
+}
 
 
 @pytest.fixture

@@ -44,6 +44,15 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/talks/{locale}/{slug}` | Get one published talk by slug |
 | public | GET | `/api/teaching/{locale}` | List published teaching courses for a locale (alias of /courses/) |
 | public | GET | `/api/teaching/{locale}/{slug}` | Get one published teaching course by slug (alias) |
+| public | POST | `/api/v1/analytics/events` | Ingest first-party anonymous aggregate event |
+| public | GET | `/api/v1/collections/{locale}` | List published collections for a locale (paginated) |
+| public | GET | `/api/v1/collections/{locale}/{slug}` | Get one published collection by slug with ordered items |
+| public | GET | `/api/v1/lessons/{locale}` | List published course lessons for a locale |
+| public | GET | `/api/v1/lessons/{locale}/{courseSlug}/{lessonSlug}` | Get one published course lesson with ordered neighbors |
+| public | GET | `/api/v1/records/{locale}/resolve` | Resolve published graph record IDs to canonical record descriptors |
+| public | GET | `/api/v1/series/{locale}/{slug}` | Get one published series by slug with ordered article items |
+| public | GET | `/api/v1/site/{locale}` | Published localized site settings for a locale (fail-closed, no fallback). |
+| admin | GET | `/api/v1/admin/analytics` | Retrieve first-party received events report |
 | admin | GET | `/api/v1/admin/approval-queue` | Owner approval queue from the imported seed records. |
 | admin | GET | `/api/v1/admin/auth/csrf` | Return the CSRF token and ensure the csrftoken cookie is set. |
 | admin | POST | `/api/v1/admin/auth/login` | Admin login. |
@@ -61,6 +70,8 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | PUT | `/api/v1/admin/composition/{page_id}` | Replace a composition page (optimistic locking). |
 | admin | POST | `/api/v1/admin/content/profile/{id}/sibling-locale` | Create the sibling-locale draft for a profile (G-G). |
 | admin | GET | `/api/v1/admin/content/project/{id}/case-media` | List project diagrams and screenshots (Media FKs). |
+| admin | GET | `/api/v1/admin/content/project/{id}/case-study` | Get project case study, evidence, collaborators, and funding. |
+| admin | PUT | `/api/v1/admin/content/project/{id}/case-study` | Atomically update project case study, evidence, collaborators, and funding. |
 | admin | PUT | `/api/v1/admin/content/project/{id}/diagrams/{diagram_id}` | Set diagram Media FK. |
 | admin | PUT | `/api/v1/admin/content/project/{id}/screenshots/{screenshot_id}` | Set screenshot Media FK. |
 | admin | GET | `/api/v1/admin/content/schema` | Writable-field metadata. |
@@ -72,6 +83,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | POST | `/api/v1/admin/content/{entity}/{id}/preview-link` | Generate a short-lived public preview share link. |
 | admin | GET | `/api/v1/admin/content/{entity}/{id}/revisions` | List immutable content revisions. |
 | admin | POST | `/api/v1/admin/content/{entity}/{id}/revisions` | Create an immutable content snapshot. |
+| admin | GET | `/api/v1/admin/content/{entity}/{id}/revisions/{revision_id}` | Get an immutable content revision with full snapshot. |
 | admin | POST | `/api/v1/admin/content/{entity}/{id}/revisions/{revision_id}/restore` | Restore a revision as draft (never overwrites live published). |
 | admin | POST | `/api/v1/admin/content/{entity}/{id}/transition` | Transition content lifecycle state. |
 | admin | GET | `/api/v1/admin/dashboard/summary` | Action-oriented content counts. |
@@ -99,8 +111,14 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | POST | `/api/v1/admin/media/{media_id}/replace` | Replace the media file (MIME-family compatible). |
 | admin | GET | `/api/v1/admin/overview/content-health` | Content health counts. |
 | admin | GET | `/api/v1/admin/overview/translation-queue` | Per-slug translation queue. |
+| admin | GET | `/api/v1/admin/publication-jobs` | List publication jobs (paged, filterable by state and locale) |
+| admin | GET | `/api/v1/admin/publication-jobs/{job_id}` | Get one publication job by UUID |
+| admin | POST | `/api/v1/admin/publication-jobs/{job_id}/retry` | Idempotently retry a publication job with If-Match and Idempotency-Key |
 | admin | GET | `/api/v1/admin/site` | Get site settings. |
 | admin | PUT | `/api/v1/admin/site` | Update site settings (optimistic locking). |
+| admin | GET | `/api/v1/admin/site/{locale}` | Get localized site settings for admin (draft state). |
+| admin | PUT | `/api/v1/admin/site/{locale}` | Update localized site settings (optimistic locking). |
+| admin | POST | `/api/v1/admin/site/{locale}/publish` | Publish draft snapshot for localized site settings (PRODUCT-V2 §I04). |
 | admin | GET | `/api/v1/admin/tags` | List topic tags. |
 | admin | POST | `/api/v1/admin/tags` | Create a topic tag. |
 | admin | DELETE | `/api/v1/admin/tags/{id}` | Delete a topic tag. |

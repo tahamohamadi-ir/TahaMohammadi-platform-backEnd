@@ -202,6 +202,8 @@ def test_schema_endpoint(admin_api_client):
     response = admin_api_client.get("/api/v1/admin/content/schema")
     assert response.status_code == 200
     entities = response.json()["entities"]
+    # A07 reconciliation: I05 registered the collection and lesson entities
+    # (ordered members, course lessons). The set stays exact.
     assert set(entities) == {
         "landing",
         "profile",
@@ -216,6 +218,8 @@ def test_schema_endpoint(admin_api_client):
         "download",
         "course",
         "creative-work",
+        "lesson",
+        "collection",
     }
 
     article_specs = {spec["key"]: spec for spec in entities["article"]["fields"]}
