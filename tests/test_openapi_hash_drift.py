@@ -65,12 +65,22 @@ def _acceptance() -> dict:
     return json.loads((CONTRACTS_DIR / "ACCEPTANCE.json").read_text(encoding="utf-8"))
 
 
-def _git_head() -> str:
-    return subprocess.check_output(
-        ["git", "rev-parse", "HEAD"],
-        cwd=CONTRACTS_DIR.parents[3],
-        text=True,
-    ).strip()
+def _is_ancestor_of_head(revision: str) -> bool:
+    """Return whether an accepted source revision is reachable from HEAD.
+
+    Acceptance records pin the revision that produced the artifact, which may
+    legitimately predate a later commit that adds consumers or release wiring.
+    Requiring equality with HEAD made the gate depend on checkout shape rather
+    than artifact provenance.
+    """
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", revision, "HEAD"],
+            cwd=CONTRACTS_DIR.parents[3],
+            check=False,
+        ).returncode
+        == 0
+    )
 
 
 @pytest.mark.parametrize("filename", sorted(ACCEPTED))
@@ -112,7 +122,7 @@ def test_provenance_matches_accepted_record():
     acceptance = _acceptance()
     assert acceptance["status"] == "scaffold-accepted"
     assert acceptance["acceptanceRecord"].endswith("OPENAPI-ACCEPTANCE.md")
-    assert acceptance["sourceCommit"] == _git_head()
+    assert _is_ancestor_of_head(acceptance["sourceCommit"])
     artifacts = acceptance["artifacts"]
     for filename, expected in ACCEPTED.items():
         recorded = artifacts[filename]
