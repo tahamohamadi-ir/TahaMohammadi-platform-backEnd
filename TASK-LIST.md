@@ -1,3 +1,5 @@
+> Current content-completion execution: 2026-09-07. See the central reviews/IMPLEMENTATION-2026-09-07.md and execution-tasks.json; earlier narrative counts are historical.
+
 # Backend Task List
 
 <!-- PRODUCT-V2.1 -->
@@ -8,7 +10,8 @@ Parent groups and retired CA IDs are not assignments. Dependencies and exact fil
 | Packet | State | Specification |
 |---|---|---|
 | PU-03-resolver | ACCEPTED_LOCAL | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-03-resolver.md` |
-| PU-03-settings | ACCEPTED_LOCAL | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-03-settings.md` |
+| PU-03-settings | REVISE | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-03-settings.md` |
+| PU-26-seed-safety | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-26-seed-safety.md` |
 | PU-04-catalog | REVISE | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-catalog.md` |
 | PU-04-metadata | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-metadata.md` |
 | PU-04-publication | IMPLEMENTED_UNREVIEWED | `../Docs/05-delivery/concept-alignment-v2/product-packets/PU-04-publication.md` |

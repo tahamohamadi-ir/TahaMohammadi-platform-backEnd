@@ -9,7 +9,7 @@
   "artifacts": {
     "admin-openapi.json": {
       "paths": 57,
-      "sha256": "1176c0696222f9ac4c86495446d1f00988bdfde19dd147e93ece29a61e973564",
+      "sha256": "135f14e5c7f03ba1aaee50fca76a54e55e0ed5a2e0360050a8939e837859208c",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
@@ -18,7 +18,7 @@
     },
     "public-openapi.json": {
       "paths": 48,
-      "sha256": "47980f8f1992d885398676cf984b80e7068c7aa8e8b8f76a856565ffc9033681",
+      "sha256": "f3115a5095097e7ccc12efba4c0c59b1f0258914c1ce8a83e867b3b207c33ec9",
       "version": "0.4.0"
     }
   },

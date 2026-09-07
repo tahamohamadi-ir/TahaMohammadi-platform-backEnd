@@ -788,6 +788,7 @@ class LocalizedSiteSettingsAdminOut(Schema):
     locale: str
     revision: str
     brandName: str
+    contentCopy: dict[str, str] = Field(default_factory=dict)
     tagline: str
     footerText: str
     seo: LocalizedSiteSeoOut
@@ -803,6 +804,7 @@ class LocalizedSiteSettingsUpdateIn(Schema):
     """Partial update payload for localized site settings (optimistically locked)."""
 
     brandName: str | None = None
+    contentCopy: dict | None = None
     tagline: str | None = None
     footerText: str | None = None
     seo: LocalizedSiteSeoIn | None = None
@@ -1074,6 +1076,7 @@ def _serialize_localized_site_settings_admin(
         locale=item.locale,
         revision=item.revision or "",
         brandName=item.brand_name,
+        contentCopy=item.managed_copy or {},
         tagline=item.tagline,
         footerText=item.footer_text,
         seo=LocalizedSiteSeoOut(
@@ -1101,6 +1104,7 @@ def _build_public_settings_payload(item: LocalizedSiteSettings, revision: str) -
         "locale": item.locale,
         "revision": revision,
         "brandName": item.brand_name,
+        "contentCopy": item.managed_copy or {},
         "tagline": item.tagline,
         "footerText": item.footer_text,
         "seo": {
@@ -1237,6 +1241,14 @@ def localized_site_settings_put(
 
         if payload.scene is not None:
             _validate_localized_scene(item, payload.scene)
+
+        if payload.contentCopy is not None:
+            if len(payload.contentCopy) > 1500:
+                raise AdminError(400, "VALIDATION", "Too many copy entries.", fields={"contentCopy": ["Maximum 1500 entries."]})
+            for key, value in payload.contentCopy.items():
+                if not re.fullmatch(r"[a-z][a-zA-Z0-9._-]{0,119}", key) or not isinstance(value, str) or len(value) > 10000:
+                    raise AdminError(400, "VALIDATION", "Invalid copy entry.", fields={f"contentCopy.{key}": ["Use a stable key and text up to 10000 characters."]})
+            item.managed_copy = dict(payload.contentCopy)
 
         item.save()
 

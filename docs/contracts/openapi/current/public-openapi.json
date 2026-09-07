@@ -2315,6 +2315,13 @@
             "title": "Brandname",
             "type": "string"
           },
+          "contentCopy": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Contentcopy",
+            "type": "object"
+          },
           "footerText": {
             "title": "Footertext",
             "type": "string"

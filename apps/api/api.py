@@ -532,6 +532,7 @@ class LocalizedSiteSettingsPublicOut(Schema):
     locale: str
     revision: str
     brandName: str
+    contentCopy: dict[str, str] = Field(default_factory=dict)
     tagline: str
     footerText: str
     seo: LocalizedSiteSeoOut
