@@ -125,7 +125,9 @@ def test_site_seed_rerun_preserves_owner_removed_relations_and_status():
     project = Project.objects.filter(locale="en").first()
     project.topics.clear()
     project.publications.clear()
-    Project.objects.filter(pk=project.pk).update(title="Owner project", status=LifecycleStatus.DRAFT)
+    Project.objects.filter(pk=project.pk).update(
+        title="Owner project", status=LifecycleStatus.DRAFT
+    )
     call_command("seed_site_content")
     project.refresh_from_db()
     assert project.title == "Owner project"

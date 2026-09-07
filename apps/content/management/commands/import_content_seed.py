@@ -22,12 +22,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
-            "--overwrite-id", action="append", default=[],
-            help="Refresh only this seed content_id (repeatable); site.settings selects supplement. "
-                 "Existing publication state is always preserved.",
+            "--overwrite-id",
+            action="append",
+            default=[],
+            help=(
+                "Refresh only this seed content_id (repeatable); "
+                "site.settings selects supplement. "
+                "Existing publication state is always preserved."
+            ),
         )
-        parser.add_argument("--dry-run", action="store_true",
-                            help="Report actions, then roll back all database changes.")
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Report actions, then roll back all database changes.",
+        )
         parser.add_argument(
             "--file",
             dest="seed_file",

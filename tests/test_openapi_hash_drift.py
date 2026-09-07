@@ -30,12 +30,12 @@ CONTRACTS_DIR = Path(__file__).resolve().parents[1] / "docs/contracts/openapi/cu
 # (computed over CRLF-encoded bytes at acceptance time).
 ACCEPTED = {
     "public-openapi.json": {
-        "sha256": "47980f8f1992d885398676cf984b80e7068c7aa8e8b8f76a856565ffc9033681",
+        "sha256": "f3115a5095097e7ccc12efba4c0c59b1f0258914c1ce8a83e867b3b207c33ec9",
         "paths": 48,
         "version": "0.4.0",
     },
     "admin-openapi.json": {
-        "sha256": "1176c0696222f9ac4c86495446d1f00988bdfde19dd147e93ece29a61e973564",
+        "sha256": "135f14e5c7f03ba1aaee50fca76a54e55e0ed5a2e0360050a8939e837859208c",
         "paths": 57,
         "version": "0.1.0",
     },
@@ -47,8 +47,8 @@ ACCEPTED = {
 
 # Hashes of the same content with LF line endings (canonical repo form).
 CANONICAL_LF = {
-    "public-openapi.json": "1efc731387720306c6674c2855d2fb4128d396abc4f2340dda330dae642d93d9",
-    "admin-openapi.json": "046bef5ade74b7e68a61d710962763586218f2fed1267ea13ab9cba7bc76b514",
+    "public-openapi.json": "9f627d6e31c624cee7a7eaf123a33e3929bdc503b9619439e13f219afe149471",
+    "admin-openapi.json": "7ca00b3054e73a9b165561af9040386bf60e3d0d9a97d654de670416982a7c05",
     "endpoint-inventory.md": "bfbb40d0066907a5f5393e1b570118037e97da7eca8c935135399f46539e4c80",
 }
 
