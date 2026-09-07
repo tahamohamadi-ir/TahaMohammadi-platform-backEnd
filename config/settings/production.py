@@ -34,6 +34,13 @@ for _loopback in ("127.0.0.1", "localhost"):
     if _loopback not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(_loopback)
 
+# Dual-domain allowance: if tahamohamadi.ir or staging.tahamohamadi.ir is present,
+# automatically permit both so production and staging requests are accepted.
+if any("tahamohamadi.ir" in h for h in ALLOWED_HOSTS):
+    for _domain in ("tahamohamadi.ir", "www.tahamohamadi.ir", "staging.tahamohamadi.ir"):
+        if _domain not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_domain)
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     raise ImproperlyConfigured("DJANGO_SECRET_KEY environment variable is required")

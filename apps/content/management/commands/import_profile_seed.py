@@ -89,11 +89,14 @@ class Command(BaseCommand):
                 if (marker or existing) and content_id not in selected:
                     self.stdout.write(f"{content_id}: preserve profile and all children")
                     continue
-                profile, _created = (existing, False) if existing else Profile.objects.get_or_create(
-                    locale=locale,
-                    slug="about",
-                    defaults={"title": DEFAULT_TITLES[locale]},
-                )
+                if existing:
+                    profile, _created = existing, False
+                else:
+                    profile, _created = Profile.objects.get_or_create(
+                        locale=locale,
+                        slug="about",
+                        defaults={"title": DEFAULT_TITLES[locale]},
+                    )
                 profile.translation_key = translation_key
                 profile.title = DEFAULT_TITLES[locale]
                 profile.body = locale_payload.get("longBio") or locale_payload.get("shortBio", "")
@@ -112,9 +115,13 @@ class Command(BaseCommand):
                 self._replace_children(profile, locale_payload)
                 ContentSeedRecord.objects.update_or_create(
                     content_id=content_id,
-                    defaults={"content_type": "profile", "locale": locale,
-                              "mapped_model_label": "content.Profile", "mapped_object_id": profile.pk,
-                              "payload": locale_payload},
+                    defaults={
+                        "content_type": "profile",
+                        "locale": locale,
+                        "mapped_model_label": "content.Profile",
+                        "mapped_object_id": profile.pk,
+                        "payload": locale_payload,
+                    },
                 )
                 action = "create" if _created else "overwrite"
                 self.stdout.write(

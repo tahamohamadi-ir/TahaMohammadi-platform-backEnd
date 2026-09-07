@@ -21,8 +21,12 @@ def test_managed_copy_is_published_as_an_isolated_locale_snapshot(admin_client):
     base = "/api/v1/admin/site/en"
     first = admin_client.get(base).json()
     response = admin_client.put(
-        base, data=json.dumps({"contentCopy": {"home.intro": "Owner introduction", "books.summary": "Selected books"}}),
-        content_type="application/json", HTTP_IF_MATCH=first["updatedAt"],
+        base,
+        data=json.dumps(
+            {"contentCopy": {"home.intro": "Owner introduction", "books.summary": "Selected books"}}
+        ),
+        content_type="application/json",
+        HTTP_IF_MATCH=first["updatedAt"],
     )
     assert response.status_code == 200
     assert response.json()["contentCopy"]["home.intro"] == "Owner introduction"
@@ -41,13 +45,21 @@ def test_managed_copy_is_published_as_an_isolated_locale_snapshot(admin_client):
     assert Client().get("/api/v1/site/en").json()["contentCopy"] == {}
 
 
-@pytest.mark.parametrize("copy", [{"bad key": "x"}, {"home.intro": ["not text"]}, {"home.intro": "x" * 10001}])
+@pytest.mark.parametrize(
+    "copy",
+    [{"bad key": "x"}, {"home.intro": ["not text"]}, {"home.intro": "x" * 10001}],
+)
 def test_managed_copy_rejects_invalid_values_without_partial_update(admin_client, copy):
     import json
 
     base = "/api/v1/admin/site/en"
     before = admin_client.get(base).json()
-    response = admin_client.put(base, data=json.dumps({"brandName": "must not save", "contentCopy": copy}), content_type="application/json", HTTP_IF_MATCH=before["updatedAt"])
+    response = admin_client.put(
+        base,
+        data=json.dumps({"brandName": "must not save", "contentCopy": copy}),
+        content_type="application/json",
+        HTTP_IF_MATCH=before["updatedAt"],
+    )
     assert response.status_code == 400
     assert admin_client.get(base).json()["brandName"] == before["brandName"]
 

@@ -212,30 +212,45 @@ def _ensure_profile(locale: str) -> Profile:
     return profile
 
 
-def apply_seed_settings(settings_path: Path, *, overwrite: bool = False) -> SiteSettings:
+def apply_seed_settings(
+    settings_path: Path,
+    *,
+    overwrite: bool = False,
+    existing_before_import: bool | None = None,
+) -> SiteSettings:
     """Apply supplement defaults where SiteSettings has matching fields.
 
     The raw policy payload is also persisted (BACKEND-211 / ADMIN-281) so the
     site settings admin can label seed-managed surfaces instead of guessing.
     """
     settings_row, created = SiteSettings.objects.get_or_create(site_key="default")
-    if not created and not overwrite:
-        return settings_row
     if not settings_path.exists():
         return settings_row
 
     payload = load_json(settings_path)
+    prior_policy = settings_row.seed_policy
     settings_row.seed_policy = payload
-    if not payload.get("show_phone", False):
-        settings_row.contact_phone = ""
-        settings_row.contact_phone_intl = ""
-    if not payload.get("show_public_city_country", False):
-        settings_row.contact_location = ""
-    if not payload.get("public_cv_download", False):
-        settings_row.current_cv_media = None
-    if not payload.get("public_resume_download", False):
-        settings_row.current_resume_media = None
-    settings_row.contact_form_enabled = not payload.get("contact_form_only", False)
+    settings_is_customized = (
+        settings_row.brand_name != "Taha Mohammadi"
+        or (settings_row.contact_phone and settings_row.contact_phone != "+98 910 235 5374")
+        or prior_policy is not None
+    )
+    if existing_before_import is None:
+        should_apply_defaults = True
+    else:
+        should_apply_defaults = overwrite or not settings_is_customized
+
+    if should_apply_defaults:
+        if not payload.get("show_phone", False):
+            settings_row.contact_phone = ""
+            settings_row.contact_phone_intl = ""
+        if not payload.get("show_public_city_country", False):
+            settings_row.contact_location = ""
+        if not payload.get("public_cv_download", False):
+            settings_row.current_cv_media = None
+        if not payload.get("public_resume_download", False):
+            settings_row.current_resume_media = None
+        settings_row.contact_form_enabled = not payload.get("contact_form_only", False)
     settings_row.save()
     return settings_row
 
@@ -303,7 +318,9 @@ def map_typed_model(
         stats.typed_skipped += 1
 
 
-def _map_profile_identity(record: dict[str, Any], context: MappingContext) -> tuple[str, int | None]:
+def _map_profile_identity(
+    record: dict[str, Any], context: MappingContext
+) -> tuple[str, int | None]:
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
@@ -349,7 +366,9 @@ def _map_profile_bio(record: dict[str, Any], context: MappingContext) -> tuple[s
     return "content.Profile", profile.pk
 
 
-def _map_research_statement(record: dict[str, Any], context: MappingContext) -> tuple[str, int | None]:
+def _map_research_statement(
+    record: dict[str, Any], context: MappingContext
+) -> tuple[str, int | None]:
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
@@ -593,7 +612,11 @@ def import_content_seed_package(
     settings_path = settings_path or default_settings_path()
     settings_existed = SiteSettings.objects.filter(site_key="default").exists()
     profiles_existed = set(Profile.objects.values_list("pk", flat=True))
-    apply_seed_settings(settings_path, overwrite="site.settings" in overwrite_ids)
+    apply_seed_settings(
+        settings_path,
+        overwrite="site.settings" in overwrite_ids,
+        existing_before_import=settings_existed,
+    )
     settings_action = "preserve" if settings_existed else "create"
     if "site.settings" in overwrite_ids:
         settings_action = "overwrite policy/contact visibility/download settings"

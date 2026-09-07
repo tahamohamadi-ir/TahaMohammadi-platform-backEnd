@@ -1244,10 +1244,28 @@ def localized_site_settings_put(
 
         if payload.contentCopy is not None:
             if len(payload.contentCopy) > 1500:
-                raise AdminError(400, "VALIDATION", "Too many copy entries.", fields={"contentCopy": ["Maximum 1500 entries."]})
+                raise AdminError(
+                    400,
+                    "VALIDATION",
+                    "Too many copy entries.",
+                    fields={"contentCopy": ["Maximum 1500 entries."]},
+                )
             for key, value in payload.contentCopy.items():
-                if not re.fullmatch(r"[a-z][a-zA-Z0-9._-]{0,119}", key) or not isinstance(value, str) or len(value) > 10000:
-                    raise AdminError(400, "VALIDATION", "Invalid copy entry.", fields={f"contentCopy.{key}": ["Use a stable key and text up to 10000 characters."]})
+                if (
+                    not re.fullmatch(r"[a-z][a-zA-Z0-9._-]{0,119}", key)
+                    or not isinstance(value, str)
+                    or len(value) > 10000
+                ):
+                    raise AdminError(
+                        400,
+                        "VALIDATION",
+                        "Invalid copy entry.",
+                        fields={
+                            f"contentCopy.{key}": [
+                                "Use a stable key and text up to 10000 characters."
+                            ]
+                        },
+                    )
             item.managed_copy = dict(payload.contentCopy)
 
         item.save()
