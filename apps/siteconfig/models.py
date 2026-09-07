@@ -100,6 +100,7 @@ class LocalizedSiteSettings(models.Model):
         choices=[("fa", "Persian"), ("en", "English")],
     )
     revision = models.CharField(max_length=64, blank=True, default="")
+    managed_copy = models.JSONField(default=dict, blank=True)
     brand_name = models.CharField(max_length=200, blank=True, default="")
     tagline = models.CharField(max_length=500, blank=True, default="")
     footer_text = models.TextField(blank=True, default="")

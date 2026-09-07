@@ -2426,6 +2426,13 @@
             "title": "Brandname",
             "type": "string"
           },
+          "contentCopy": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Contentcopy",
+            "type": "object"
+          },
           "footerText": {
             "title": "Footertext",
             "type": "string"
@@ -2519,6 +2526,18 @@
               }
             ],
             "title": "Brandname"
+          },
+          "contentCopy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contentcopy"
           },
           "footerText": {
             "anyOf": [

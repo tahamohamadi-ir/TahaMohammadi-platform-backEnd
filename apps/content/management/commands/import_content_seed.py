@@ -17,10 +17,17 @@ from apps.content.services.content_seed_import import (
 class Command(BaseCommand):
     help = (
         "Import owner content seed v1.1 records from content-records.v1.1-seed.json "
-        "as draft/not-public. Re-runs upsert by stable content_id."
+        "as draft/not-public. Re-runs preserve existing content and owner edits."
     )
 
     def add_arguments(self, parser) -> None:
+        parser.add_argument(
+            "--overwrite-id", action="append", default=[],
+            help="Refresh only this seed content_id (repeatable); site.settings selects supplement. "
+                 "Existing publication state is always preserved.",
+        )
+        parser.add_argument("--dry-run", action="store_true",
+                            help="Report actions, then roll back all database changes.")
         parser.add_argument(
             "--file",
             dest="seed_file",
@@ -50,16 +57,26 @@ class Command(BaseCommand):
                 self.style.WARNING(f"Seed settings file not found (skipping): {settings_path}")
             )
 
-        stats = import_content_seed_package(
-            seed_path=seed_path,
-            settings_path=settings_path if settings_path.exists() else None,
-        )
+        try:
+            stats = import_content_seed_package(
+                seed_path=seed_path,
+                settings_path=settings_path,
+                overwrite_ids=set(options["overwrite_id"]),
+                dry_run=options["dry_run"],
+            )
+        except ValueError as exc:
+            raise CommandError(str(exc)) from exc
+
+        if options["dry_run"]:
+            self.stdout.write("Dry run: all database changes rolled back.")
+        for change in stats.changes:
+            self.stdout.write(change)
 
         self.stdout.write(
             self.style.SUCCESS(
                 "Imported content seed: "
                 f"records={stats.records_upserted} "
-                f"(created={stats.records_created}), "
+                f"(created={stats.records_created}, preserved={stats.records_preserved}), "
                 f"typed_mapped={stats.typed_mapped}, "
                 f"typed_skipped={stats.typed_skipped}, "
                 f"admin_only={stats.skipped_admin_only}"

@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.content.models import (
+    ContentSeedRecord,
     LifecycleStatus,
     Locale,
     Profile,
@@ -43,6 +44,12 @@ class Command(BaseCommand):
     help = "Import the CMS About/Profile seed artifact derived from apps/web/src/data/profile*.ts."
 
     def add_arguments(self, parser):
+        parser.add_argument("--overwrite-id", action="append", default=[],
+                            choices=["profile.en", "profile.fa"],
+                            help="Refresh the selected profile, replacing its seed child lists; "
+                                 "publication state and revision are preserved.")
+        parser.add_argument("--dry-run", action="store_true",
+                            help="Report changes and roll back the import transaction.")
         parser.add_argument(
             "--path",
             default=str(DEFAULT_SEED_PATH),
@@ -64,13 +71,25 @@ class Command(BaseCommand):
             raise CommandError("Seed JSON must contain a top-level 'profiles' object.")
 
         translation_key = uuid.UUID(payload.get("translationKey", str(uuid.uuid4())))
+        selected = set(options["overwrite_id"])
+        if selected - {"profile.en", "profile.fa"}:
+            raise CommandError("Overwrite IDs must be profile.en or profile.fa.")
         imported_locales: list[str] = []
         with transaction.atomic():
             for locale in (Locale.EN, Locale.FA):
                 locale_payload = profiles.get(locale)
                 if not isinstance(locale_payload, dict):
                     raise CommandError(f"Missing locale payload for '{locale}'.")
-                profile, _created = Profile.objects.get_or_create(
+                content_id = f"profile.{locale}"
+                marker = ContentSeedRecord.objects.filter(content_id=content_id).first()
+                existing = (Profile.objects.filter(pk=marker.mapped_object_id).first()
+                            if marker and marker.mapped_model_label == "content.Profile" else None)
+                if existing is None:
+                    existing = Profile.objects.filter(locale=locale, slug="about").first()
+                if (marker or existing) and content_id not in selected:
+                    self.stdout.write(f"{content_id}: preserve profile and all children")
+                    continue
+                profile, _created = (existing, False) if existing else Profile.objects.get_or_create(
                     locale=locale,
                     slug="about",
                     defaults={"title": DEFAULT_TITLES[locale]},
@@ -83,14 +102,31 @@ class Command(BaseCommand):
                 profile.short_bio = locale_payload.get("shortBio", "")
                 profile.long_bio = locale_payload.get("longBio", "")
                 profile.availability = locale_payload.get("availability", "")
-                profile.status = LifecycleStatus.PUBLISHED
-                profile.published_at = profile.published_at or timezone.now()
-                profile.revision = 1
+                if _created:
+                    profile.status = LifecycleStatus.PUBLISHED
+                    profile.published_at = timezone.now()
+                    profile.revision = 1
                 profile.full_clean()
                 profile.save()
 
                 self._replace_children(profile, locale_payload)
+                ContentSeedRecord.objects.update_or_create(
+                    content_id=content_id,
+                    defaults={"content_type": "profile", "locale": locale,
+                              "mapped_model_label": "content.Profile", "mapped_object_id": profile.pk,
+                              "payload": locale_payload},
+                )
+                action = "create" if _created else "overwrite"
+                self.stdout.write(
+                    f"{content_id}: {action} fields=translation_key,title,body,seo_title,"
+                    "seo_description,short_bio,long_bio,availability; "
+                    "replace children=skills,experience,education,publications,researchProjects,"
+                    "certificates,socials"
+                )
                 imported_locales.append(locale)
+            if options["dry_run"]:
+                transaction.set_rollback(True)
+                self.stdout.write("Dry run: all database changes rolled back.")
 
         self.stdout.write(
             self.style.SUCCESS(
