@@ -21,6 +21,7 @@ from apps.content.data.site_content import (
 )
 from apps.content.models import (
     Article,
+    ContentSeedRecord,
     Landing,
     LifecycleStatus,
     Profile,
@@ -57,6 +58,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
+            "--overwrite-id",
+            action="append",
+            default=[],
+            help="Refresh only this reported site content ID (repeatable).",
+        )
+        parser.add_argument(
             "--force",
             action="store_true",
             help="Update existing rows for the canonical slugs instead of skipping them.",
@@ -72,6 +79,9 @@ class Command(BaseCommand):
         dry_run: bool = options["dry_run"]
         published_at = timezone.now() - timedelta(days=1)
         counts = SeedCounts()
+        self.overwrite_ids = set(options["overwrite_id"])
+        self.seen_ids = set()
+        self.written_objects = set()
 
         if dry_run:
             self.stdout.write("Dry run — no database writes.")
@@ -92,6 +102,9 @@ class Command(BaseCommand):
             )
             self._seed_articles(force, dry_run, published_at, counts)
 
+            unknown = self.overwrite_ids - self.seen_ids
+            if unknown:
+                raise CommandError(f"Unknown overwrite IDs: {', '.join(sorted(unknown))}")
             if dry_run:
                 transaction.set_rollback(True)
 
@@ -115,23 +128,59 @@ class Command(BaseCommand):
         kind: str,
         counts: SeedCounts,
     ):
-        existing = model.objects.filter(**lookup).first()
-        if existing and not force:
+        content_id = f"site.{kind}.{lookup['locale']}.{lookup['slug']}"
+        self.seen_ids.add(content_id)
+        marker = ContentSeedRecord.objects.filter(content_id=content_id).first()
+        existing = (
+            model.objects.filter(pk=marker.mapped_object_id).first()
+            if marker and marker.mapped_model_label == model._meta.label
+            else None
+        )
+        if existing is None and marker is None:
+            existing = model.objects.filter(**lookup).first()
+        overwrite = force or content_id in self.overwrite_ids
+        if (marker or existing) and not overwrite:
             counts.bump(kind, created=False, skipped=True)
+            self.stdout.write(f"{content_id}: preserve")
+            # Adopt existing canonical rows once so later owner slug edits remain safe.
+            if existing is not None and marker is None and not dry_run:
+                self._record_mapping(content_id, kind, lookup, existing)
             return existing
 
+        defaults = dict(defaults)
+        if existing is not None:
+            defaults.pop("status", None)
+            defaults.pop("published_at", None)
+        action = "create" if existing is None else "overwrite"
+        self.stdout.write(f"{content_id}: {action} fields={','.join(sorted(defaults))}")
         if dry_run:
-            action = "create" if existing is None else "update"
-            self.stdout.write(f"[dry-run] {kind} {action} {lookup}")
             counts.bump(kind, created=existing is None)
             return existing
 
-        obj, created = model.objects.update_or_create(
-            defaults=defaults,
-            **lookup,
-        )
+        if existing is None:
+            obj, created = model.objects.get_or_create(defaults=defaults, **lookup)
+        else:
+            obj, created = existing, False
+            for key, value in defaults.items():
+                setattr(obj, key, value)
+            obj.save(update_fields=[*defaults, "updated_at"])
+        self._record_mapping(content_id, kind, lookup, obj)
+        self.written_objects.add((kind, obj.pk))
         counts.bump(kind, created=created)
         return obj
+
+    def _record_mapping(self, content_id, kind, lookup, obj):
+        ContentSeedRecord.objects.update_or_create(
+            content_id=content_id,
+            defaults={
+                "content_type": kind,
+                "locale": lookup["locale"],
+                "slug": lookup["slug"],
+                "mapped_model_label": obj._meta.label,
+                "mapped_object_id": obj.pk,
+                "payload": {},
+            },
+        )
 
     def _published_defaults(self, published_at) -> dict[str, Any]:
         return {
@@ -175,9 +224,7 @@ class Command(BaseCommand):
                 counts=counts,
             )
 
-    def _seed_research_statements(
-        self, force, dry_run, published_at, counts: SeedCounts
-    ) -> None:
+    def _seed_research_statements(self, force, dry_run, published_at, counts: SeedCounts) -> None:
         for locale_code, payload in RESEARCH_STATEMENTS.items():
             self._upsert(
                 ResearchStatement,
@@ -272,28 +319,21 @@ class Command(BaseCommand):
                     "show_on_projects": payload.get("show_on_projects", True),
                 }
 
-                if dry_run:
-                    self._upsert(
-                        Project,
-                        lookup=lookup,
-                        defaults=defaults,
-                        force=force,
-                        dry_run=True,
-                        kind="project",
-                        counts=counts,
-                    )
-                    continue
-
-                existing = Project.objects.filter(**lookup).first()
-                if existing and not force:
-                    counts.bump("project", created=False, skipped=True)
-                    continue
-
-                project, created = Project.objects.update_or_create(
+                project = self._upsert(
+                    Project,
+                    lookup=lookup,
                     defaults=defaults,
-                    **lookup,
+                    force=force,
+                    dry_run=dry_run,
+                    kind="project",
+                    counts=counts,
                 )
-                counts.bump("project", created=created)
+                if (
+                    dry_run
+                    or project is None
+                    or ("project", project.pk) not in self.written_objects
+                ):
+                    continue
 
                 topic_ids = [
                     topic_map[(locale_code, slug)].pk
@@ -306,26 +346,9 @@ class Command(BaseCommand):
                     if (locale_code, slug) in publication_map
                 ]
                 if topic_ids:
-                    project.topics.set(
-                        ResearchTopic.objects.filter(pk__in=topic_ids)
-                    )
+                    project.topics.set(ResearchTopic.objects.filter(pk__in=topic_ids))
                 if publication_ids:
-                    project.publications.set(
-                        Publication.objects.filter(pk__in=publication_ids)
-                    )
-
-        if not dry_run and not force:
-            missing_topics = sum(
-                1
-                for locale_code, rows in PROJECTS.items()
-                for payload in rows
-                for slug in payload["topic_slugs"]
-                if (locale_code, slug) not in topic_map
-            )
-            if missing_topics:
-                raise CommandError(
-                    "Some project topic links were missing after seed; re-run with --force."
-                )
+                    project.publications.set(Publication.objects.filter(pk__in=publication_ids))
 
     def _seed_articles(self, force, dry_run, published_at, counts: SeedCounts) -> None:
         for locale_code, rows in ARTICLES.items():

@@ -15,6 +15,7 @@ from apps.content.models import (
     ProfileSocialLink,
     Project,
 )
+from apps.content.services.content_seed_import import apply_seed_settings
 from apps.siteconfig.models import SiteSettings
 
 pytestmark = pytest.mark.django_db
@@ -22,14 +23,31 @@ pytestmark = pytest.mark.django_db
 
 def package(tmp_path):
     records = [
-        {"content_id": "profile.identity.en", "content_type": "profile_identity",
-         "locale": "en", "title": "Seed identity", "data": {"name": "Seed name"}},
-        {"content_id": "profile.bio.en", "content_type": "profile_bio", "locale": "en",
-         "title": "Seed bio", "body_markdown": "Seed body"},
-        {"content_id": "availability.en", "content_type": "availability", "locale": "en",
-         "body_markdown": "Seed availability"},
-        {"content_id": "contact.github", "content_type": "contact_link",
-         "data": {"url": "https://github.com/seed-fixture"}},
+        {
+            "content_id": "profile.identity.en",
+            "content_type": "profile_identity",
+            "locale": "en",
+            "title": "Seed identity",
+            "data": {"name": "Seed name"},
+        },
+        {
+            "content_id": "profile.bio.en",
+            "content_type": "profile_bio",
+            "locale": "en",
+            "title": "Seed bio",
+            "body_markdown": "Seed body",
+        },
+        {
+            "content_id": "availability.en",
+            "content_type": "availability",
+            "locale": "en",
+            "body_markdown": "Seed availability",
+        },
+        {
+            "content_id": "contact.github",
+            "content_type": "contact_link",
+            "data": {"url": "https://github.com/seed-fixture"},
+        },
     ]
     path = tmp_path / "seed.json"
     path.write_text(json.dumps({"records": records}), encoding="utf-8")
@@ -44,8 +62,11 @@ def test_content_rerun_preserves_edited_identity_profile_relations_and_publicati
     profile = Profile.objects.get(locale="en")
     stamp = timezone.now()
     Profile.objects.filter(pk=profile.pk).update(
-        slug="owner-about", body="Owner body", availability="Owner availability",
-        status=LifecycleStatus.PUBLISHED, published_at=stamp,
+        slug="owner-about",
+        body="Owner body",
+        availability="Owner availability",
+        status=LifecycleStatus.PUBLISHED,
+        published_at=stamp,
     )
     profile.social_links.all().delete()
     owner_link = ProfileSocialLink.objects.create(
@@ -90,8 +111,9 @@ def test_selective_overwrite_has_dry_run_report_and_preserves_other_rows(tmp_pat
     Profile.objects.filter(pk=profile.pk).update(body="Owner body", status=LifecycleStatus.ARCHIVED)
     Landing.objects.update(title="Owner home")
     report = StringIO()
-    call_command("import_content_seed", **args, overwrite_id=["profile.bio.en"],
-                 dry_run=True, stdout=report)
+    call_command(
+        "import_content_seed", **args, overwrite_id=["profile.bio.en"], dry_run=True, stdout=report
+    )
     profile.refresh_from_db()
     assert profile.body == "Owner body"
     assert "profile.bio.en" in report.getvalue()
@@ -108,14 +130,18 @@ def test_profile_seed_preserves_existing_profile_and_child_ids(tmp_path):
     path.write_text(json.dumps({"profiles": {"en": {}, "fa": {}}}), encoding="utf-8")
     call_command("import_profile_seed", path=str(path))
     profile = Profile.objects.get(locale="en")
-    Profile.objects.filter(pk=profile.pk).update(body="Owner body", revision=9,
-                                               status=LifecycleStatus.ARCHIVED)
-    child = ProfileSocialLink.objects.create(profile=profile, platform="Owner",
-                                             url="https://example.org/owner")
+    Profile.objects.filter(pk=profile.pk).update(
+        body="Owner body", revision=9, status=LifecycleStatus.ARCHIVED
+    )
+    child = ProfileSocialLink.objects.create(
+        profile=profile, platform="Owner", url="https://example.org/owner"
+    )
     call_command("import_profile_seed", path=str(path))
     profile.refresh_from_db()
     assert (profile.body, profile.revision, profile.status) == (
-        "Owner body", 9, LifecycleStatus.ARCHIVED,
+        "Owner body",
+        9,
+        LifecycleStatus.ARCHIVED,
     )
     assert list(profile.social_links.values_list("pk", flat=True)) == [child.pk]
 
@@ -134,3 +160,44 @@ def test_site_seed_rerun_preserves_owner_removed_relations_and_status():
     assert project.status == LifecycleStatus.DRAFT
     assert not project.topics.exists()
     assert not project.publications.exists()
+
+
+def test_site_seed_preserves_renamed_slugs():
+    call_command("seed_site_content")
+    landing = Landing.objects.get(locale="en", slug="home")
+    project = Project.objects.filter(locale="en").first()
+    Landing.objects.filter(pk=landing.pk).update(slug="owner-home")
+    Project.objects.filter(pk=project.pk).update(slug="owner-project")
+    counts = (Landing.objects.count(), Project.objects.count())
+    call_command("seed_site_content")
+    assert (Landing.objects.count(), Project.objects.count()) == counts
+    landing.refresh_from_db()
+    project.refresh_from_db()
+    assert (landing.slug, project.slug) == ("owner-home", "owner-project")
+
+
+def test_selective_availability_refresh_uses_renamed_profile(tmp_path):
+    args = package(tmp_path)
+    call_command("import_content_seed", **args)
+    profile = Profile.objects.get(locale="en")
+    Profile.objects.filter(pk=profile.pk).update(slug="owner-about", availability="Owner")
+    call_command("import_content_seed", **args, overwrite_id=["availability.en"])
+    profile.refresh_from_db()
+    assert Profile.objects.filter(locale="en").count() == 1
+    assert profile.availability == "Seed availability"
+
+
+def test_seed_settings_preserves_existing_values_without_guessing_owner_intent(tmp_path):
+    row = SiteSettings.get_singleton()
+    row.brand_name = "Taha Mohammadi"
+    row.contact_phone = ""
+    row.contact_location = "Owner place"
+    row.seed_policy = {"owner-policy": True}
+    row.save()
+    args = package(tmp_path)
+    from pathlib import Path
+
+    apply_seed_settings(Path(args["settings_file"]))
+    row.refresh_from_db()
+    assert row.contact_location == "Owner place"
+    assert row.seed_policy == {"owner-policy": True}

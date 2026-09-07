@@ -193,13 +193,29 @@ class MappingContext:
                 setattr(existing, key, value)
                 changed.append(key)
         if changed:
-            existing.save(update_fields=[*changed, "updated_at"]
-                          if hasattr(existing, "updated_at") else changed)
+            existing.save(
+                update_fields=[*changed, "updated_at"]
+                if hasattr(existing, "updated_at")
+                else changed
+            )
             self.changes.append(f"{model._meta.label} update fields={','.join(sorted(changed))}")
         return existing, False
 
 
-def _ensure_profile(locale: str) -> Profile:
+def _ensure_profile(locale: str, context: MappingContext) -> Profile:
+    # Resolve stable seed identity before the original slug, which the owner can edit.
+    if context.seed_row and context.seed_row.mapped_model_label == "content.Profile":
+        mapped = Profile.objects.filter(pk=context.seed_row.mapped_object_id, locale=locale).first()
+        if mapped is not None:
+            return mapped
+    markers = ContentSeedRecord.objects.filter(
+        locale=locale,
+        mapped_model_label="content.Profile",
+        content_type__in=["profile_bio", "profile"],
+    ).values_list("mapped_object_id", flat=True)
+    mapped = Profile.objects.filter(pk__in=markers).first()
+    if mapped is not None:
+        return mapped
     # Child imports must not reset their parent's publication state.
     profile, _ = Profile.objects.get_or_create(
         locale=locale,
@@ -216,7 +232,6 @@ def apply_seed_settings(
     settings_path: Path,
     *,
     overwrite: bool = False,
-    existing_before_import: bool | None = None,
 ) -> SiteSettings:
     """Apply supplement defaults where SiteSettings has matching fields.
 
@@ -227,30 +242,20 @@ def apply_seed_settings(
     if not settings_path.exists():
         return settings_row
 
+    if not created and not overwrite:
+        return settings_row
     payload = load_json(settings_path)
-    prior_policy = settings_row.seed_policy
     settings_row.seed_policy = payload
-    settings_is_customized = (
-        settings_row.brand_name != "Taha Mohammadi"
-        or (settings_row.contact_phone and settings_row.contact_phone != "+98 910 235 5374")
-        or prior_policy is not None
-    )
-    if existing_before_import is None:
-        should_apply_defaults = True
-    else:
-        should_apply_defaults = overwrite or not settings_is_customized
-
-    if should_apply_defaults:
-        if not payload.get("show_phone", False):
-            settings_row.contact_phone = ""
-            settings_row.contact_phone_intl = ""
-        if not payload.get("show_public_city_country", False):
-            settings_row.contact_location = ""
-        if not payload.get("public_cv_download", False):
-            settings_row.current_cv_media = None
-        if not payload.get("public_resume_download", False):
-            settings_row.current_resume_media = None
-        settings_row.contact_form_enabled = not payload.get("contact_form_only", False)
+    if not payload.get("show_phone", False):
+        settings_row.contact_phone = ""
+        settings_row.contact_phone_intl = ""
+    if not payload.get("show_public_city_country", False):
+        settings_row.contact_location = ""
+    if not payload.get("public_cv_download", False):
+        settings_row.current_cv_media = None
+    if not payload.get("public_resume_download", False):
+        settings_row.current_resume_media = None
+    settings_row.contact_form_enabled = not payload.get("contact_form_only", False)
     settings_row.save()
     return settings_row
 
@@ -265,8 +270,11 @@ def upsert_seed_record(
     status = record.get("status") or {}
     content_id = record["content_id"]
     content_type = record["content_type"]
-    save_record = (ContentSeedRecord.objects.update_or_create if overwrite
-                   else ContentSeedRecord.objects.get_or_create)
+    save_record = (
+        ContentSeedRecord.objects.update_or_create
+        if overwrite
+        else ContentSeedRecord.objects.get_or_create
+    )
     obj, created = save_record(
         content_id=content_id,
         defaults={
@@ -334,7 +342,8 @@ def _map_profile_identity(
         settings_row.save()
         context.changes.append("siteconfig.SiteSettings identity fields=brand_name,tagline")
 
-    landing, _ = context.upsert(Landing,
+    landing, _ = context.upsert(
+        Landing,
         locale=locale,
         slug="home",
         defaults={
@@ -351,7 +360,8 @@ def _map_profile_bio(record: dict[str, Any], context: MappingContext) -> tuple[s
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    profile, _ = context.upsert(Profile,
+    profile, _ = context.upsert(
+        Profile,
         locale=locale,
         slug="about",
         defaults={
@@ -372,7 +382,8 @@ def _map_research_statement(
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    obj, _ = context.upsert(ResearchStatement,
+    obj, _ = context.upsert(
+        ResearchStatement,
         locale=locale,
         slug=record.get("slug") or "research-statement",
         defaults={
@@ -388,7 +399,8 @@ def _map_research_focus(record: dict[str, Any], context: MappingContext) -> tupl
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    obj, _ = context.upsert(ResearchTopic,
+    obj, _ = context.upsert(
+        ResearchTopic,
         locale=locale,
         slug=record.get("slug") or "",
         defaults={
@@ -406,7 +418,8 @@ def _map_project(record: dict[str, Any], context: MappingContext) -> tuple[str, 
     if locale is None:
         return "", None
     code_url = _repository_url(record)
-    obj, _ = context.upsert(Project,
+    obj, _ = context.upsert(
+        Project,
         locale=locale,
         slug=record.get("slug") or "",
         defaults={
@@ -426,7 +439,8 @@ def _map_writing(record: dict[str, Any], context: MappingContext) -> tuple[str, 
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    obj, _ = context.upsert(Article,
+    obj, _ = context.upsert(
+        Article,
         locale=locale,
         slug=record.get("slug") or "",
         defaults={
@@ -444,7 +458,7 @@ def _map_education(record: dict[str, Any], context: MappingContext) -> tuple[str
     if locale is None:
         return "", None
     data = record.get("data") or {}
-    profile = _ensure_profile(locale)
+    profile = _ensure_profile(locale, context)
     defaults = {
         "institution": data.get("institution") or "",
         "degree": record.get("title") or "",
@@ -456,7 +470,8 @@ def _map_education(record: dict[str, Any], context: MappingContext) -> tuple[str
         "detail_body": record.get("body_markdown") or "",
         "ordering": record.get("sort_order") or 0,
     }
-    obj, _ = context.upsert(ProfileEducation,
+    obj, _ = context.upsert(
+        ProfileEducation,
         profile=profile,
         slug=record.get("slug") or "",
         defaults=defaults,
@@ -469,8 +484,9 @@ def _map_experience(record: dict[str, Any], context: MappingContext) -> tuple[st
     if locale is None:
         return "", None
     role, organization = _split_role_organization(record.get("title") or "")
-    profile = _ensure_profile(locale)
-    obj, _ = context.upsert(ProfileExperience,
+    profile = _ensure_profile(locale, context)
+    obj, _ = context.upsert(
+        ProfileExperience,
         profile=profile,
         slug=record.get("slug") or "",
         defaults={
@@ -490,9 +506,10 @@ def _map_credential(record: dict[str, Any], context: MappingContext) -> tuple[st
     if locale is None:
         return "", None
     data = record.get("data") or {}
-    profile = _ensure_profile(locale)
+    profile = _ensure_profile(locale, context)
     detail = data.get("recorded_completion") or record.get("excerpt") or ""
-    obj, _ = context.upsert(ProfileCertificate,
+    obj, _ = context.upsert(
+        ProfileCertificate,
         profile=profile,
         slug=record.get("slug") or "",
         defaults={
@@ -509,7 +526,7 @@ def _map_availability(record: dict[str, Any], context: MappingContext) -> tuple[
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    profile = _ensure_profile(locale)
+    profile = _ensure_profile(locale, context)
     if context.overwrite or profile.pk not in context.existing_profile_ids:
         profile.availability = record.get("body_markdown") or record.get("excerpt") or ""
         profile.save(update_fields=["availability"])
@@ -531,8 +548,9 @@ def _map_contact_link(record: dict[str, Any], context: MappingContext) -> tuple[
         settings_row.contact_orcid = url
     elif content_id == "contact.github":
         for locale in (Locale.EN, Locale.FA):
-            profile = _ensure_profile(locale)
-            context.upsert(ProfileSocialLink,
+            profile = _ensure_profile(locale, context)
+            context.upsert(
+                ProfileSocialLink,
                 profile=profile,
                 platform="GitHub",
                 defaults={"url": url, "ordering": 0},
@@ -553,7 +571,8 @@ def _map_route_copy(record: dict[str, Any], context: MappingContext) -> tuple[st
     locale = _locale_or_none(record)
     if locale is None:
         return "", None
-    obj, _ = context.upsert(Landing,
+    obj, _ = context.upsert(
+        Landing,
         locale=locale,
         slug=record.get("slug") or "",
         defaults={
@@ -615,7 +634,6 @@ def import_content_seed_package(
     apply_seed_settings(
         settings_path,
         overwrite="site.settings" in overwrite_ids,
-        existing_before_import=settings_existed,
     )
     settings_action = "preserve" if settings_existed else "create"
     if "site.settings" in overwrite_ids:
@@ -626,8 +644,9 @@ def import_content_seed_package(
         content_id = record["content_id"]
         overwrite = content_id in overwrite_ids
         existed = ContentSeedRecord.objects.filter(content_id=content_id).exists()
-        seed_row = upsert_seed_record(record, package_version=package_version,
-                                      stats=stats, overwrite=overwrite)
+        seed_row = upsert_seed_record(
+            record, package_version=package_version, stats=stats, overwrite=overwrite
+        )
         if existed and not overwrite:
             # A mapped record may have been renamed or removed by its owner.
             # Never resurrect it or its deleted children from the old seed.
@@ -642,8 +661,10 @@ def import_content_seed_package(
         )
         map_typed_model(record, seed_row, stats, context)
         action = "overwrite" if existed else "create metadata"
-        stats.changes.append(f"{content_id}: {action}; " + ("; ".join(context.changes)
-                             or "typed content preserved/unmapped"))
+        stats.changes.append(
+            f"{content_id}: {action}; "
+            + ("; ".join(context.changes) or "typed content preserved/unmapped")
+        )
     if dry_run:
         transaction.set_rollback(True)
     return stats
