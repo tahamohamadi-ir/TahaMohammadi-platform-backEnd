@@ -560,24 +560,49 @@ class TestProductLocalizedSettings:
 @pytest.fixture
 def featured_article():
     from django.utils import timezone
+
     from apps.content.models import Article
-    return Article.objects.create(locale="en", slug="synthetic-featured", title="Synthetic featured", status="published", published_at=timezone.now())
+    return Article.objects.create(
+        locale="en",
+        slug="synthetic-featured",
+        title="Synthetic featured",
+        status="published",
+        published_at=timezone.now(),
+    )
 
 
 @pytest.fixture
 def brand_media():
     from apps.media.models import Media
     # Metadata fixture only; no uploaded file or real storage is modified.
-    return Media.objects.bulk_create([Media(file="synthetic-brand.png", title="Synthetic brand", alt_text_en="Synthetic brand mark", mime="image/png", is_active=True)])[0]
+    return Media.objects.bulk_create(
+        [
+            Media(
+                file="synthetic-brand.png",
+                title="Synthetic brand",
+                alt_text_en="Synthetic brand mark",
+                mime="image/png",
+                is_active=True,
+            )
+        ]
+    )[0]
 
 
 def _put_localized(admin_client, payload):
     import json
+
     base = "/api/v1/admin/site/en"
-    return admin_client.put(base, data=json.dumps(payload), content_type="application/json", HTTP_IF_MATCH=admin_client.get(base).json()["updatedAt"])
+    return admin_client.put(
+        base,
+        data=json.dumps(payload),
+        content_type="application/json",
+        HTTP_IF_MATCH=admin_client.get(base).json()["updatedAt"],
+    )
 
 
-def test_featured_and_brand_are_isolated_published_snapshots_with_explicit_clears(admin_client, featured_article, brand_media):
+def test_featured_and_brand_are_isolated_published_snapshots_with_explicit_clears(
+    admin_client, featured_article, brand_media
+):
     refs = [{"family": "article", "id": str(featured_article.pk)}]
     result = _put_localized(admin_client, {"featuredRecords": refs, "brandMediaId": brand_media.pk})
     assert result.status_code == 200
@@ -610,7 +635,9 @@ def test_featured_and_brand_are_isolated_published_snapshots_with_explicit_clear
 ])
 def test_featured_rejects_invalid_refs_atomically(admin_client, refs):
     before = admin_client.get("/api/v1/admin/site/en").json()
-    result = _put_localized(admin_client, {"brandName": "Must not persist", "featuredRecords": refs})
+    result = _put_localized(
+        admin_client, {"brandName": "Must not persist", "featuredRecords": refs}
+    )
     assert result.status_code in (400, 422)
     assert admin_client.get("/api/v1/admin/site/en").json()["brandName"] == before["brandName"]
 
@@ -650,7 +677,9 @@ def test_public_brand_filters_revoked_snapshot_media(admin_client, brand_media, 
     assert Client().get("/api/v1/site/en").json()["brandMedia"] is None
 
 
-def test_brand_requires_existing_active_media_and_draft_ref_stays_private(admin_client, featured_article, brand_media):
+def test_brand_requires_existing_active_media_and_draft_ref_stays_private(
+    admin_client, featured_article, brand_media
+):
     from apps.media.models import Media
     assert _put_localized(admin_client, {"brandMediaId": 999999999}).status_code == 400
     Media.objects.filter(pk=brand_media.pk).update(is_active=False)

@@ -29,7 +29,7 @@ from apps.api.admin_common import (
     _require_admin_otp,
 )
 from apps.api.admin_content import ENTITY_MODELS
-from apps.api.record_resolver import MAX_ID, RESOLVER_FAMILIES, _ID_RE
+from apps.api.record_resolver import _ID_RE, MAX_ID, RESOLVER_FAMILIES
 from apps.content.models import Article, TopicTag
 from apps.media.models import Media
 from apps.rebuild.services import enqueue_publication_job
@@ -1226,7 +1226,11 @@ def localized_site_settings_put(
             ).exclude(file="").exists():
                 raise AdminError(
                     400, "VALIDATION", "Brand media must be an existing active library item.",
-                    fields={"brandMediaId": ["Choose existing active media or clear the selection."]},
+                    fields={
+                        "brandMediaId": [
+                            "Choose existing active media or clear the selection."
+                        ]
+                    },
                 )
             item.brand_media_id = media_id
 
