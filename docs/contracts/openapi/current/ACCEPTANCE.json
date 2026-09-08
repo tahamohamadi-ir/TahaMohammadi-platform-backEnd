@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-08 — localized settings featured-records/brand-media additive schema (PU-03-settings)",
+  "acceptanceAddendum": "Addendum 2026-09-08 — featured-records bound 3→6 for three projects plus three publications (PU-03-settings)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -9,7 +9,7 @@
   "artifacts": {
     "admin-openapi.json": {
       "paths": 57,
-      "sha256": "b529e29a9658822b6804c3d5b0be143692f68ddfa37e3b11d2c7fe6232a0deb5",
+      "sha256": "274407a8fa3ad3b4b78c677bed76cc14871276468a70fb0d8542d0a637b1876b",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {

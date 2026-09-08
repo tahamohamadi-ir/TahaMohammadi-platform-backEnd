@@ -2596,7 +2596,7 @@
                 "items": {
                   "$ref": "#/components/schemas/LocalizedFeaturedRecordOut"
                 },
-                "maxItems": 3,
+                "maxItems": 6,
                 "type": "array"
               },
               {
