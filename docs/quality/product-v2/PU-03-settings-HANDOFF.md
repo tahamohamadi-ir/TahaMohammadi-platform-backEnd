@@ -156,4 +156,24 @@ None (backend API packet).
   `maxItems: 3→6`); public snapshot, path counts (48/57), versions, and the
   inventory are unchanged.
 
+---
+
+## 9. 2026-09-08 — public journey projection (owner-directed)
+
+- New read-only `GET /api/v1/site/{locale}/journey` projecting the
+  live-published `about` profile's `experience_entries`/`education_entries`
+  as `{kind, title, subtitle, period}` milestones in explicit ordering
+  (experience, then education). No new admin surface: entries are managed
+  through the existing profile content API.
+- Publication safety: only the live `public()` about row exposes children.
+  Snapshot fallback is deliberately not applied (it could materialize draft
+  child rows). Draft profile, other locales, and unsupported locales are
+  404; a published profile without entries is 200 with `[]`.
+- Degree and field are comma-joined from real record fields; no copy,
+  dates, or links invented. New tests in
+  `tests/test_product_profile_journey.py` (3/3: shape/order, fail-closed,
+  empty).
+- Contract re-pin: public paths 48→49, inventory 124→125, versions
+  unchanged; admin snapshot untouched by this change.
+
 PU-03-settings_HANDOFF_READY

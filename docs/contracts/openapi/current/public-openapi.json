@@ -2008,6 +2008,35 @@
         "title": "Input",
         "type": "object"
       },
+      "JourneyMilestoneOut": {
+        "description": "One timeline milestone projected from a published profile's entries.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "period": {
+            "default": "",
+            "title": "Period",
+            "type": "string"
+          },
+          "subtitle": {
+            "default": "",
+            "title": "Subtitle",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "JourneyMilestoneOut",
+        "type": "object"
+      },
       "LandingOut": {
         "description": "Public projection of a published landing page.",
         "properties": {
@@ -2593,6 +2622,27 @@
           "count"
         ],
         "title": "PagedTalkListOut",
+        "type": "object"
+      },
+      "ProfileJourneyOut": {
+        "description": "Published career timeline for a locale (fail-closed, no fallback).",
+        "properties": {
+          "locale": {
+            "title": "Locale",
+            "type": "string"
+          },
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/JourneyMilestoneOut"
+            },
+            "title": "Milestones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "locale"
+        ],
+        "title": "ProfileJourneyOut",
         "type": "object"
       },
       "ProfileOut": {
@@ -6513,6 +6563,46 @@
           }
         },
         "summary": "Published localized site settings for a locale (fail-closed, no fallback)."
+      }
+    },
+    "/api/v1/site/{locale}/journey": {
+      "get": {
+        "description": "Project the published about profile's experience/education entries.\n\nOnly the live-published ``about`` profile exposes its child entries;\nentry rows carry no independent publication state, so snapshot fallback\nis deliberately not applied here (it could leak draft child rows).\nFamily order is explicit ``ordering``; experience precedes education.\nDegree and field are comma-joined from real record fields.",
+        "operationId": "apps_api_api_get_profile_journey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileJourneyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Published career timeline for a locale (fail-closed, no fallback)."
       }
     }
   },
