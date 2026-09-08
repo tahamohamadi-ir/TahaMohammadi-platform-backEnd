@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from ninja import Field, Router, Schema
 from ninja.responses import Status
+from pydantic import ConfigDict, StrictInt, StrictStr
 
 from apps.api.admin_common import (
     AdminError,
@@ -28,6 +29,7 @@ from apps.api.admin_common import (
     _require_admin_otp,
 )
 from apps.api.admin_content import ENTITY_MODELS
+from apps.api.record_resolver import _ID_RE, MAX_ID, RESOLVER_FAMILIES
 from apps.content.models import Article, TopicTag
 from apps.media.models import Media
 from apps.rebuild.services import enqueue_publication_job
@@ -782,6 +784,14 @@ class LocalizedSceneOut(Schema):
     density: str = "standard"
 
 
+class LocalizedFeaturedRecordOut(Schema):
+    """Canonical resolver-family reference; content remains separately governed."""
+
+    model_config = ConfigDict(extra="forbid")
+    family: StrictStr
+    id: StrictStr
+
+
 class LocalizedSiteSettingsAdminOut(Schema):
     """Admin projection of localized site settings with draft/published status."""
 
@@ -789,6 +799,8 @@ class LocalizedSiteSettingsAdminOut(Schema):
     revision: str
     brandName: str
     contentCopy: dict[str, str] = Field(default_factory=dict)
+    featuredRecords: list[LocalizedFeaturedRecordOut] = Field(default_factory=list)
+    brandMediaId: int | None = None
     tagline: str
     footerText: str
     seo: LocalizedSiteSeoOut
@@ -805,6 +817,8 @@ class LocalizedSiteSettingsUpdateIn(Schema):
 
     brandName: str | None = None
     contentCopy: dict | None = None
+    featuredRecords: list[LocalizedFeaturedRecordOut] | None = Field(default=None, max_length=3)
+    brandMediaId: StrictInt | None = Field(default=None, gt=0, le=MAX_ID)
     tagline: str | None = None
     footerText: str | None = None
     seo: LocalizedSiteSeoIn | None = None
@@ -1077,6 +1091,8 @@ def _serialize_localized_site_settings_admin(
         revision=item.revision or "",
         brandName=item.brand_name,
         contentCopy=item.managed_copy or {},
+        featuredRecords=item.featured_records or [],
+        brandMediaId=item.brand_media_id,
         tagline=item.tagline,
         footerText=item.footer_text,
         seo=LocalizedSiteSeoOut(
@@ -1105,6 +1121,9 @@ def _build_public_settings_payload(item: LocalizedSiteSettings, revision: str) -
         "revision": revision,
         "brandName": item.brand_name,
         "contentCopy": item.managed_copy or {},
+        "featuredRecords": item.featured_records or [],
+        # Resolve this snapshot ID afresh at read time; never expose draft media.
+        "brandMediaId": item.brand_media_id,
         "tagline": item.tagline,
         "footerText": item.footer_text,
         "seo": {
@@ -1174,6 +1193,46 @@ def localized_site_settings_put(
             )
         if not _if_match_matches(request.headers.get("If-Match"), item):
             raise AdminConflictError(_serialize_updated_at(item.updated_at))
+
+        if payload.featuredRecords is not None:
+            seen = set()
+            references = []
+            for reference in payload.featuredRecords:
+                model = RESOLVER_FAMILIES.get(reference.family)
+                pair = (reference.family, reference.id)
+                if (
+                    model is None
+                    or not _ID_RE.fullmatch(reference.id)
+                    or int(reference.id) > MAX_ID
+                    or pair in seen
+                ):
+                    raise AdminError(
+                        400, "VALIDATION", "Invalid or duplicate featured reference.",
+                        fields={"featuredRecords": ["Choose unique canonical content references."]},
+                    )
+                if not model.objects.filter(pk=int(reference.id), locale=locale).exists():
+                    raise AdminError(
+                        400, "VALIDATION", "Featured record must exist in the settings locale.",
+                        fields={"featuredRecords": ["Choose an existing exact-locale record."]},
+                    )
+                seen.add(pair)
+                references.append(reference.model_dump())
+            item.featured_records = references
+
+        if "brandMediaId" in payload.model_fields_set:
+            media_id = payload.brandMediaId
+            if media_id is not None and not Media.objects.filter(
+                pk=media_id, is_active=True
+            ).exclude(file="").exists():
+                raise AdminError(
+                    400, "VALIDATION", "Brand media must be an existing active library item.",
+                    fields={
+                        "brandMediaId": [
+                            "Choose existing active media or clear the selection."
+                        ]
+                    },
+                )
+            item.brand_media_id = media_id
 
         if payload.brandName is not None:
             brand_name = payload.brandName.strip()

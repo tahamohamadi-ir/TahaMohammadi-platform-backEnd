@@ -2290,6 +2290,26 @@
         "title": "LocalizedAudienceLinkOut",
         "type": "object"
       },
+      "LocalizedFeaturedRecordOut": {
+        "additionalProperties": false,
+        "description": "Canonical resolver-family reference; content remains separately governed.",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "id"
+        ],
+        "title": "LocalizedFeaturedRecordOut",
+        "type": "object"
+      },
       "LocalizedNavLinkOut": {
         "description": "One navigation link for localized site settings.",
         "properties": {
@@ -2422,6 +2442,17 @@
             "title": "Audiencelinks",
             "type": "array"
           },
+          "brandMediaId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brandmediaid"
+          },
           "brandName": {
             "title": "Brandname",
             "type": "string"
@@ -2432,6 +2463,13 @@
             },
             "title": "Contentcopy",
             "type": "object"
+          },
+          "featuredRecords": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedFeaturedRecordOut"
+            },
+            "title": "Featuredrecords",
+            "type": "array"
           },
           "footerText": {
             "title": "Footertext",
@@ -2516,6 +2554,19 @@
             ],
             "title": "Audiencelinks"
           },
+          "brandMediaId": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 9223372036854775807,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brandmediaid"
+          },
           "brandName": {
             "anyOf": [
               {
@@ -2538,6 +2589,21 @@
               }
             ],
             "title": "Contentcopy"
+          },
+          "featuredRecords": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LocalizedFeaturedRecordOut"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Featuredrecords"
           },
           "footerText": {
             "anyOf": [

@@ -555,3 +555,138 @@ class TestProductLocalizedSettings:
         )
         assert res_ok.status_code == 200
         assert res_ok.json()["navLinks"][0]["href"] == "/fa/about"
+
+
+@pytest.fixture
+def featured_article():
+    from django.utils import timezone
+
+    from apps.content.models import Article
+    return Article.objects.create(
+        locale="en",
+        slug="synthetic-featured",
+        title="Synthetic featured",
+        status="published",
+        published_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def brand_media():
+    from apps.media.models import Media
+    # Metadata fixture only; no uploaded file or real storage is modified.
+    return Media.objects.bulk_create(
+        [
+            Media(
+                file="synthetic-brand.png",
+                title="Synthetic brand",
+                alt_text_en="Synthetic brand mark",
+                mime="image/png",
+                is_active=True,
+            )
+        ]
+    )[0]
+
+
+def _put_localized(admin_client, payload):
+    import json
+
+    base = "/api/v1/admin/site/en"
+    return admin_client.put(
+        base,
+        data=json.dumps(payload),
+        content_type="application/json",
+        HTTP_IF_MATCH=admin_client.get(base).json()["updatedAt"],
+    )
+
+
+def test_featured_and_brand_are_isolated_published_snapshots_with_explicit_clears(
+    admin_client, featured_article, brand_media
+):
+    refs = [{"family": "article", "id": str(featured_article.pk)}]
+    result = _put_localized(admin_client, {"featuredRecords": refs, "brandMediaId": brand_media.pk})
+    assert result.status_code == 200
+    assert result.json()["featuredRecords"] == refs
+    assert result.json()["brandMediaId"] == brand_media.pk
+    assert Client().get("/api/v1/site/en").status_code == 404
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    published = Client().get("/api/v1/site/en").json()
+    assert published["featuredRecords"] == refs
+    assert published["brandMedia"]["alt"] == "Synthetic brand mark"
+    assert "brandMediaId" not in published
+    assert Client().get("/api/v1/site/fa").status_code == 404
+    omitted = _put_localized(admin_client, {"tagline": "Synthetic draft"}).json()
+    assert omitted["featuredRecords"] == refs and omitted["brandMediaId"] == brand_media.pk
+    cleared = _put_localized(admin_client, {"featuredRecords": [], "brandMediaId": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["featuredRecords"] == [] and cleared.json()["brandMediaId"] is None
+    assert Client().get("/api/v1/site/en").json() == published
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    cleared_public = Client().get("/api/v1/site/en").json()
+    assert cleared_public["featuredRecords"] == [] and cleared_public["brandMedia"] is None
+
+
+@pytest.mark.parametrize("refs", [
+    [{"family": "unknown", "id": "1"}], [{"family": "article", "id": "01"}],
+    [{"family": "article", "id": "1\n"}], [{"family": "article", "id": "9223372036854775808"}],
+    [{"family": "article", "id": "999999999"}], [{"family": "article", "id": 1}],
+    [{"family": "article", "id": "1", "title": "must not accept"}],
+    [{"family": "article", "id": str(i)} for i in range(1, 5)],
+])
+def test_featured_rejects_invalid_refs_atomically(admin_client, refs):
+    before = admin_client.get("/api/v1/admin/site/en").json()
+    result = _put_localized(
+        admin_client, {"brandName": "Must not persist", "featuredRecords": refs}
+    )
+    assert result.status_code in (400, 422)
+    assert admin_client.get("/api/v1/admin/site/en").json()["brandName"] == before["brandName"]
+
+
+def test_featured_requires_exact_locale_and_unique_refs(admin_client, featured_article):
+    refs = [{"family": "article", "id": str(featured_article.pk)}]
+    assert _put_localized(admin_client, {"featuredRecords": refs * 2}).status_code == 400
+    featured_article.locale = "fa"
+    featured_article.save()
+    assert _put_localized(admin_client, {"featuredRecords": refs}).status_code == 400
+
+
+@pytest.mark.parametrize("status", ["draft", "archived", "deleted", "wrong-locale"])
+def test_public_featured_filters_revoked_snapshot_records(admin_client, featured_article, status):
+    from apps.content.models import Article
+    refs = [{"family": "article", "id": str(featured_article.pk)}]
+    assert _put_localized(admin_client, {"featuredRecords": refs}).status_code == 200
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    if status == "deleted":
+        featured_article.delete()
+    elif status == "wrong-locale":
+        Article.objects.filter(pk=featured_article.pk).update(locale="fa")
+    else:
+        Article.objects.filter(pk=featured_article.pk).update(status=status)
+    assert Client().get("/api/v1/site/en").json()["featuredRecords"] == []
+
+
+@pytest.mark.parametrize("change", ["inactive", "deleted"])
+def test_public_brand_filters_revoked_snapshot_media(admin_client, brand_media, change):
+    from apps.media.models import Media
+    assert _put_localized(admin_client, {"brandMediaId": brand_media.pk}).status_code == 200
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    if change == "deleted":
+        brand_media.delete()
+    else:
+        Media.objects.filter(pk=brand_media.pk).update(is_active=False)
+    assert Client().get("/api/v1/site/en").json()["brandMedia"] is None
+
+
+def test_brand_requires_existing_active_media_and_draft_ref_stays_private(
+    admin_client, featured_article, brand_media
+):
+    from apps.media.models import Media
+    assert _put_localized(admin_client, {"brandMediaId": 999999999}).status_code == 400
+    Media.objects.filter(pk=brand_media.pk).update(is_active=False)
+    assert _put_localized(admin_client, {"brandMediaId": brand_media.pk}).status_code == 400
+    featured_article.status = "draft"
+    featured_article.save()
+    refs = [{"family": "article", "id": str(featured_article.pk)}]
+    assert _put_localized(admin_client, {"featuredRecords": refs}).status_code == 200
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    assert Client().get("/api/v1/site/en").json()["featuredRecords"] == []

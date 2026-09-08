@@ -123,8 +123,21 @@ PUBLIC_ENDPOINTS = [
 @pytest.fixture
 def imported_seed_db(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
+        from apps.siteconfig.models import SiteSettings
+
+        settings = SiteSettings.get_singleton()
+        before = {
+            field: getattr(settings, field)
+            for field in (
+                "contact_phone",
+                "contact_phone_intl",
+                "contact_location",
+                "current_cv_media_id",
+                "current_resume_media_id",
+            )
+        }
         call_command("import_content_seed")
-        yield
+        yield before
 
 
 @pytest.mark.django_db
@@ -135,10 +148,7 @@ def test_admin_seed_records_stay_in_admin_only_model(imported_seed_db):
         assert row.publication_state == "not-public", content_id
         assert row.approval_state == "private", content_id
 
-    assert (
-        ContentSeedRecord.objects.filter(visibility="admin-only").count()
-        == len(ADMIN_SEED_IDS)
-    )
+    assert ContentSeedRecord.objects.filter(visibility="admin-only").count() == len(ADMIN_SEED_IDS)
 
 
 @pytest.mark.django_db
@@ -182,20 +192,16 @@ def test_public_api_omits_admin_seed_records(imported_seed_db):
 
 
 @pytest.mark.django_db
-def test_publication_defaults_record_applies_privacy_without_public_leak(imported_seed_db):
+def test_seed_preserves_existing_settings_without_public_admin_record_leak(imported_seed_db):
     from apps.siteconfig.models import SiteSettings
 
     row = ContentSeedRecord.objects.get(content_id="admin.settings.publication-defaults")
     assert row.mapped_model_label == ""
 
     settings_row = SiteSettings.get_singleton()
-    assert settings_row.contact_phone == ""
-    assert settings_row.contact_phone_intl == ""
-    assert settings_row.contact_location == ""
-    assert settings_row.current_cv_media is None
-    assert settings_row.current_resume_media is None
+    for field, original in imported_seed_db.items():
+        assert getattr(settings_row, field) == original
 
     client = Client()
     body = client.get("/api/site").json()
-    assert body["downloads"] == []
     assert "phone" not in body["contact"]

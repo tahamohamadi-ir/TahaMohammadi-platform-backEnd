@@ -19,6 +19,7 @@ from ninja.pagination import PageNumberPagination, paginate
 
 from apps.api.admin_siteconfig import (
     LocalizedAudienceLinkOut,
+    LocalizedFeaturedRecordOut,
     LocalizedNavLinkOut,
     LocalizedSceneOut,
     LocalizedSiteSeoOut,
@@ -533,6 +534,8 @@ class LocalizedSiteSettingsPublicOut(Schema):
     revision: str
     brandName: str
     contentCopy: dict[str, str] = Field(default_factory=dict)
+    featuredRecords: list[LocalizedFeaturedRecordOut] = Field(default_factory=list)
+    brandMedia: PublicMediaOut | None = None
     tagline: str
     footerText: str
     seo: LocalizedSiteSeoOut
@@ -561,7 +564,31 @@ def get_localized_site_settings(request, locale: str):
             "NOT_FOUND",
             f"Published site settings not found for locale '{locale}'.",
         )
-    return item.published_payload
+    payload = dict(item.published_payload)
+    # Revocation and locale changes apply even to old settings snapshots. Use
+    # current public eligibility, not draft settings or a stored descriptor.
+    references = payload.get("featuredRecords")
+    public_references = []
+    for reference in references[:3] if isinstance(references, list) else []:
+        if not isinstance(reference, dict):
+            continue
+        family, record_id = reference.get("family"), reference.get("id")
+        model = RESOLVER_FAMILIES.get(family) if isinstance(family, str) else None
+        if (
+            model is None or not isinstance(record_id, str)
+            or not _ID_RE.fullmatch(record_id) or int(record_id) > MAX_ID
+        ):
+            continue
+        if model.objects.public().filter(pk=int(record_id), locale=locale).exists():
+            public_references.append({"family": family, "id": record_id})
+    payload["featuredRecords"] = public_references
+    media_id = payload.pop("brandMediaId", None)
+    media = (
+        Media.objects.filter(pk=media_id, is_active=True).exclude(file="").first()
+        if type(media_id) is int and 0 < media_id <= MAX_ID else None
+    )
+    payload["brandMedia"] = public_media_ref(media, request, locale=locale)
+    return payload
 
 
 @api.get(
@@ -2647,4 +2674,3 @@ def _analytics_scoped_validation_error(request, exc):
             request, analytics_validation_envelope(request, exc.errors), status=422
         )
     return api.create_response(request, {"detail": exc.errors}, status=422)
-

@@ -116,4 +116,28 @@ None (backend API packet).
 
 ---
 
+## 7. 2026-09-08 — OpenAPI re-pin for featured/brand additive delta (PS-05)
+
+- Backend CI on PR #3 failed only on the provenance gate: the branch adds
+  `featuredRecords` (`LocalizedFeaturedRecordOut`) and `brandMedia` to the
+  public `LocalizedSiteSettingsPublicOut` plus the admin featured/brand
+  shapes. Fresh-export drift was confined to the two JSON snapshots
+  (path counts 48/57, versions 0.4.0/0.1.0, inventory 124 ops — all
+  unchanged); the schema diff is purely additive (zero removed lines).
+- Re-exported via `scripts/export_openapi.py` (development settings) and
+  re-pinned `ACCEPTANCE.json` + `test_openapi_hash_drift.py` (CRLF and LF
+  hashes) to the new values. `PROVENANCE.json` is the regenerated
+  generation evidence. `endpoint-inventory.md` has no content change and is
+  left untouched.
+- Local evidence: drift + openapi access tests **20/20**, branch suites
+  (localized settings, managed-copy seed, seed safety, seed policy)
+  **60/60**, `ruff check` clean, `verify_openapi_export.py` **3/3 MATCH**.
+- Compatibility: additive and backward compatible — new public fields carry
+  defaults (`[]`/`null`); the frontend reads `featuredRecords` through its
+  own optional local type, so stale generated client types break nothing.
+  Regenerated client-type adoption remains a separate PUBLIC step after this
+  acceptance, per change control.
+- The coordination-level `OPENAPI-ACCEPTANCE.md` addendum mirror is left for
+  the coordinator (ROOT-owned doc, outside this packet's allowlist).
+
 PU-03-settings_HANDOFF_READY

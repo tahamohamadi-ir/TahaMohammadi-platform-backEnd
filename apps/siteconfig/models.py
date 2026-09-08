@@ -101,6 +101,10 @@ class LocalizedSiteSettings(models.Model):
     )
     revision = models.CharField(max_length=64, blank=True, default="")
     managed_copy = models.JSONField(default=dict, blank=True)
+    featured_records = models.JSONField(default=list, blank=True)
+    brand_media = models.ForeignKey(
+        "media.Media", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
     brand_name = models.CharField(max_length=200, blank=True, default="")
     tagline = models.CharField(max_length=500, blank=True, default="")
     footer_text = models.TextField(blank=True, default="")

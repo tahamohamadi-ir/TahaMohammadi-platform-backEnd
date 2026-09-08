@@ -52,7 +52,7 @@ def test_apply_seed_settings_persists_policy(tmp_path, db):
         tmp_path,
         {"show_phone": False, "public_cv_download": False, "locale_fallback": "none"},
     )
-    settings_row = apply_seed_settings(path)
+    settings_row = apply_seed_settings(path, overwrite=True)
     assert settings_row.seed_policy == {
         "show_phone": False,
         "public_cv_download": False,
@@ -72,7 +72,7 @@ def test_missing_policy_file_leaves_seed_policy_empty(tmp_path, db):
 @pytest.mark.django_db
 def test_admin_site_response_carries_seed_policy(admin_api_client, db, tmp_path):
     path = _write_policy(tmp_path, {"show_phone": False})
-    apply_seed_settings(path)
+    apply_seed_settings(path, overwrite=True)
 
     response = admin_api_client.get("/api/v1/admin/site")
     assert response.status_code == 200
@@ -82,7 +82,7 @@ def test_admin_site_response_carries_seed_policy(admin_api_client, db, tmp_path)
 @pytest.mark.django_db
 def test_seed_policy_is_not_writable_via_update(admin_api_client, db, tmp_path):
     path = _write_policy(tmp_path, {"show_phone": False})
-    apply_seed_settings(path)
+    apply_seed_settings(path, overwrite=True)
 
     current = admin_api_client.get("/api/v1/admin/site").json()
     response = admin_api_client.put(
