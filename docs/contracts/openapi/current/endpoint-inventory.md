@@ -52,6 +52,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/v1/records/{locale}/resolve` | Resolve published graph record IDs to canonical record descriptors |
 | public | GET | `/api/v1/series/{locale}/{slug}` | Get one published series by slug with ordered article items |
 | public | GET | `/api/v1/site/{locale}` | Published localized site settings for a locale (fail-closed, no fallback). |
+| public | GET | `/api/v1/site/{locale}/journey` | Published career timeline for a locale (fail-closed, no fallback). |
 | admin | GET | `/api/v1/admin/analytics` | Retrieve first-party received events report |
 | admin | GET | `/api/v1/admin/approval-queue` | Owner approval queue from the imported seed records. |
 | admin | GET | `/api/v1/admin/auth/csrf` | Return the CSRF token and ensure the csrftoken cookie is set. |

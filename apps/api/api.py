@@ -594,6 +594,71 @@ def get_localized_site_settings(request, locale: str):
     return payload
 
 
+class JourneyMilestoneOut(Schema):
+    """One timeline milestone projected from a published profile's entries."""
+
+    kind: str
+    title: str = ""
+    subtitle: str = ""
+    period: str = ""
+
+
+class ProfileJourneyOut(Schema):
+    """Published career timeline for a locale (fail-closed, no fallback)."""
+
+    locale: str
+    milestones: list[JourneyMilestoneOut] = Field(default_factory=list)
+
+
+@api.get(
+    "/v1/site/{locale}/journey",
+    response={200: ProfileJourneyOut, 404: ErrorEnvelopeOut},
+    summary="Published career timeline for a locale (fail-closed, no fallback).",
+)
+def get_profile_journey(request, locale: str):
+    """Project the published about profile's experience/education entries.
+
+    Only the live-published ``about`` profile exposes its child entries;
+    entry rows carry no independent publication state, so snapshot fallback
+    is deliberately not applied here (it could leak draft child rows).
+    Family order is explicit ``ordering``; experience precedes education.
+    Degree and field are comma-joined from real record fields.
+    """
+    if locale not in ("fa", "en"):
+        return _error_response(
+            request, 404, "NOT_FOUND", f"Locale '{locale}' not supported."
+        )
+    profile = (
+        Profile.objects.public()
+        .filter(locale=locale, slug="about")
+        .prefetch_related("experience_entries", "education_entries")
+        .first()
+    )
+    if profile is None:
+        return _error_response(
+            request, 404, "NOT_FOUND", f"Published journey not found for locale '{locale}'."
+        )
+    milestones = [
+        {
+            "kind": "experience",
+            "title": entry.role,
+            "subtitle": entry.organization,
+            "period": entry.period,
+        }
+        for entry in profile.experience_entries.all()
+    ]
+    milestones.extend(
+        {
+            "kind": "education",
+            "title": f"{entry.degree}, {entry.field}" if entry.field else entry.degree,
+            "subtitle": entry.institution,
+            "period": entry.period,
+        }
+        for entry in profile.education_entries.all()
+    )
+    return {"locale": locale, "milestones": milestones}
+
+
 @api.get(
     "/landings/{locale}",
     response=list[LandingOut],
