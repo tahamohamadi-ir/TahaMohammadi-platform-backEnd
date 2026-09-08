@@ -5,10 +5,9 @@ entries; entry rows carry no independent publication state, so a draft
 profile (or another locale) must stay fail-closed.
 """
 
+import pytest
 from django.test import Client
 from django.utils import timezone
-
-import pytest
 
 pytestmark = pytest.mark.django_db
 
