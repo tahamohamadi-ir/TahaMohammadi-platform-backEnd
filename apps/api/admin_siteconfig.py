@@ -817,7 +817,9 @@ class LocalizedSiteSettingsUpdateIn(Schema):
 
     brandName: str | None = None
     contentCopy: dict | None = None
-    featuredRecords: list[LocalizedFeaturedRecordOut] | None = Field(default=None, max_length=3)
+    # Shared Home list: three selected projects plus three selected
+    # publications. The public projection applies the same bound.
+    featuredRecords: list[LocalizedFeaturedRecordOut] | None = Field(default=None, max_length=6)
     brandMediaId: StrictInt | None = Field(default=None, gt=0, le=MAX_ID)
     tagline: str | None = None
     footerText: str | None = None

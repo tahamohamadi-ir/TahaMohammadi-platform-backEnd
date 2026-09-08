@@ -140,4 +140,20 @@ None (backend API packet).
 - The coordination-level `OPENAPI-ACCEPTANCE.md` addendum mirror is left for
   the coordinator (ROOT-owned doc, outside this packet's allowlist).
 
+---
+
+## 8. 2026-09-08 — featured-records bound 3→6 (owner-directed)
+
+- Owner ordered both remaining fixes. The shared Home list could not hold
+  three selected projects plus three selected publications: the admin update
+  schema capped `featuredRecords` at `max_length=3` and the public
+  projection sliced `references[:3]`. Both bounds are now 6, with comments
+  tying them together. No other shape changed.
+- New regression test `test_featured_accepts_six_refs_and_rejects_seventh`:
+  6 valid refs accepted end-to-end (admin → publish → public), the 7th
+  rejected, public projection returns all 6.
+- Contract re-pin: only `admin-openapi.json` drifted (one line,
+  `maxItems: 3→6`); public snapshot, path counts (48/57), versions, and the
+  inventory are unchanged.
+
 PU-03-settings_HANDOFF_READY

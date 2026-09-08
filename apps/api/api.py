@@ -569,7 +569,10 @@ def get_localized_site_settings(request, locale: str):
     # current public eligibility, not draft settings or a stored descriptor.
     references = payload.get("featuredRecords")
     public_references = []
-    for reference in references[:3] if isinstance(references, list) else []:
+    # Home renders three selected projects plus three selected publications
+    # from one shared list; keep the public bound identical to the admin
+    # update bound below.
+    for reference in references[:6] if isinstance(references, list) else []:
         if not isinstance(reference, dict):
             continue
         family, record_id = reference.get("family"), reference.get("id")

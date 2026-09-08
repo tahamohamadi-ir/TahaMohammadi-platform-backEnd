@@ -650,6 +650,31 @@ def test_featured_requires_exact_locale_and_unique_refs(admin_client, featured_a
     assert _put_localized(admin_client, {"featuredRecords": refs}).status_code == 400
 
 
+def test_featured_accepts_six_refs_and_rejects_seventh(admin_client):
+    from django.test import Client
+    from django.utils import timezone
+
+    from apps.content.models import Article
+    articles = [
+        Article.objects.create(
+            locale="en",
+            slug=f"synthetic-featured-{index}",
+            title=f"Synthetic featured {index}",
+            status="published",
+            published_at=timezone.now(),
+        )
+        for index in range(7)
+    ]
+    six = [{"family": "article", "id": str(article.pk)} for article in articles[:6]]
+    result = _put_localized(admin_client, {"featuredRecords": six})
+    assert result.status_code == 200
+    assert result.json()["featuredRecords"] == six
+    seven = six + [{"family": "article", "id": str(articles[6].pk)}]
+    assert _put_localized(admin_client, {"featuredRecords": seven}).status_code in (400, 422)
+    assert admin_client.post("/api/v1/admin/site/en/publish").status_code == 200
+    assert Client().get("/api/v1/site/en").json()["featuredRecords"] == six
+
+
 @pytest.mark.parametrize("status", ["draft", "archived", "deleted", "wrong-locale"])
 def test_public_featured_filters_revoked_snapshot_records(admin_client, featured_article, status):
     from apps.content.models import Article
