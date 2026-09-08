@@ -2238,6 +2238,26 @@
         "title": "LocalizedAudienceLinkOut",
         "type": "object"
       },
+      "LocalizedFeaturedRecordOut": {
+        "additionalProperties": false,
+        "description": "Canonical resolver-family reference; content remains separately governed.",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "id"
+        ],
+        "title": "LocalizedFeaturedRecordOut",
+        "type": "object"
+      },
       "LocalizedNavLinkOut": {
         "description": "One navigation link for localized site settings.",
         "properties": {
@@ -2311,6 +2331,16 @@
             "title": "Audiencelinks",
             "type": "array"
           },
+          "brandMedia": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicMediaOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "brandName": {
             "title": "Brandname",
             "type": "string"
@@ -2321,6 +2351,13 @@
             },
             "title": "Contentcopy",
             "type": "object"
+          },
+          "featuredRecords": {
+            "items": {
+              "$ref": "#/components/schemas/LocalizedFeaturedRecordOut"
+            },
+            "title": "Featuredrecords",
+            "type": "array"
           },
           "footerText": {
             "title": "Footertext",

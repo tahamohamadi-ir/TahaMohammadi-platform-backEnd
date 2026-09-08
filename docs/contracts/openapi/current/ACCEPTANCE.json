@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-06 — product-v2 packet endpoints and audit-fix schema reconciliation (A01/A03/A04/A09)",
+  "acceptanceAddendum": "Addendum 2026-09-08 — localized settings featured-records/brand-media additive schema (PU-03-settings)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -9,7 +9,7 @@
   "artifacts": {
     "admin-openapi.json": {
       "paths": 57,
-      "sha256": "135f14e5c7f03ba1aaee50fca76a54e55e0ed5a2e0360050a8939e837859208c",
+      "sha256": "b529e29a9658822b6804c3d5b0be143692f68ddfa37e3b11d2c7fe6232a0deb5",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
@@ -18,13 +18,13 @@
     },
     "public-openapi.json": {
       "paths": 48,
-      "sha256": "f3115a5095097e7ccc12efba4c0c59b1f0258914c1ce8a83e867b3b207c33ec9",
+      "sha256": "02dcfff0188cd2512853f3998f991be4b96d88d47d43f3404ffdc9452fc1c971",
       "version": "0.4.0"
     }
   },
   "djangoSettingsModule": "config.settings.development",
-  "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md.",
-  "sourceCommit": "bd6682ea9dae7e5bf6957c36691dc3a94a00ea37",
+  "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md. 2026-09-08 re-pin (additive localized-settings featured/brand delta only, zero removed schema lines) verified by Backend CI provenance gate plus drift/access tests; evidence recorded in Back-End/docs/quality/product-v2/PU-03-settings-HANDOFF.md.",
+  "sourceCommit": "07197024dd26b6abff605bb0720a6c2aab190657",
   "status": "scaffold-accepted",
   "supersedes": "The former PROVENANCE.json-embedded acceptance pointer (status scaffold-accepted plus acceptanceRecord), retired because every export regenerates PROVENANCE.json with a fresh timestamp, which made identical-snapshot acceptance ambiguous and broke the drift gate."
 }
