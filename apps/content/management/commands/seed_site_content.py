@@ -22,6 +22,8 @@ from apps.content.data.site_content import (
 from apps.content.models import (
     Article,
     ContentSeedRecord,
+    HomeModule,
+    HomeModuleKey,
     Landing,
     LifecycleStatus,
     Profile,
@@ -29,6 +31,7 @@ from apps.content.models import (
     Publication,
     ResearchStatement,
     ResearchTopic,
+    SelectionMode,
 )
 
 
@@ -101,6 +104,7 @@ class Command(BaseCommand):
                 publication_map,
             )
             self._seed_articles(force, dry_run, published_at, counts)
+            self._seed_home_composition(dry_run, published_at, counts)
 
             unknown = self.overwrite_ids - self.seen_ids
             if unknown:
@@ -116,6 +120,40 @@ class Command(BaseCommand):
         )
         for kind, total in sorted(counts.by_type.items()):
             self.stdout.write(f"  {kind}: {total}")
+
+    def _seed_home_composition(
+        self,
+        dry_run: bool,
+        published_at,
+        counts: SeedCounts,
+    ) -> None:
+        """Create the canonical shell only when a locale has no composition.
+
+        A single existing row means the locale has been configured through the
+        admin editor. Preserve that complete owner-controlled composition,
+        including draft or hidden rows, on every seed run.
+        """
+        for locale in ("en", "fa"):
+            if HomeModule.objects.filter(locale=locale).exists():
+                self.stdout.write(f"home.composition.{locale}: preserve")
+                continue
+
+            self.stdout.write(
+                f"home.composition.{locale}: create keys={','.join(HomeModuleKey.values)}"
+            )
+            for order, key in enumerate(HomeModuleKey.values):
+                counts.bump("home_module", created=True)
+                if dry_run:
+                    continue
+                HomeModule.objects.create(
+                    locale=locale,
+                    key=key,
+                    visible=True,
+                    order=order,
+                    selection_mode=SelectionMode.MANUAL,
+                    status=LifecycleStatus.PUBLISHED,
+                    published_at=published_at,
+                )
 
     def _upsert(
         self,

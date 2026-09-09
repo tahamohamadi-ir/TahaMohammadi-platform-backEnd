@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from apps.content.models import (
     Article,
+    HomeModule,
+    HomeModuleKey,
     Landing,
     LifecycleStatus,
     Profile,
@@ -30,6 +32,12 @@ def test_seed_site_content_populates_public_api():
     assert Publication.objects.public().count() == 6
     assert Project.objects.public().count() == 6
     assert Article.objects.public().count() == 4
+    assert HomeModule.objects.visible_for_locale("en").count() == len(
+        HomeModuleKey.values
+    )
+    assert HomeModule.objects.visible_for_locale("fa").count() == len(
+        HomeModuleKey.values
+    )
 
     client = Client()
     topics = client.get("/api/research/topics/en").json()
@@ -43,6 +51,36 @@ def test_seed_site_content_populates_public_api():
     project = client.get("/api/research/projects/en/pars-sql-vtd-edge").json()
     assert project["code_url"] == "https://github.com/tahamohamadi-ir/ADHD-VTD"
     assert project["code_availability"] == "public"
+
+    composition = client.get("/api/home-composition/en")
+    assert composition.status_code == 200
+    assert [module["key"] for module in composition.json()["modules"]] == list(
+        HomeModuleKey.values
+    )
+
+
+@pytest.mark.django_db
+def test_seed_site_content_preserves_existing_home_composition():
+    existing = HomeModule.objects.create(
+        locale="en",
+        key=HomeModuleKey.GRAPH,
+        visible=False,
+        order=7,
+        status=LifecycleStatus.DRAFT,
+        provenance_note="owner configuration",
+    )
+
+    call_command("seed_site_content")
+
+    assert list(HomeModule.objects.filter(locale="en")) == [existing]
+    existing.refresh_from_db()
+    assert existing.visible is False
+    assert existing.order == 7
+    assert existing.status == LifecycleStatus.DRAFT
+    assert existing.provenance_note == "owner configuration"
+    assert HomeModule.objects.filter(locale="fa").count() == len(
+        HomeModuleKey.values
+    )
 
 
 @pytest.mark.django_db
