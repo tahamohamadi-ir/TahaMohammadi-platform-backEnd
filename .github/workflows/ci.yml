@@ -14,7 +14,7 @@ jobs:
     name: uv sync, Ruff, manage.py check, pytest, OpenAPI provenance gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv and Python 3.12
         uses: astral-sh/setup-uv@v5
@@ -24,6 +24,12 @@ jobs:
 
       - name: uv sync (locked environment)
         run: uv sync --frozen
+
+      - name: Dependency audit
+        run: uv run --with pip-audit pip-audit
+
+      - name: Secret scan
+        run: uvx --from detect-secrets==1.5.0 detect-secrets scan --baseline .secrets.baseline --exclude-files '\.secrets\.baseline$'
 
       - name: Ruff
         run: uv run ruff check .
