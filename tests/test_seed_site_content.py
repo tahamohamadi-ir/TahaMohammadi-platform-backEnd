@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from apps.content.models import (
     Article,
+    GraphVersion,
+    GraphVersionStatus,
     HomeModule,
     HomeModuleKey,
     Landing,
@@ -58,6 +60,21 @@ def test_seed_site_content_populates_public_api():
         HomeModuleKey.values
     )
 
+    graph = client.get("/api/graph/en")
+    assert graph.status_code == 200
+    graph_data = graph.json()
+    assert [node["id"] for node in graph_data["nodes"]] == [
+        "identity",
+        *[
+            f"research-topic-{topic.pk}"
+            for topic in ResearchTopic.objects.public()
+            .filter(locale="en")
+            .order_by("slug")
+        ],
+    ]
+    assert len(graph_data["edges"]) == 3
+    assert all(edge["source"] == "identity" for edge in graph_data["edges"])
+
 
 @pytest.mark.django_db
 def test_seed_site_content_preserves_existing_home_composition():
@@ -81,6 +98,20 @@ def test_seed_site_content_preserves_existing_home_composition():
     assert HomeModule.objects.filter(locale="fa").count() == len(
         HomeModuleKey.values
     )
+
+
+@pytest.mark.django_db
+def test_seed_site_content_preserves_existing_graph_version():
+    existing = GraphVersion.objects.create(
+        locale="en",
+        status=GraphVersionStatus.DRAFT,
+    )
+
+    call_command("seed_site_content")
+
+    assert list(GraphVersion.objects.filter(locale="en")) == [existing]
+    assert existing.nodes.count() == 0
+    assert GraphVersion.objects.latest_active("fa") is not None
 
 
 @pytest.mark.django_db

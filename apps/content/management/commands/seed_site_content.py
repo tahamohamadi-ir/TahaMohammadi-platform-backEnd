@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from math import cos, pi, sin
 from typing import Any
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -22,6 +24,11 @@ from apps.content.data.site_content import (
 from apps.content.models import (
     Article,
     ContentSeedRecord,
+    GraphEdge,
+    GraphNode,
+    GraphNodeRelated,
+    GraphVersion,
+    GraphVersionStatus,
     HomeModule,
     HomeModuleKey,
     Landing,
@@ -105,6 +112,7 @@ class Command(BaseCommand):
             )
             self._seed_articles(force, dry_run, published_at, counts)
             self._seed_home_composition(dry_run, published_at, counts)
+            self._seed_research_graph(dry_run, counts)
 
             unknown = self.overwrite_ids - self.seen_ids
             if unknown:
@@ -153,6 +161,92 @@ class Command(BaseCommand):
                     selection_mode=SelectionMode.MANUAL,
                     status=LifecycleStatus.PUBLISHED,
                     published_at=published_at,
+                )
+
+    def _seed_research_graph(self, dry_run: bool, counts: SeedCounts) -> None:
+        """Create a graph from published profile/topic records when none exists.
+
+        Labels, summaries, and links come from the locale's public records.
+        Edges only express the existing profile-to-research-topic grouping.
+        Any graph version created in the editor remains fully owner-controlled.
+        """
+        color_roles = ("research", "signature", "context")
+        icon_roles = ("disc", "square", "diamond")
+
+        for locale in ("en", "fa"):
+            if GraphVersion.objects.filter(locale=locale).exists():
+                self.stdout.write(f"research.graph.{locale}: preserve")
+                continue
+
+            profile = Profile.objects.public().filter(locale=locale).order_by("slug").first()
+            topics = list(
+                ResearchTopic.objects.public().filter(locale=locale).order_by("slug")
+            )
+            if profile is None or not topics:
+                self.stdout.write(f"research.graph.{locale}: skip incomplete public records")
+                continue
+
+            self.stdout.write(
+                f"research.graph.{locale}: create topics={len(topics)}"
+            )
+            counts.bump("graph_version", created=True)
+            if dry_run:
+                continue
+
+            version = GraphVersion.objects.create(
+                locale=locale,
+                status=GraphVersionStatus.ACTIVE,
+            )
+            identity = GraphNode.objects.create(
+                version=version,
+                node_id="identity",
+                label=profile.title,
+                type="identity",
+                accessible_label=profile.title,
+                color_role="brand",
+                icon_role="ring",
+                weight=1,
+                pos_x=0,
+                pos_y=0,
+                pos_z=8,
+            )
+            profile_type = ContentType.objects.get_for_model(Profile)
+            GraphNodeRelated.objects.create(
+                node=identity,
+                content_type=profile_type,
+                object_id=profile.pk,
+            )
+            topic_type = ContentType.objects.get_for_model(ResearchTopic)
+            radius_x = 112
+            radius_y = 76
+            for index, topic in enumerate(topics):
+                angle = -pi / 2 + (2 * pi * index) / len(topics)
+                node = GraphNode.objects.create(
+                    version=version,
+                    node_id=f"research-topic-{topic.pk}",
+                    label=topic.title,
+                    type="research-topic",
+                    summary=topic.summary,
+                    accessible_label=topic.title,
+                    color_role=color_roles[index % len(color_roles)],
+                    icon_role=icon_roles[index % len(icon_roles)],
+                    weight=1,
+                    pos_x=round(cos(angle) * radius_x, 3),
+                    pos_y=round(sin(angle) * radius_y, 3),
+                    pos_z=(-8, 12, -2)[index % 3],
+                )
+                GraphNodeRelated.objects.create(
+                    node=node,
+                    content_type=topic_type,
+                    object_id=topic.pk,
+                )
+                GraphEdge.objects.create(
+                    version=version,
+                    source=identity,
+                    target=node,
+                    relation_type="research-focus",
+                    directed=True,
+                    weight=1,
                 )
 
     def _upsert(
