@@ -174,16 +174,34 @@ class Command(BaseCommand):
         icon_roles = ("disc", "square", "diamond")
 
         for locale in ("en", "fa"):
-            if GraphVersion.objects.filter(locale=locale).exists():
-                self.stdout.write(f"research.graph.{locale}: preserve")
-                continue
-
+            landing = Landing.objects.public().filter(locale=locale).order_by("slug").first()
             profile = Profile.objects.public().filter(locale=locale).order_by("slug").first()
             topics = list(
                 ResearchTopic.objects.public().filter(locale=locale).order_by("slug")
             )
-            if profile is None or not topics:
+            if landing is None or profile is None or not topics:
                 self.stdout.write(f"research.graph.{locale}: skip incomplete public records")
+                continue
+
+            versions = list(GraphVersion.objects.filter(locale=locale))
+            if versions:
+                repaired = False
+                if len(versions) == 1 and self._is_generated_research_graph(
+                    versions[0], profile, landing, topics, color_roles, icon_roles
+                ):
+                    identity = versions[0].nodes.get(node_id="identity")
+                    if identity.label == profile.title and landing.title != profile.title:
+                        self.stdout.write(
+                            f"research.graph.{locale}: repair generated identity label"
+                        )
+                        counts.bump("graph_node", created=False)
+                        if not dry_run:
+                            identity.label = landing.title
+                            identity.accessible_label = landing.title
+                            identity.save(update_fields=["label", "accessible_label"])
+                        repaired = True
+                if not repaired:
+                    self.stdout.write(f"research.graph.{locale}: preserve")
                 continue
 
             self.stdout.write(
@@ -200,9 +218,9 @@ class Command(BaseCommand):
             identity = GraphNode.objects.create(
                 version=version,
                 node_id="identity",
-                label=profile.title,
+                label=landing.title,
                 type="identity",
-                accessible_label=profile.title,
+                accessible_label=landing.title,
                 color_role="brand",
                 icon_role="ring",
                 weight=1,
@@ -248,6 +266,102 @@ class Command(BaseCommand):
                     directed=True,
                     weight=1,
                 )
+
+    def _is_generated_research_graph(
+        self,
+        version: GraphVersion,
+        profile: Profile,
+        landing: Landing,
+        topics: list[ResearchTopic],
+        color_roles: tuple[str, ...],
+        icon_roles: tuple[str, ...],
+    ) -> bool:
+        """Recognize only the exact graph shape previously created by this command."""
+        if version.status != GraphVersionStatus.ACTIVE or version.groups.exists():
+            return False
+
+        nodes = {node.node_id: node for node in version.nodes.all()}
+        expected_ids = {"identity", *(f"research-topic-{topic.pk}" for topic in topics)}
+        if set(nodes) != expected_ids:
+            return False
+
+        identity = nodes["identity"]
+        if not (
+            identity.label in {profile.title, landing.title}
+            and identity.accessible_label == identity.label
+            and identity.type == "identity"
+            and identity.summary == ""
+            and identity.color_role == "brand"
+            and identity.icon_role == "ring"
+            and identity.weight == 1
+            and identity.pos_x == 0
+            and identity.pos_y == 0
+            and identity.pos_z == 8
+            and identity.group_id is None
+        ):
+            return False
+
+        radius_x = 112
+        radius_y = 76
+        for index, topic in enumerate(topics):
+            angle = -pi / 2 + (2 * pi * index) / len(topics)
+            node = nodes[f"research-topic-{topic.pk}"]
+            if not (
+                node.label == topic.title
+                and node.type == "research-topic"
+                and node.summary == topic.summary
+                and node.accessible_label == topic.title
+                and node.color_role == color_roles[index % len(color_roles)]
+                and node.icon_role == icon_roles[index % len(icon_roles)]
+                and node.weight == 1
+                and node.pos_x == round(cos(angle) * radius_x, 3)
+                and node.pos_y == round(sin(angle) * radius_y, 3)
+                and node.pos_z == (-8, 12, -2)[index % 3]
+                and node.group_id is None
+            ):
+                return False
+
+        profile_type = ContentType.objects.get_for_model(Profile)
+        topic_type = ContentType.objects.get_for_model(ResearchTopic)
+        related = {
+            (row.node.node_id, row.content_type_id, row.object_id)
+            for row in GraphNodeRelated.objects.filter(node__version=version).select_related(
+                "node"
+            )
+        }
+        expected_related = {
+            ("identity", profile_type.pk, profile.pk),
+            *(
+                (f"research-topic-{topic.pk}", topic_type.pk, topic.pk)
+                for topic in topics
+            ),
+        }
+        if related != expected_related:
+            return False
+
+        edges = {
+            (
+                edge.source.node_id,
+                edge.target.node_id,
+                edge.relation_type,
+                edge.directed,
+                edge.weight,
+                edge.explanation,
+            )
+            for edge in version.edges.select_related("source", "target")
+        }
+        expected_edges = {
+            (
+                "identity",
+                f"research-topic-{topic.pk}",
+                "research-focus",
+                True,
+                1,
+                "",
+            )
+            for topic in topics
+        }
+        return edges == expected_edges
 
     def _upsert(
         self,

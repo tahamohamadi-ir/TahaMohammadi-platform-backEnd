@@ -72,6 +72,7 @@ def test_seed_site_content_populates_public_api():
             .order_by("slug")
         ],
     ]
+    assert graph_data["nodes"][0]["label"] == "Taha Mohammadi"
     assert len(graph_data["edges"]) == 3
     assert all(edge["source"] == "identity" for edge in graph_data["edges"])
 
@@ -112,6 +113,22 @@ def test_seed_site_content_preserves_existing_graph_version():
     assert list(GraphVersion.objects.filter(locale="en")) == [existing]
     assert existing.nodes.count() == 0
     assert GraphVersion.objects.latest_active("fa") is not None
+
+
+@pytest.mark.django_db
+def test_seed_site_content_repairs_only_the_generated_identity_label():
+    call_command("seed_site_content")
+    graph = GraphVersion.objects.latest_active("en")
+    identity = graph.nodes.get(node_id="identity")
+    identity.label = "About"
+    identity.accessible_label = "About"
+    identity.save(update_fields=["label", "accessible_label"])
+
+    call_command("seed_site_content")
+
+    identity.refresh_from_db()
+    assert identity.label == "Taha Mohammadi"
+    assert identity.accessible_label == "Taha Mohammadi"
 
 
 @pytest.mark.django_db
