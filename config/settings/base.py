@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.health",
     "apps.admin",
     "apps.content",
+    "apps.atlas",
     "apps.media",
     "apps.security",
     "apps.api",
