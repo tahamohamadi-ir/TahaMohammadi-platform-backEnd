@@ -39,7 +39,7 @@ select = ["E", "F", "W", "I", "UP", "B"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "*_test.py"]
-testpaths = ["tests"]
+testpaths = ["tests", "apps"]
 
 [tool.uv]
 package = false
