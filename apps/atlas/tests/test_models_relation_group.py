@@ -171,6 +171,29 @@ def test_relation_clean_reports_an_invalid_endpoint_segment():
     assert "target" in exc.value.message_dict
 
 
+def test_relation_clean_rejects_a_composed_key_with_a_tilde_bearing_endpoint():
+    """Task 7 review F2: per-segment checks alone cannot see a four-part key.
+
+    A node row written through ``.update()`` bypasses ``AtlasNode.clean()``, so a
+    tilde-bearing node key can exist and would compose a relation key with *four*
+    segments — which every URL codec would split wrongly. Only validating the
+    composed value itself catches it, which is why ``clean()`` now calls
+    ``is_valid_relation_public_key`` on the composition.
+    """
+    source, target = _node(), _node()
+    # Bypass the model rule the way a queryset write would.
+    AtlasNode.objects.filter(pk=source.pk).update(public_key="a~b-11223344")
+    source.refresh_from_db()
+    relation = _relation(source, target, relation_type=_relation_type("uses"))
+
+    assert relation.public_key.count("~") == 3                      # the composed key is unreadable
+    assert not is_valid_relation_public_key(relation.public_key)
+
+    with pytest.raises(ValidationError) as exc:
+        relation.clean()
+    assert "public_key" in exc.value.message_dict
+
+
 def test_membership_endpoints_must_share_the_version():
     other = AtlasVersion.objects.create(status="draft", label="v2")
     group = _group(version=_node().version)

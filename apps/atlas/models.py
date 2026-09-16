@@ -572,6 +572,15 @@ class AtlasRelation(models.Model):
                     "The relation type's key does not match the taxonomy key grammar, so "
                     "the composed relation key would be unreadable."
                 )
+            elif not is_valid_relation_public_key(self.public_key):
+                # The per-segment checks above cannot see a tilde-bearing endpoint key
+                # (a row written through ``.update()`` bypasses ``AtlasNode.clean()``),
+                # which would compose a four-part key no URL codec can split correctly.
+                # Validating the composed value itself closes that gap.
+                errors["public_key"] = (
+                    "The composed relation key must be exactly "
+                    "'<source>~<relation-type>~<target>'."
+                )
         if errors:
             raise ValidationError(errors)
 
