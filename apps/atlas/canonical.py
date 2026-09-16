@@ -46,8 +46,9 @@ Tasks 14/15 need both: ``source_key`` is the registry key of this module
 ``canonical.family`` uses (spec §10.2's example). ``route_family`` comes from
 the existing ``apps.api.record_resolver.ROUTE_FAMILY_MAP`` — the table is
 imported, never duplicated. The two entities this plan adds have no public
-route in v1 (spec §22), so their ``route_family`` is ``None``: the Task 14 wire
-mapping is ``{"family": family, "id": id, "slug": slug, "title": title,
+route in v1 (spec §5.2; §25 "Explicit deferred features"), so their
+``route_family`` is ``None``: the Task 14 wire mapping is
+``{"family": family, "id": id, "slug": slug, "title": title,
 "routeFamily": route_family, "href": f"/{locale}/{route_family}/{slug}/"}``
 with ``routeFamily``/``href`` omitted where ``route_family`` is ``None``.
 """
@@ -117,8 +118,9 @@ class AmbiguousCanonicalRef(Exception):
     Raised by :func:`resolve_canonical` instead of picking a row: a canonical
     reference that points at two rows is an authoring defect the publish gate
     must report (validation code ``AMBIGUOUS_CANONICAL_REF``, spec §20.1), not a
-    choice the resolver may make. The attributes carry the offending triple so
-    the validator can name the node it came from without re-parsing the message.
+    choice the resolver may make. The attributes carry the offending triple and
+    the true number of matching published rows, so the validator can name the
+    node it came from without re-parsing the message.
     """
 
     def __init__(self, source: str, translation_key: UUID, locale: str, *, count: int) -> None:
@@ -140,7 +142,7 @@ class CanonicalResolution:
     fields the projection borrows from it (spec §5.3: "nodes are references,
     never copies"); ``family``/``source_key`` are the two family spellings;
     ``route_family`` is the record's public route family, ``None`` when v1 has
-    no public route for it (spec §22).
+    no public route for it (spec §5.2; §25 "Explicit deferred features").
     """
 
     model: type[models.Model]
@@ -199,9 +201,9 @@ def resolve_canonical(
     if translation_key is None:
         return None
     model = CANONICAL_SOURCES[source]
-    rows = list(
-        model.objects.public().filter(translation_key=translation_key, locale=locale)[:2]
-    )
+    # No slice: when more than one row matches, ``len(rows)`` is what the error
+    # reports, and a capped fetch would understate the ambiguity.
+    rows = list(model.objects.public().filter(translation_key=translation_key, locale=locale))
     if not rows:
         return None
     if len(rows) > 1:

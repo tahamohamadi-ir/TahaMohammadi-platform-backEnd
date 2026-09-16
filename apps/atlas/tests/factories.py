@@ -49,6 +49,15 @@ The ``atlas_v1`` family bundles (ruling R5) expose, beyond ``version``:
   ``break_/restore_{en,fa}_projection()``, which unpublish/republish one
   canonical row of the draft in exactly one locale.
 
+**The two active-version bundles are mutually exclusive in one test.** Both
+``atlas_active_version`` and ``atlas_two_versions`` create a version with
+``status="active"``; requesting both fixtures in one test makes the second
+creation fail at setup with ``IntegrityError: UNIQUE constraint failed:
+atlas_version.status`` — that is the spec's one-active-version rule (the
+partial unique index ``atlas_version_unique_active``), not a fixture bug. A
+test that needs both shapes must build the second version itself, as
+``_version()`` documents.
+
 Every bundle writes a placeholder ``layout`` (all-zero coordinates) for each of
 its visible nodes, because the endpoints of Tasks 15/16 fail closed on a missing
 position: real coordinates are Task 11's engine and Task 13's

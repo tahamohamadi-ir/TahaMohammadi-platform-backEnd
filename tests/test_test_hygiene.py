@@ -6,6 +6,14 @@ and runs **one** test while the run still looks complete. That happened during
 Plan A (Task 7): a real-row test reused an existing test's name and the suite
 reported a green count one lower than the number of definitions.
 
+The guard scans exactly what pytest collects under its two roots: every
+``test_*.py`` and ``*_test.py`` file under ``tests/`` and ``apps/`` — the mirror
+of ``testpaths``/``python_files`` in ``pyproject.toml``, not just files inside a
+``tests/`` directory. A collectable duplicate the guard cannot see is a hole the
+check falls through, so the globs stay deliberately redundant
+(``apps/**/test_*.py`` subsumes the older ``apps/**/tests/**/test_*.py`` shape);
+overlap between them is deduplicated below.
+
 This is deliberately a collected test rather than an ad-hoc script so the check
 cannot rot, and it is non-vacuous: it asserts it actually found test files.
 """
@@ -16,15 +24,22 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TEST_GLOBS = ("tests/**/test_*.py", "apps/**/tests/**/test_*.py")
+#: Mirrors ``testpaths = ["tests", "apps"]`` x ``python_files`` in
+#: ``pyproject.toml``: pytest collects any matching file below either root, so
+#: the guard must cover the same set. ``apps/**/test_*.py`` subsumes the older
+#: ``apps/**/tests/**/test_*.py``; ``_test_files`` deduplicates the overlap.
+TEST_GLOBS = (
+    "tests/**/test_*.py",
+    "tests/**/*_test.py",
+    "apps/**/test_*.py",
+    "apps/**/*_test.py",
+)
 TEST_PREFIX = "test_"
 
 
 def _test_files() -> list[Path]:
-    files: list[Path] = []
-    for pattern in TEST_GLOBS:
-        files.extend(sorted(REPO_ROOT.glob(pattern)))
-    return files
+    """Every collectable test file, deduplicated (the globs may overlap)."""
+    return sorted({path for pattern in TEST_GLOBS for path in REPO_ROOT.glob(pattern)})
 
 
 def _top_level_test_names(path: Path) -> list[str]:

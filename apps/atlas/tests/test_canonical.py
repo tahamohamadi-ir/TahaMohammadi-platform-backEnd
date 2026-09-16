@@ -92,8 +92,9 @@ def test_record_resolver_family_slugs_agree_with_the_model_names():
 
     For the families the record resolver already serves, its slug is the model's
     lowercase name — that agreement is what licenses using the same convention
-    for the two entities the resolver does not know yet (spec §22: ``method``
-    and ``technology`` are published entities without public routes in v1).
+    for the two entities the resolver does not know yet (spec §5.2; §25
+    "Explicit deferred features": ``method`` and ``technology`` are published
+    entities without public routes in v1).
     """
     for family, model in RESOLVER_FAMILIES.items():
         assert model._meta.model_name == family, family
@@ -147,6 +148,24 @@ def test_ambiguity_is_detected_not_guessed(seed_pairs):
         resolve_canonical_pair("research_topic", topic_en.translation_key)
 
 
+def test_ambiguity_count_reports_every_twin_not_a_slice(seed_pairs):
+    """Three published rows for one key report ``count == 3``, not the ``[:2]`` slice."""
+    topic_en, _ = seed_pairs.research_topic
+    for _ in range(2):
+        ResearchTopic.objects.create(
+            locale="en",
+            slug=f"twin-{uuid4().hex[:8]}",
+            title="Twin",
+            status="published",
+            published_at=timezone.now(),
+            translation_key=topic_en.translation_key,
+        )
+    with pytest.raises(AmbiguousCanonicalRef) as excinfo:
+        resolve_canonical("research_topic", topic_en.translation_key, "en")
+    assert excinfo.value.count == 3
+    assert "3 published rows" in str(excinfo.value)
+
+
 def test_summary_precedence_uses_the_first_populated_field(seed_pairs):
     # Deviation from the plan's snippet (plan error, proven in the RED run):
     # ``Project`` has no ``summary`` field, so the snippet's
@@ -161,6 +180,13 @@ def test_summary_precedence_uses_the_first_populated_field(seed_pairs):
 
 
 def test_summary_precedence_prefers_the_earlier_field_and_falls_through(seed_pairs):
+    """The earlier *populated* field of the tuple wins; an empty one falls through.
+
+    The two-field families populate **both** fields in the "wins" case: with
+    only one field populated, an inverted iteration order (or a "keep the last
+    populated field" rule) returns the same answer and the documented precedence
+    stays unpinned — a mutation that flips the order must fail here.
+    """
     topic_en, _ = seed_pairs.research_topic
     assert resolve_canonical("research_topic", topic_en.translation_key, "en").summary == (
         "Research topic summary"
@@ -170,16 +196,19 @@ def test_summary_precedence_prefers_the_earlier_field_and_falls_through(seed_pai
     topic_en.save(update_fields=["summary"])
     assert resolve_canonical("research_topic", topic_en.translation_key, "en").summary == ""
 
-    method_en, _ = seed_pairs.method
-    assert resolve_canonical("method", method_en.translation_key, "en").summary == (
-        "Method short description"
-    )
-    method_en.short_description = ""
-    method_en.description = "Method long description"
-    method_en.save(update_fields=["short_description", "description"])
-    assert resolve_canonical("method", method_en.translation_key, "en").summary == (
-        "Method long description"
-    )
+    for source, earlier, later in (
+        ("method", "Method short description", "Method long description"),
+        ("technology", "Technology short description", "Technology long description"),
+    ):
+        en_row, _ = getattr(seed_pairs, source)
+        en_row.short_description = earlier
+        en_row.description = later
+        en_row.save(update_fields=["short_description", "description"])
+        assert resolve_canonical(source, en_row.translation_key, "en").summary == earlier, source
+
+        en_row.short_description = ""
+        en_row.save(update_fields=["short_description"])
+        assert resolve_canonical(source, en_row.translation_key, "en").summary == later, source
 
 
 def test_resolution_carries_the_wire_family_slug_and_the_route_family(seed_pairs):
@@ -195,7 +224,8 @@ def test_resolution_carries_the_wire_family_slug_and_the_route_family(seed_pairs
     assert resolve_canonical("profile", profile_en.translation_key, "en").route_family == "about"
 
     # `method`/`technology` are published entities without public routes in v1
-    # (spec §22), so the existing map has no entry — None, never an invented route.
+    # (spec §5.2; §25), so the existing map has no entry — None, never an
+    # invented route.
     for source in ("method", "technology"):
         en_row, _ = getattr(seed_pairs, source)
         resolved = resolve_canonical(source, en_row.translation_key, "en")
