@@ -14,16 +14,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.content.models import Profile, ResearchTopic
 
-# Task 8 will move this allow-list into ``apps/atlas/canonical.py`` and this
-# command will import it from there instead.
+# Task 8 moves this allow-list into ``apps/atlas/canonical.py``; this command
+# then imports it from there instead. Keys are the canonical-source vocabulary
+# used by ``AtlasNodeType.canonical_source`` (``research_topic``), not the
+# Django model name (``researchtopic``) — the report uses the same vocabulary
+# so there is exactly one spelling in the Atlas subsystem.
 CANONICAL_SOURCES = {
     "profile": Profile,
-    "researchtopic": ResearchTopic,
+    "research_topic": ResearchTopic,
 }
 
 
@@ -31,13 +34,26 @@ class Command(BaseCommand):
     help = "Read-only audit of bilingual pairing for Atlas candidate records."
 
     def add_arguments(self, parser):
-        parser.add_argument("--json", dest="json_path", default=None)
-        parser.add_argument("--models", default="profile,researchtopic")
+        parser.add_argument(
+            "--json",
+            dest="json_path",
+            default=None,
+            help="Write the full report to this path (nothing is written otherwise).",
+        )
+        parser.add_argument(
+            "--models",
+            default="profile,research_topic",
+            help="Canonical-source keys to audit (default: profile,research_topic).",
+        )
 
     def handle(self, *args, **options):
         report = {"generated_at": timezone.now().isoformat(), "candidates": [], "blocking": []}
-        for key in options["models"].split(","):
-            model = CANONICAL_SOURCES[key.strip()]
+        for raw_key in options["models"].split(","):
+            key = raw_key.strip()
+            if key not in CANONICAL_SOURCES:
+                known = ", ".join(sorted(CANONICAL_SOURCES))
+                raise CommandError(f"unknown canonical source {key!r}; known keys: {known}")
+            model = CANONICAL_SOURCES[key]
             for row in model.objects.filter(status="published").order_by("slug", "locale"):
                 partner = (
                     model.objects.filter(
@@ -48,11 +64,13 @@ class Command(BaseCommand):
                     else False
                 )
                 entry = {
-                    "model": model._meta.model_name,
+                    "model": key,
+                    "modelName": model._meta.model_name,
                     "locale": row.locale,
                     "pk": row.pk,
                     "slug": row.slug,
                     "translation_key": str(row.translation_key) if row.translation_key else None,
+                    "published": True,
                     "partner_locale_present": partner,
                 }
                 report["candidates"].append(entry)
