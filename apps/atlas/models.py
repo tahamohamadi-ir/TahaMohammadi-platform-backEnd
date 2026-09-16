@@ -108,7 +108,14 @@ class SELF_LOOP_POLICIES(models.TextChoices):
 
 
 class CANONICAL_SOURCES(models.TextChoices):
-    """Which published CMS model a node of this type must reference (spec §5.3)."""
+    """Which published CMS model a node of this type must reference (spec §5.3).
+
+    This is the **column vocabulary** for ``AtlasNodeType.canonical_source`` and
+    ``AtlasNode.canonical_model``. The *resolver registry* — a ``dict`` whose
+    keys are these values and whose values are the model classes — lives in
+    ``apps/atlas/canonical.py`` under the same name: two objects, one name, one
+    meaning each. Import the choices from here, the registry from there.
+    """
 
     RESEARCH_TOPIC = "research_topic", "Research topic"
     PROJECT = "project", "Project"

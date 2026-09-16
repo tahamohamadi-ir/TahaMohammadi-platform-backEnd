@@ -17,17 +17,15 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.content.models import Profile, ResearchTopic
+from apps.atlas.canonical import CANONICAL_SOURCES
 
-# Task 8 moves this allow-list into ``apps/atlas/canonical.py``; this command
-# then imports it from there instead. Keys are the canonical-source vocabulary
-# used by ``AtlasNodeType.canonical_source`` (``research_topic``), not the
-# Django model name (``researchtopic``) — the report uses the same vocabulary
-# so there is exactly one spelling in the Atlas subsystem.
-CANONICAL_SOURCES = {
-    "profile": Profile,
-    "research_topic": ResearchTopic,
-}
+# The allow-list has exactly one home: ``apps/atlas/canonical.py`` (plan Task 8).
+# Its keys are the canonical-source vocabulary used by
+# ``AtlasNodeType.canonical_source`` (``research_topic``), not the Django model
+# name (``researchtopic``) — the report uses the same vocabulary so there is
+# exactly one spelling in the Atlas subsystem. It is a *different* object from
+# ``apps.atlas.models.CANONICAL_SOURCES`` (the ``TextChoices`` for the
+# ``canonical_model`` column); this command must import this one.
 
 
 class Command(BaseCommand):
