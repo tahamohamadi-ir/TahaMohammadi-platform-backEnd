@@ -10,7 +10,8 @@ that the issue names the offending composed relation key:
 * ``DUPLICATE_RELATION`` — one composed key claimed twice: the same
   ``(source, type, target)`` authored twice, or an undirected relation plus its
   reversed pair;
-* ``DANGLING_RELATION_ENDPOINT`` — an endpoint that is not a node of the version;
+* ``DANGLING_RELATION_ENDPOINT`` — an endpoint that is not a node of the version
+  (either end, and a payload row with no key at all);
 * ``DIRECTION_NOT_OVERRIDABLE`` — ``directed`` contradicts the type's
   ``directed_default`` while the type does not allow the override (the plan adds
   this code to the blocking set; the model deliberately never coerces ``directed``).
@@ -152,6 +153,82 @@ def test_an_undirected_relation_duplicating_its_reversed_pair_is_flagged(atlas_v
     assert grouped["DUPLICATE_RELATION"] == [forward.public_key]
 
 
+@pytest.mark.parametrize(
+    "ascending",
+    [True, False],
+    ids=["undirected-authored-ascending", "undirected-authored-descending"],
+)
+def test_a_reversed_directed_row_duplicates_the_undirected_one_either_way_round(
+    atlas_v1, ascending
+):
+    """Spec §20.1's "duplicates its reversed pair", read with §5.3's sorted key.
+
+    One undirected row and one directed row of the same type between the same two
+    nodes compose the same edge in two spellings: the undirected key orders its
+    ends (``A~t~B``), the directed key keeps the authored order (``B~t~A``). Which
+    end the undirected row was authored from is not part of the graph, so it must
+    not change the verdict.
+
+    The state is reachable through the ORM: ``AtlasRelation.clean``'s mirror guard
+    fires for **undirected** rows only, so the directed row passes ``full_clean()``
+    (asserted below), ``create()`` never calls ``clean()``, and the unique
+    constraint covers one authored triple rather than the pair.
+
+    Every composed key the two colliding rows claim is reported, once each — in the
+    descending case both rows compose the same string (so one issue), in the
+    ascending case the two spellings differ (so two).
+    """
+    low = _node(version=atlas_v1.version, public_key="research-area-00000001")
+    high = _node(version=atlas_v1.version, public_key="research-area-00000002")
+    undirected_type = _relation_type(
+        key="mirrors", directed_default=False, overridable_direction=True
+    )
+    undirected = _relation(
+        source=low if ascending else high,
+        target=high if ascending else low,
+        relation_type=undirected_type,
+        version=atlas_v1.version,
+        directed=False,
+    )
+    # The directed row reverses the stored triple — the only orientation the unique
+    # constraint leaves for a second row between these two nodes.
+    directed = _relation(
+        source=high if ascending else low,
+        target=low if ascending else high,
+        relation_type=undirected_type,
+        version=atlas_v1.version,
+        directed=True,
+    )
+    directed.full_clean()
+
+    assert undirected.public_key == f"{low.public_key}~mirrors~{high.public_key}"
+    grouped = issue_codes(validate_relations(atlas_v1.version))
+    assert grouped["DUPLICATE_RELATION"] == sorted({undirected.public_key, directed.public_key})
+
+
+def test_two_directed_reversals_are_not_duplicates(atlas_v1):
+    """The other half of the identity rule: a directed pair stays legal.
+
+    Only an **undirected** row answers for both endpoint orders, because only its
+    key is sorted (spec §5.3). Two directed rows between the same two nodes compose
+    two different keys and are two different edges; claiming the reversed identity
+    for a directed row as well would report every antiparallel directed pair —
+    the shape the Task 10 hierarchy fixture builds on purpose — as a duplicate.
+    """
+    low = _node(version=atlas_v1.version, public_key="research-area-00000001")
+    high = _node(version=atlas_v1.version, public_key="research-area-00000002")
+    directed_type = _relation_type(key="points-at", directed_default=True)
+    forward = _relation(
+        source=low, target=high, relation_type=directed_type, version=atlas_v1.version
+    )
+    backward = _relation(
+        source=high, target=low, relation_type=directed_type, version=atlas_v1.version
+    )
+    assert forward.public_key != backward.public_key, "a directed key keeps the authored order"
+
+    assert "DUPLICATE_RELATION" not in issue_codes(validate_relations(atlas_v1.version))
+
+
 def test_the_same_triple_twice_is_flagged_on_the_rule_layer(atlas_v1):
     """The exact-triple case the DB constraint makes unreachable through the ORM.
 
@@ -177,6 +254,34 @@ def test_the_same_triple_twice_is_flagged_on_the_rule_layer(atlas_v1):
     assert issue_codes(issues)["DUPLICATE_RELATION"] == [first.public_key]
 
 
+def test_a_keyless_detached_row_is_dangling(atlas_v1):
+    """A row with no composed key is reported unnamed — never read, never a crash.
+
+    Plan B's bulk PUT validates a payload graph before writing it, so the rule layer
+    can be handed rows whose endpoints do not exist yet: a relation row with no
+    ``source``/``target``/``relation_type`` has no composed key at all
+    (``public_key`` raises on it — asserted below), and the honest report is
+    ``DANGLING_RELATION_ENDPOINT`` with no relation key to name, because the payload
+    references nothing this version holds. A stored row's three foreign keys are
+    non-null, so this is the payload path's shape only.
+    """
+    bare = AtlasRelation()
+    type_only = AtlasRelation(relation_type=atlas_v1.relation_type)
+    endpoints_only = AtlasRelation(source=atlas_v1.identity, target=atlas_v1.identity)
+
+    assert (bare.source_id, bare.target_id, bare.relation_type_id) == (None, None, None)
+    with pytest.raises(AttributeError):
+        _ = bare.public_key  # no endpoints to compose a key from
+
+    issues = relation_rule_issues(
+        [bare, type_only, endpoints_only], version_id=atlas_v1.version.pk, allowed_types={}
+    )
+    assert issue_codes(issues) == {"DANGLING_RELATION_ENDPOINT": [None, None, None]}
+    for issue in issues:
+        assert issue.node_key is None and issue.group_key is None
+        assert issue.message_token == MESSAGE_TOKENS["DANGLING_RELATION_ENDPOINT"]
+
+
 def test_an_endpoint_outside_the_version_is_dangling(atlas_v1):
     elsewhere = _version(status="draft", label="atlas-v1-elsewhere")
     foreign = _node(version=elsewhere)
@@ -192,6 +297,45 @@ def test_an_endpoint_outside_the_version_is_dangling(atlas_v1):
     assert relation.public_key in {
         other.public_key for other in atlas_v1.version.relations.all()
     }
+
+
+def test_a_foreign_target_is_dangling_either_way_round(atlas_v1):
+    """Both clauses of the endpoint rule, each with its own foreign endpoint.
+
+    The rule is one ``or`` over the row's two endpoints. The foreign-*source* case
+    above cannot tell a mutation that drops the target clause
+    (``relation.target.version_id != version_id``) from the real rule — the source
+    half keeps reporting — so this test adds the missing direction, and a local
+    control next to both foreign rows so "dangling" cannot degenerate into "any
+    relation of the version".
+    """
+    elsewhere = _version(status="draft", label="atlas-v1-elsewhere")
+    foreign = _node(version=elsewhere)
+    relation_type = _relation_type(key="connects")
+    foreign_source = _relation(
+        source=foreign,
+        target=atlas_v1.identity,
+        relation_type=relation_type,
+        version=atlas_v1.version,
+    )
+    foreign_target = _relation(
+        source=atlas_v1.identity,
+        target=foreign,
+        relation_type=relation_type,
+        version=atlas_v1.version,
+    )
+    both_local = _relation(
+        source=atlas_v1.identity,
+        target=atlas_v1.areas[0],
+        relation_type=relation_type,
+        version=atlas_v1.version,
+    )
+
+    grouped = issue_codes(validate_relations(atlas_v1.version))
+    assert grouped["DANGLING_RELATION_ENDPOINT"] == sorted(
+        {foreign_source.public_key, foreign_target.public_key}
+    )
+    assert both_local.public_key not in grouped["DANGLING_RELATION_ENDPOINT"]
 
 
 def test_an_invisible_relation_is_still_judged(atlas_v1):

@@ -48,7 +48,10 @@ Scope decisions of Tasks 9–10, recorded because the plan leaves them open:
 * duplicates are reported **once per duplicated composed key** — the key is the
   wire identity, and the two halves of an undirected mirrored pair compose the
   same key, so "this key is claimed twice" is the honest message and the one the
-  admin can act on;
+  admin can act on. An undirected row answers to **both** endpoint orders, so a
+  directed row that reverses it is its duplicate whichever way round the undirected
+  row was authored — the verdict is order-independent, as the sorted key of §5.3
+  requires — and each involved key spelling is reported once;
 * the **hierarchy subgraph is restricted on both ends** — a relation counts only
   when its type has ``hierarchy_role`` *and* both endpoints are visible nodes of
   this version (spec §5.6 "restricted to ``visible`` nodes"), and its arcs are
@@ -271,14 +274,24 @@ def _identities(relation: AtlasRelation) -> set[tuple[str, str, str]]:
     """The ``(source key, type key, target key)`` triples this row answers to.
 
     The stored identity is the authored triple. An **undirected** relation also
-    answers to the same triple with its endpoints ordered, because that reversed
-    pair composes the same public key (``relation_public_key`` sorts the ends of
-    an undirected key) — the mirror rule of ``AtlasRelation.clean``.
+    answers to both ordered orientations — ``(min, t, max)`` *and* ``(max, t, min)``
+    — because either pair composes the same public key (``relation_public_key``
+    sorts the ends of an undirected key): the mirror rule of ``AtlasRelation.clean``.
+
+    Both orientations, not just the sorted one: ``(authored) ∪ {(min, t, max)}``
+    collapses to a single triple whenever the row was authored ascending, so an
+    undirected row would then not answer for the reversed pair of a directed row
+    that happens to be stored that way round — an insertion-order-dependent verdict,
+    which is exactly what the sorted key of spec §5.3 exists to rule out. Claiming
+    ``(min, t, max)`` and ``(max, t, min)`` makes the row's identity set the same
+    whatever order its endpoints were authored in (a self-loop, where the two
+    coincide, still claims one).
     """
     source, target = relation.source.public_key, relation.target.public_key
     identities = {(source, relation.relation_type.key, target)}
     if not relation.directed:
         identities.add((min(source, target), relation.relation_type.key, max(source, target)))
+        identities.add((max(source, target), relation.relation_type.key, min(source, target)))
     return identities
 
 
