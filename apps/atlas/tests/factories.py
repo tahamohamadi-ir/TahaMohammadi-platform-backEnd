@@ -23,6 +23,8 @@ Three rules these builders encode:
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from apps.atlas.keys import new_group_key, new_node_key
 from apps.atlas.models import (
     AtlasGroup,
@@ -81,8 +83,17 @@ def _relation_type(key="uses", *, allowed_sources=(), allowed_targets=(), **over
     return relation_type
 
 
-def _version(status="draft", label=DEFAULT_VERSION_LABEL, **overrides):
-    """Create an `AtlasVersion` row (the shared draft version by default)."""
+def _version(status="draft", label=None, **overrides):
+    """Create a fresh `AtlasVersion` row — never a second copy of the shared one.
+
+    ``label=None`` mints a per-call label (``fixture-<8 hex>``) instead of reusing
+    ``DEFAULT_VERSION_LABEL``: a second row carrying the shared ``("draft", "fixture")``
+    identity would make ``_default_version()``'s ``get_or_create`` raise
+    ``MultipleObjectsReturned`` for every version-less builder that runs afterwards —
+    an error raised far from its cause. Pass an explicit ``label`` for a named version.
+    """
+    if label is None:
+        label = f"{DEFAULT_VERSION_LABEL}-{uuid4().hex[:8]}"
     return AtlasVersion.objects.create(status=status, label=label, **overrides)
 
 

@@ -389,6 +389,9 @@ class AtlasNode(models.Model):
 class AtlasNodeTranslation(models.Model):
     """Per-locale overrides of a node's projected label/summary (spec §5)."""
 
+    #: spec §5.3:271 — a search alias is at most this many characters.
+    ALIAS_MAX_LENGTH = 120
+
     node = models.ForeignKey(AtlasNode, on_delete=models.CASCADE, related_name="translations")
     locale = models.CharField(max_length=2, choices=Locale.choices)
     label_override = models.CharField(max_length=200, blank=True)
@@ -397,7 +400,7 @@ class AtlasNodeTranslation(models.Model):
     #: ``accessibleLabel``.
     accessible_label_override = models.CharField(max_length=300, blank=True)
     #: Optional search aliases/synonyms: a list of non-empty strings, each at
-    #: most 120 characters (spec §5).
+    #: most 120 characters (spec §5.3:271) — enforced by ``clean()`` below.
     aliases = models.JSONField(default=list, blank=True)
 
     class Meta:
@@ -411,6 +414,39 @@ class AtlasNodeTranslation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.node.public_key} ({self.locale})"
+
+    def clean(self) -> None:
+        """``aliases`` is a list of non-empty strings, each ≤ 120 characters (spec §5.3:271).
+
+        ``aliases`` is a ``JSONField``, so nothing but this rule stands between a
+        malformed value and the search index; every message names the offending value.
+        """
+        super().clean()
+        errors: dict[str, str] = {}
+        if not isinstance(self.aliases, list):
+            errors["aliases"] = (
+                "Aliases must be a list of non-empty strings, each at most "
+                f"{self.ALIAS_MAX_LENGTH} characters; got {self.aliases!r}."
+            )
+        else:
+            for alias in self.aliases:
+                if not isinstance(alias, str):
+                    errors["aliases"] = (
+                        "Every alias must be a string, each at most "
+                        f"{self.ALIAS_MAX_LENGTH} characters; got {alias!r}."
+                    )
+                    break
+                if not alias:
+                    errors["aliases"] = f"Every alias must be a non-empty string; got {alias!r}."
+                    break
+                if len(alias) > self.ALIAS_MAX_LENGTH:
+                    errors["aliases"] = (
+                        f"Alias {alias!r} is {len(alias)} characters; the limit is "
+                        f"{self.ALIAS_MAX_LENGTH} characters."
+                    )
+                    break
+        if errors:
+            raise ValidationError(errors)
 
 
 class AtlasRelation(models.Model):
