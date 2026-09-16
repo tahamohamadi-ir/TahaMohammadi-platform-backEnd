@@ -13,7 +13,14 @@ from __future__ import annotations
 import re
 import uuid
 
-PUBLIC_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._~-]{1,79}$")
+# The spec's key grammar: 2–80 characters, first character alphanumeric, the
+# rest alphanumeric plus ``. _ ~ -``. A leading ``~`` is impossible, which is
+# what keeps a relation key distinguishable from a node key. The pattern ends
+# with ``\Z`` rather than ``$``: ``$`` also matches *before a final newline*, so
+# a ``$``-anchored pattern accepts ``"ab\n"`` under both ``match`` and
+# ``fullmatch`` — keys are persisted identifiers, so every caller (including
+# model ``clean()``) must reject that.
+PUBLIC_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._~-]{1,79}\Z")
 _SUFFIX_BYTES = 4
 
 
@@ -35,9 +42,10 @@ def relation_public_key(source: str, relation_type: str, target: str, *, directe
 
 
 def is_valid_public_key(value: str) -> bool:
-    return (
-        bool(value)
-        and bool(PUBLIC_KEY_RE.match(value))
-        and "~" not in value.split("~")[0][:1]
-        and len(value) <= 80
-    )
+    """True when ``value`` matches the whole key grammar.
+
+    ``fullmatch`` plus the pattern's ``\\Z`` anchor means a trailing newline can
+    never be accepted; the grammar's length bounds are fully expressed by the
+    pattern, so no separate length check is needed.
+    """
+    return isinstance(value, str) and PUBLIC_KEY_RE.fullmatch(value) is not None

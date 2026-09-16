@@ -38,3 +38,19 @@ def test_relation_key_is_composed_and_direction_ordered():
 def test_key_grammar_rejects_unsafe_characters():
     for bad in ("UPPER-case", "has space", "slash/key", "colon:key", "", "x" * 81):
         assert not is_valid_public_key(bad)
+
+
+def test_key_grammar_matches_the_whole_string():
+    # `$` would also match before a final newline; keys are persisted identifiers,
+    # so a trailing newline must be rejected rather than silently accepted — and
+    # direct `PUBLIC_KEY_RE.match(...)` callers must not accept it either.
+    for bad in ("ab\n", "research-area-1a2b3c4d\n", " a-11111111", "a-11111111 "):
+        assert not is_valid_public_key(bad), bad
+        assert not PUBLIC_KEY_RE.match(bad), bad
+
+
+def test_key_grammar_length_bounds():
+    assert is_valid_public_key("ab")                       # shortest legal key
+    assert not is_valid_public_key("a")                    # one character is too short
+    assert is_valid_public_key("x" * 80)                   # longest legal key
+    assert not is_valid_public_key("x" * 81)
