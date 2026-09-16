@@ -10,8 +10,8 @@ the fields the behaviour under test depends on.
 Three rules these builders encode:
 
 * a caller that does not care about identity still gets a valid, unique
-  ``public_key`` (``new_node_key``/``new_group_key``), because the key is
-  globally unique;
+  ``public_key`` (``new_node_key``/``new_group_key``) — unique per version
+  (ruling R9: a clone reuses its source's keys);
 * a node's ``canonical_model`` and ``importance`` agree with its node type
   (spec §5: the type's ``canonical_source``/``default_importance`` are copied
   into the node at creation), so ``full_clean()`` on a factory-built node

@@ -68,11 +68,25 @@ def test_localized_override_is_optional_and_unique_per_locale():
 
 
 @pytest.mark.django_db
-def test_node_public_key_is_globally_unique_across_versions():
-    first, second = _node(), _node(version=AtlasVersion.objects.create(status="draft", label="v2"))
-    second.public_key = first.public_key
-    with pytest.raises(IntegrityError):
-        second.save()
+def test_node_public_key_is_unique_per_version_and_reusable_across_versions():
+    """Ruling R9 — the plan's original test asserted *global* uniqueness; inverted here.
+
+    The clone flow (spec §8.2: `Active vN ──clone──▶ Draft vN+1 ──edit──▶ … ──▶ Publish`)
+    copies a version's keys onto a coexisting draft: a clone that re-keyed its nodes would
+    break every deep link (`?focus=node:<key>`) and the stored layout dict on publish, against
+    the critical rule "stable public keys must not silently mutate". A key is therefore unique
+    *within* its version; a second version may reuse it, and the served topology still never
+    has a key meaning two things because exactly one version is active at a time.
+    """
+    first = _node(public_key="research-area-1a2b3c4d")
+    clone = _node(version=_version(), public_key=first.public_key)  # R9: allowed, and the point
+    assert clone.public_key == first.public_key
+    assert AtlasNode.objects.filter(public_key=first.public_key).count() == 2
+    # Control: a *different* key inside the same version is fine — so the check below
+    # discriminates on the key, not on "a second node in this version".
+    assert _node(version=first.version, public_key="research-area-2b3c4d5e").pk
+    with pytest.raises(IntegrityError), transaction.atomic():  # within one version: still unique
+        _node(version=first.version, public_key=first.public_key)
 
 
 @pytest.mark.django_db

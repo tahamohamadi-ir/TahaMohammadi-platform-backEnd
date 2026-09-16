@@ -293,9 +293,11 @@ class AtlasNode(models.Model):
     """A locale-neutral topology node of one version (spec §5)."""
 
     version = models.ForeignKey(AtlasVersion, on_delete=models.CASCADE, related_name="nodes")
-    #: ``<node-type-key>-<8 hex>``, assigned at creation, immutable thereafter,
-    #: unique globally so a key never means two things. The uniqueness is a Meta
-    #: constraint (plan shape), not ``unique=True`` on the field.
+    #: ``<node-type-key>-<8 hex>``, assigned at creation and immutable thereafter.
+    #: Unique **per version**, not globally (ruling R9): the clone flow (spec §8.2)
+    #: copies a version's keys onto a coexisting draft so deep links and the stored
+    #: layout dict survive a publish. The uniqueness is a Meta constraint (plan
+    #: shape), not ``unique=True`` on the field.
     public_key = models.SlugField(max_length=80)
     node_type = models.ForeignKey(AtlasNodeType, on_delete=models.PROTECT, related_name="nodes")
     canonical_model = models.CharField(
@@ -325,7 +327,13 @@ class AtlasNode(models.Model):
         db_table = "atlas_node"
         ordering = ["version", "sort_order", "public_key"]
         constraints = [
-            models.UniqueConstraint(fields=["public_key"], name="atlas_node_unique_public_key"),
+            # Ruling R9: a node key is unique *within its version*, not globally — a clone
+            # (spec §8.2 `Active vN ──clone──▶ Draft vN+1`) must carry its source's keys
+            # while both versions coexist, and a key never means two things in the served
+            # topology because exactly one version is active at a time.
+            models.UniqueConstraint(
+                fields=["version", "public_key"], name="atlas_node_version_public_key"
+            ),
             models.UniqueConstraint(
                 fields=["version", "node_type", "canonical_translation_key"],
                 condition=models.Q(canonical_translation_key__isnull=False),
@@ -484,6 +492,11 @@ class AtlasRelation(models.Model):
         db_table = "atlas_relation"
         ordering = ["version", "sort_order", "id"]
         constraints = [
+            # Ruling R9 needs nothing extra here: a relation's public key is composed and
+            # never stored (spec §5.3), so this constraint already pins an edge inside one
+            # version, and the composed key is unique within a version because its endpoint
+            # node keys are (``atlas_node_version_public_key``). A clone copies the same
+            # three segments, so the composed key stays stable across versions too.
             models.UniqueConstraint(
                 fields=["version", "source", "target", "relation_type"],
                 name="atlas_relation_unique_version_pair_rel",
@@ -598,10 +611,11 @@ class AtlasGroup(models.Model):
     """
 
     version = models.ForeignKey(AtlasVersion, on_delete=models.CASCADE, related_name="groups")
-    #: ``group-<8 hex>`` (``keys.new_group_key``), assigned at creation, immutable
-    #: thereafter and unique globally, so a group key never means two things. It
-    #: never carries ``~`` — ``clean()`` below is that half of the "a ``~`` in a
-    #: URL key means relation" property, mirroring ``AtlasNode.clean()``.
+    #: ``group-<8 hex>`` (``keys.new_group_key``), assigned at creation and immutable
+    #: thereafter. Unique **per version** (ruling R9, exactly as a node key is): a
+    #: clone copies group keys onto its coexisting draft. It never carries ``~`` —
+    #: ``clean()`` below is that half of the "a ``~`` in a URL key means relation"
+    #: property, mirroring ``AtlasNode.clean()``.
     public_key = models.SlugField(max_length=80)
     sort_order = models.PositiveIntegerField(default=0)
     active = models.BooleanField(default=True)
@@ -610,7 +624,11 @@ class AtlasGroup(models.Model):
         db_table = "atlas_group"
         ordering = ["version", "sort_order", "public_key"]
         constraints = [
-            models.UniqueConstraint(fields=["public_key"], name="atlas_group_unique_public_key"),
+            # Ruling R9: like the node key, a group key is unique within its version —
+            # the clone flow (spec §8.2) copies group keys onto the new draft.
+            models.UniqueConstraint(
+                fields=["version", "public_key"], name="atlas_group_version_public_key"
+            ),
         ]
 
     def __str__(self) -> str:

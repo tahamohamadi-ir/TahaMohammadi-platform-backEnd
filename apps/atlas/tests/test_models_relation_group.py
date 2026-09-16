@@ -23,6 +23,7 @@ from apps.atlas.models import (
     AtlasGroup,
     AtlasGroupMembership,
     AtlasGroupTranslation,
+    AtlasNode,
     AtlasRelation,
     AtlasRelationTranslation,
     AtlasVersion,
@@ -31,10 +32,12 @@ from apps.atlas.models import (
 from apps.atlas.tests.factories import (
     _group,
     _group_translation,
+    _membership,
     _node,
     _relation,
     _relation_translation,
     _relation_type,
+    _version,
 )
 
 pytestmark = pytest.mark.django_db
@@ -198,21 +201,56 @@ def test_group_key_never_contains_a_tilde():
         group.full_clean()
 
 
-def test_group_public_key_is_unique_across_versions():
-    """Globally unique, like a node key (spec §5.3: "immutable, unique").
+def test_group_public_key_is_unique_per_version_and_reusable_across_versions():
+    """Ruling R9: group keys are version-scoped exactly as node keys are (spec §5.5).
 
-    Two versions may not share a group key: the constraint is on ``public_key``
-    alone, exactly as ``AtlasNode``'s is. This is also why Plan A's ``clone_version``
-    (Task 13) cannot copy keys verbatim onto a second live version — reported as a
-    cross-task finding, not re-litigated here.
+    The original test asserted *global* uniqueness; the clone flow (spec §8.2, plan
+    Task 13 `clone_version`) copies a version's group keys onto a coexisting draft —
+    a re-keyed clone would break `?focus=group:<key>` deep links on publish.
     """
     group = _group(public_key="group-1a2b3c4d")
-    with pytest.raises(IntegrityError), transaction.atomic():
+    # Control: a *different* key inside the same version is fine — so the check below
+    # discriminates on the key, not on "a second group in this version".
+    assert _group(version=group.version, public_key="group-4d5e6f70").pk
+    with pytest.raises(IntegrityError), transaction.atomic():  # within one version: still unique
         _group(version=group.version, public_key=group.public_key)
-    other_version = AtlasVersion.objects.create(status="draft", label="v2")
-    with pytest.raises(IntegrityError), transaction.atomic():
-        _group(version=other_version, public_key=group.public_key)
-    assert AtlasGroup.objects.filter(public_key=group.public_key).count() == 1
+    other_version = _version()
+    clone = _group(version=other_version, public_key=group.public_key)  # R9: allowed
+    assert clone.version_id == other_version.pk
+    assert AtlasGroup.objects.filter(public_key=group.public_key).count() == 2
+
+
+def test_clone_can_copy_keys_onto_a_coexisting_version():
+    """Ruling R9 end to end: a clone keeps node, group and composed relation keys.
+
+    `clone_version` (plan Task 13: "New draft with copied public keys and pins") copies
+    nodes, relations, groups and memberships while the source version stays live. Before
+    R9 each copied node/group key tripped a UNIQUE constraint; with version-scoped
+    uniqueness the *composed* relation key (spec §5.3: never stored) follows its
+    endpoints', so deep links and the layout dict survive the clone untouched.
+    """
+    relation_type = _relation_type("uses")
+    source_node = _node(public_key="research-area-1a2b3c4d")
+    target_node = _node(public_key="project-2b3c4d5e")
+    relation = _relation(source_node, target_node, relation_type=relation_type)
+    group = _group(public_key="group-3c4d5e6f")
+    _membership(group, source_node)
+
+    clone = _version()
+    clone_source = _node(version=clone, public_key=source_node.public_key)
+    clone_target = _node(version=clone, public_key=target_node.public_key)
+    clone_relation = _relation(
+        clone_source, clone_target, relation_type=relation_type, version=clone
+    )
+    clone_group = _group(version=clone, public_key=group.public_key)
+    _membership(clone_group, clone_source)
+
+    assert clone_source.public_key == source_node.public_key
+    assert clone_group.public_key == group.public_key
+    assert clone_relation.public_key == relation.public_key  # deep-link identity survives
+    assert AtlasNode.objects.filter(public_key=source_node.public_key).count() == 2
+    assert AtlasGroup.objects.filter(public_key=group.public_key).count() == 2
+    assert clone_relation.full_clean() is None  # the clone's own edge is valid, not just inserted
 
 
 def test_generated_group_keys_pass_the_model_rule():
