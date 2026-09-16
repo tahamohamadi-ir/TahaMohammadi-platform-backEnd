@@ -1,15 +1,19 @@
 """`AtlasNodeType` / `AtlasRelationType` — taxonomy fields, key grammar and lifecycle rules.
 
-Builders are local to this module for now; plan Task 6 promotes the shared ones into
-``apps/atlas/tests/factories.py``. The row-backed halves of the lifecycle rules —
-``PROTECT``-on-delete and key immutability for a *real* node — become executable once
-``AtlasNode`` ships (plan Task 6); here the immutability guard is proven against a stub
-referencing model, and the node-backed cases are re-proven there.
+Builders live in ``apps/atlas/tests/factories.py`` (plan Task 6, ruling R4).
+
+The row-backed halves of the lifecycle rules — ``PROTECT``-on-delete and key
+immutability for a *real* node — were only provable against a stub while
+``AtlasNode`` did not exist. They are re-proven here with real rows now that it
+does: ``test_node_type_key_is_immutable_once_used`` and
+``test_in_use_taxonomy_cannot_be_deleted`` close Task 5's carry-forward. The two
+monkeypatched tests stay, because they prove the guard branch on its own.
 """
 
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 
 from apps.atlas import models as atlas_models
 from apps.atlas.models import (
@@ -17,46 +21,14 @@ from apps.atlas.models import (
     SELF_LOOP_POLICIES,
     SEMANTIC_ROLES,
     VISUAL_ROLES,
+    AtlasNode,
     AtlasNodeType,
     AtlasRelationType,
+    _referencing_model,
 )
+from apps.atlas.tests.factories import _node, _node_type, _relation_type
 
 pytestmark = pytest.mark.django_db
-
-
-def _node_type(key="research-area", **overrides):
-    """Create an `AtlasNodeType` with spec-shaped defaults (`research-area`)."""
-    row = {
-        "label_en": "Research area",
-        "label_fa": "دامنهٔ پژوهشی",
-        "semantic_role": "area",
-        "visual_role": "domain",
-        "canonical_source": "research_topic",
-    }
-    row.update(overrides)
-    return AtlasNodeType.objects.create(key=key, **row)
-
-
-def _relation_type(key="uses", *, allowed_sources=(), allowed_targets=(), **overrides):
-    """Create an `AtlasRelationType`; allowed type keys resolve to existing node types."""
-    row = {
-        "label_en": key,
-        "label_fa": key,
-        "inverse_label_en": f"inverse of {key}",
-        "inverse_label_fa": key,
-        "semantic_role": "utility",
-    }
-    row.update(overrides)
-    relation_type = AtlasRelationType.objects.create(key=key, **row)
-    if allowed_sources:
-        relation_type.allowed_source_types.set(
-            AtlasNodeType.objects.filter(key__in=allowed_sources)
-        )
-    if allowed_targets:
-        relation_type.allowed_target_types.set(
-            AtlasNodeType.objects.filter(key__in=allowed_targets)
-        )
-    return relation_type
 
 
 def test_node_type_defaults_match_spec():
@@ -140,7 +112,32 @@ class _StubReferencingRows:
 
 
 class _StubReferencingModel:
+    """Mirrors the real model shape the guard reads: both manager slots exist."""
+
     _default_manager = _StubReferencingRows()
+    _base_manager = _StubReferencingRows()
+
+
+class _StubFilteringRows:
+    """A *default* manager whose filter would hide an in-use row."""
+
+    def filter(self, **kwargs):
+        return self
+
+    def exists(self):
+        return False
+
+
+class _StubBaseRows(_StubFilteringRows):
+    """The base manager, which still sees the row the filter hides."""
+
+    def exists(self):
+        return True
+
+
+class _StubModelWithFilteringDefaultManager:
+    _default_manager = _StubFilteringRows()
+    _base_manager = _StubBaseRows()
 
 
 def test_node_type_key_is_immutable_once_a_node_uses_it(monkeypatch):
@@ -237,3 +234,69 @@ def test_choice_vocabularies_match_spec():
     assert AtlasNodeType._meta.get_field("semantic_role").choices == SEMANTIC_ROLES.choices
     assert AtlasNodeType._meta.get_field("canonical_source").default == "none"
     assert AtlasRelationType._meta.get_field("self_loop_policy").default == "forbid"
+
+
+def test_node_type_key_is_immutable_once_used():
+    """Task 5 carry-forward, real rows: an existing node locks its type's key.
+
+    Task 5 could only prove this with a monkeypatched stub (``AtlasNode`` did not
+    exist yet); here the guard resolves the real foreign key. The error is keyed
+    by field and carries the node-type message verbatim (spec §5.3).
+    """
+    node_type = _node_type("research-area")
+    _node(node_type=node_type)
+    node_type.key = "research-area-renamed"
+    with pytest.raises(ValidationError) as exc:
+        node_type.save()
+    assert exc.value.message_dict == {
+        "key": ["A node type key is immutable once a node uses it."]
+    }
+    assert AtlasNodeType.objects.get(pk=node_type.pk).key == "research-area"
+
+
+def test_in_use_taxonomy_cannot_be_deleted():
+    """Task 5 carry-forward, real rows: ``PROTECT`` blocks deleting a used type.
+
+    The node FK is the only thing carrying this protection (no custom code), so
+    the test fails if the FK ever loses ``on_delete=models.PROTECT``.
+    """
+    node_type = _node_type("project", canonical_source="project")
+    node = _node(node_type=node_type)
+    with pytest.raises(ProtectedError), transaction.atomic():
+        node_type.delete()
+    assert AtlasNodeType.objects.filter(pk=node_type.pk).exists()
+    assert AtlasNode.objects.filter(pk=node.pk).exists()
+
+
+def test_retiring_an_in_use_type_is_allowed():
+    """Deletion is blocked; retirement is the sanctioned escape hatch (spec §5.3)."""
+    node_type = _node_type("research-area")
+    _node(node_type=node_type)
+    node_type.active = False
+    node_type.save()
+    assert AtlasNodeType.objects.get(pk=node_type.pk).active is False
+
+
+def test_the_in_use_guard_is_armed_for_real_node_rows():
+    """The guard resolves the referencing model by name and *swallows* ``LookupError``.
+
+    A typo in that name — or a model that never lands — would therefore disable
+    the immutability and deletion protections silently and forever, so the
+    resolution itself is asserted here. The relation half arrives with
+    ``AtlasRelation`` and is asserted by plan Task 7 (recorded as a carry-forward).
+    """
+    assert _referencing_model("atlas", "AtlasNode") is not None
+
+
+def test_in_use_detection_reads_through_the_base_manager(monkeypatch):
+    """A filtering default manager must not hide in-use rows from the guard.
+
+    ``_base_manager`` (not ``_default_manager``) is read, so a model that later
+    gains a filtered default manager cannot silently disable the rules.
+    """
+    node_type = _node_type("research-area")
+    stub = _StubModelWithFilteringDefaultManager
+    monkeypatch.setattr(atlas_models, "_referencing_model", lambda *args, **kwargs: stub)
+    node_type.key = "research-area-renamed"
+    with pytest.raises(ValidationError):
+        node_type.save()
