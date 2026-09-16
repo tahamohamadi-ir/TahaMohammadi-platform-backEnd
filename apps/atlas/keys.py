@@ -4,8 +4,8 @@ Node keys are ``<node-type-key>-<8 hex>``, group keys are ``group-<8 hex>`` and
 relation keys compose ``<source>~<relation-type>~<target>``. For undirected
 relation types the two endpoints are ordered lexicographically, so the same
 pair always produces the same key. Node and group keys never contain ``~``
-(they are built by ``new_node_key``/``new_group_key``), so a ``~`` in a URL key
-unambiguously means "relation".
+(``new_node_key`` rejects a type key that does, and ``new_group_key`` mints a
+fixed prefix), so a ``~`` in a URL key unambiguously means "relation".
 """
 
 from __future__ import annotations
@@ -29,6 +29,16 @@ def _suffix() -> str:
 
 
 def new_node_key(node_type_key: str) -> str:
+    """Mint a node key. The type key must not contain the relation separator.
+
+    ``PUBLIC_KEY_RE`` permits ``~`` (relation keys need it), so the "a ``~`` in a
+    URL key means relation" property is only true if node/group keys never carry
+    one. Node types are validated to ``[a-z0-9-]`` elsewhere, but this generator
+    is the last line of defence: minting ``new_node_key("a~b")`` would produce a
+    key that every URL codec reads as a relation key.
+    """
+    if "~" in node_type_key:
+        raise ValueError(f"node type key must not contain '~': {node_type_key!r}")
     return f"{node_type_key}-{_suffix()}"
 
 
@@ -44,8 +54,14 @@ def relation_public_key(source: str, relation_type: str, target: str, *, directe
 def is_valid_public_key(value: str) -> bool:
     """True when ``value`` matches the whole key grammar.
 
-    ``fullmatch`` plus the pattern's ``\\Z`` anchor means a trailing newline can
-    never be accepted; the grammar's length bounds are fully expressed by the
-    pattern, so no separate length check is needed.
+    ``fullmatch`` means the whole string must match; the pattern's ``\\Z`` anchor
+    additionally protects the raw ``PUBLIC_KEY_RE.match(...)`` callers the plan
+    requires (``$`` would let ``"ab\\n"`` through under ``match``). The grammar's
+    length bounds are fully expressed by the pattern, so no separate length check
+    is needed.
+
+    Note: this validates a *single* key segment (2–80 chars). A composed relation
+    key can legitimately exceed 80 characters, so relation keys must be validated
+    per segment rather than with this helper.
     """
     return isinstance(value, str) and PUBLIC_KEY_RE.fullmatch(value) is not None

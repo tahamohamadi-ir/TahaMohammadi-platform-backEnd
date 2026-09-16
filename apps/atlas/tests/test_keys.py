@@ -1,5 +1,7 @@
 """Public-key generator — node/group shape, relation composition, key grammar."""
 
+import pytest
+
 from apps.atlas.keys import (
     PUBLIC_KEY_RE,
     is_valid_public_key,
@@ -54,3 +56,16 @@ def test_key_grammar_length_bounds():
     assert not is_valid_public_key("a")                    # one character is too short
     assert is_valid_public_key("x" * 80)                   # longest legal key
     assert not is_valid_public_key("x" * 81)
+
+
+def test_generated_node_and_group_keys_never_contain_the_separator():
+    # The "a `~` in a URL key means relation" property depends on this: a node key
+    # carrying `~` would be read as a relation key by every URL codec.
+    for _ in range(50):
+        assert "~" not in new_node_key("research-area")
+        assert "~" not in new_group_key()
+
+
+def test_node_key_generator_rejects_a_type_key_containing_the_separator():
+    with pytest.raises(ValueError):
+        new_node_key("a~b")
