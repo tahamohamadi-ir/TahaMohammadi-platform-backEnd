@@ -629,6 +629,27 @@ class Method(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMi
         return f"{self.title} ({self.locale})"
 
 
+class Technology(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
+    """Technology track — first-class publishable entity (Atlas node source)."""
+
+    short_description = models.TextField(blank=True)
+    description = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "content_technology"
+        ordering = ["locale", "sort_order", "slug"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["locale", "slug"],
+                name="content_technology_unique_locale_slug",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.locale})"
+
+
 class ResearchStatement(LocalizedContentMixin, ContentPublicationMetadataMixin, LifecycleMixin):
     """Independent research agenda statement (HTML text + optional PDF)."""
 
