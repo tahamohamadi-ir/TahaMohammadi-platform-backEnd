@@ -12,6 +12,13 @@ computed once per revision and stored on the version as
 ``{"<node public key>": [x, y, z], ...}``; consumers project it, never
 re-simulate it (spec §12.1).
 
+``AtlasRelation`` is an authored edge between two nodes of one version — never
+inferred — and its public key is **composed and never stored**
+(``<source>~<relation-type>~<target>``). ``AtlasGroup``,
+``AtlasGroupTranslation`` and ``AtlasGroupMembership`` cluster nodes across
+locales; membership is not a relation and never appears in the relation list,
+the hierarchy DAG or the relation counts (spec §5.5).
+
 ``Meta.ordering`` is unspecified by the plan in places; wherever it is, the
 choice here is deterministic and therefore testable — ``sort_order``/``key`` for
 the taxonomies (Task 5 precedent), ``-id`` for versions (the plan fixes it), and
@@ -26,7 +33,7 @@ from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from apps.atlas.keys import PUBLIC_KEY_RE, is_valid_public_key
+from apps.atlas.keys import PUBLIC_KEY_RE, is_valid_public_key, relation_public_key
 from apps.content.models import Locale
 
 #: Taxonomy key grammar (spec §5.3): lowercase letters, digits and hyphens only.
@@ -43,6 +50,36 @@ def validate_taxonomy_key(value: str) -> None:
             "A taxonomy key must match ^[a-z0-9-]+$; '~' is reserved for composed "
             "relation keys."
         )
+
+
+#: Separator of a composed public relation key. Node, group and taxonomy keys
+#: never contain it, so a ``~`` in a URL key unambiguously means "relation".
+RELATION_KEY_SEPARATOR = "~"
+
+
+def is_valid_relation_public_key(value: str) -> bool:
+    """Validate a composed ``<source>~<relation-type>~<target>`` key **per segment**.
+
+    ``is_valid_public_key`` is the *single-key* grammar and caps a key at 80
+    characters, which is shorter than a legal composed relation key: two
+    80-character node keys around a 64-character type key reach 226 characters.
+    Applying the single-key grammar to the composed value would therefore reject
+    valid relation keys, so every segment is validated with the grammar it
+    actually belongs to — the two endpoints with ``is_valid_public_key``, the
+    middle segment with the taxonomy key grammar.
+
+    Importable by the validation and projection layers (plan Tasks 9/14/15),
+    which must never call ``is_valid_public_key`` on a whole relation key.
+    """
+    parts = str(value).split(RELATION_KEY_SEPARATOR)
+    if len(parts) != 3:
+        return False
+    source_key, relation_type_key, target_key = parts
+    return bool(
+        is_valid_public_key(source_key)
+        and is_valid_public_key(target_key)
+        and TAXONOMY_KEY_RE.fullmatch(relation_type_key)
+    )
 
 
 class SEMANTIC_ROLES(models.TextChoices):
@@ -374,3 +411,250 @@ class AtlasNodeTranslation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.node.public_key} ({self.locale})"
+
+
+class AtlasRelation(models.Model):
+    """An authored, locale-neutral relation between two nodes of one version (spec §5.3).
+
+    Only authored rows exist — nothing infers a relation (spec constraint in the
+    plan's Global Constraints). The public key is **composed and never stored**:
+    ``<source>~<relation-type>~<target>``, with the endpoints ordered by
+    ``public_key`` when ``directed`` is ``False`` so the identity does not depend
+    on which end was authored first.
+    """
+
+    version = models.ForeignKey(AtlasVersion, on_delete=models.CASCADE, related_name="relations")
+    source = models.ForeignKey(
+        AtlasNode, on_delete=models.CASCADE, related_name="outgoing_relations"
+    )
+    target = models.ForeignKey(
+        AtlasNode, on_delete=models.CASCADE, related_name="incoming_relations"
+    )
+    relation_type = models.ForeignKey(
+        AtlasRelationType, on_delete=models.PROTECT, related_name="relations"
+    )
+    #: ``directed`` is initialised from ``relation_type.directed_default`` by the
+    #: authoring layer (spec §5.3) and is deliberately **not** rewritten on save:
+    #: a relation that contradicts its type while ``overridable_direction`` is
+    #: false must stay observable, because that contradiction is the publish
+    #: blocker ``DIRECTION_NOT_OVERRIDABLE`` (plan Task 9). A save-level coercion
+    #: would make that code unreachable through the ORM.
+    directed = models.BooleanField(default=True)
+    weight = models.PositiveSmallIntegerField(default=1)
+    visible = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "atlas_relation"
+        ordering = ["version", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "source", "target", "relation_type"],
+                name="atlas_relation_unique_version_pair_rel",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.relation_type.key}: {self.source.public_key}->{self.target.public_key}"
+
+    @property
+    def public_key(self) -> str:
+        """The composed public key — derived on read, never a column (spec §5.3)."""
+        return relation_public_key(
+            self.source.public_key,
+            self.relation_type.key,
+            self.target.public_key,
+            directed=self.directed,
+        )
+
+    def clean(self) -> None:
+        """Same-version endpoints, self-loop policy, mirrored pairs, composed key.
+
+        The first three mirror ``GraphEdge.clean`` (spec §5.3: "mirrors
+        ``GraphEdge.clean``"); the last validates the composed public key per
+        segment, because the single-key grammar cannot judge a composed key.
+        """
+        super().clean()
+        errors: dict[str, str] = {}
+        endpoints_known = bool(self.version_id and self.source_id and self.target_id)
+        if endpoints_known and (
+            self.source.version_id != self.version_id
+            or self.target.version_id != self.version_id
+        ):
+            errors["version"] = "Relation endpoints must belong to the same Atlas version."
+        if not errors and endpoints_known and self.source_id == self.target_id:
+            if (
+                self.relation_type_id
+                and self.relation_type.self_loop_policy != SELF_LOOP_POLICIES.ALLOW
+            ):
+                errors["target"] = (
+                    "A self-loop is only allowed when the relation type's self_loop_policy "
+                    "is 'allow'."
+                )
+        mirrored_pair_possible = (
+            not self.directed and endpoints_known and self.source_id != self.target_id
+        )
+        if not errors and mirrored_pair_possible:
+            mirror = AtlasRelation.objects.filter(
+                version_id=self.version_id,
+                source_id=self.target_id,
+                target_id=self.source_id,
+                relation_type_id=self.relation_type_id,
+            )
+            if self.pk:
+                mirror = mirror.exclude(pk=self.pk)
+            if mirror.exists():
+                errors["source"] = (
+                    "An undirected relation must not duplicate an existing reversed pair."
+                )
+        if not errors and endpoints_known and self.relation_type_id:
+            if not is_valid_public_key(self.source.public_key):
+                errors["source"] = (
+                    "The source node's public key does not match the Atlas key grammar, so "
+                    "the composed relation key would be unreadable."
+                )
+            elif not is_valid_public_key(self.target.public_key):
+                errors["target"] = (
+                    "The target node's public key does not match the Atlas key grammar, so "
+                    "the composed relation key would be unreadable."
+                )
+            elif TAXONOMY_KEY_RE.fullmatch(self.relation_type.key) is None:
+                errors["relation_type"] = (
+                    "The relation type's key does not match the taxonomy key grammar, so "
+                    "the composed relation key would be unreadable."
+                )
+        if errors:
+            raise ValidationError(errors)
+
+
+class AtlasRelationTranslation(models.Model):
+    """Optional per-locale explanation of a relation (spec §5.3).
+
+    Blank means "the relation type's forward/inverse label only" — the type
+    carries the display copy, this carries the extra sentence.
+    """
+
+    relation = models.ForeignKey(
+        AtlasRelation, on_delete=models.CASCADE, related_name="translations"
+    )
+    locale = models.CharField(max_length=2, choices=Locale.choices)
+    explanation = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "atlas_relation_translation"
+        ordering = ["relation", "locale"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relation", "locale"], name="atlas_relation_translation_unique_locale"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.relation.public_key} ({self.locale})"
+
+
+class AtlasGroup(models.Model):
+    """A locale-neutral cluster of a version's nodes (spec §5.3/§5.5).
+
+    Membership is laid out and filtered on, never rendered as a relationship: it
+    appears in no relation list, no relation inspector and no relationship count
+    (spec §5.5).
+    """
+
+    version = models.ForeignKey(AtlasVersion, on_delete=models.CASCADE, related_name="groups")
+    #: ``group-<8 hex>`` (``keys.new_group_key``), assigned at creation, immutable
+    #: thereafter and unique globally, so a group key never means two things. It
+    #: never carries ``~`` — ``clean()`` below is that half of the "a ``~`` in a
+    #: URL key means relation" property, mirroring ``AtlasNode.clean()``.
+    public_key = models.SlugField(max_length=80)
+    sort_order = models.PositiveIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "atlas_group"
+        ordering = ["version", "sort_order", "public_key"]
+        constraints = [
+            models.UniqueConstraint(fields=["public_key"], name="atlas_group_unique_public_key"),
+        ]
+
+    def __str__(self) -> str:
+        return self.public_key
+
+    def clean(self) -> None:
+        """A group key is a node-style key: valid grammar, and never a ``~``."""
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.public_key and "~" in self.public_key:
+            errors["public_key"] = (
+                "A group key must not contain '~': that separator is reserved for relation "
+                "keys, so a tilde-bearing key would be read as a relation key."
+            )
+        elif self.public_key and not is_valid_public_key(self.public_key):
+            errors["public_key"] = (
+                f"A public key must match the Atlas key grammar ({PUBLIC_KEY_RE.pattern})."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+
+class AtlasGroupTranslation(models.Model):
+    """Localized group copy; both locales are required at publish (spec §5.5)."""
+
+    group = models.ForeignKey(AtlasGroup, on_delete=models.CASCADE, related_name="translations")
+    locale = models.CharField(max_length=2, choices=Locale.choices)
+    #: Blank at the model level on purpose: "required for both locales" is a
+    #: publish gate (validation code ``GROUP_LOCALE_MISSING``, plan Task 10), not
+    #: a storage rule — a half-translated draft must remain saveable.
+    label = models.CharField(max_length=200, blank=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "atlas_group_translation"
+        ordering = ["group", "locale"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "locale"], name="atlas_group_translation_unique_locale"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.group.public_key} ({self.locale})"
+
+
+class AtlasGroupMembership(models.Model):
+    """One node's membership in one group of the same version (spec §5.3/§5.5).
+
+    ``group.members`` yields these membership rows (the plan's Task 7 assertion);
+    the member nodes are reached through ``.node``.
+    """
+
+    group = models.ForeignKey(AtlasGroup, on_delete=models.CASCADE, related_name="members")
+    node = models.ForeignKey(
+        AtlasNode, on_delete=models.CASCADE, related_name="group_memberships"
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "atlas_group_membership"
+        ordering = ["group", "sort_order", "node"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "node"], name="atlas_group_membership_unique_node"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.group.public_key} <- {self.node.public_key}"
+
+    def clean(self) -> None:
+        """A membership never crosses versions — both endpoints share one version.
+
+        A group belongs to exactly one version and so does a node, so a membership
+        linking two versions would dangle in the projection of either one, exactly
+        as a cross-version relation endpoint does.
+        """
+        super().clean()
+        if self.group_id and self.node_id and self.group.version_id != self.node.version_id:
+            raise ValidationError(
+                {"node": "A group member must belong to the group's Atlas version."}
+            )

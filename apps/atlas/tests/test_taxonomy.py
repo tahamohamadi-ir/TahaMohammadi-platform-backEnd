@@ -8,6 +8,15 @@ immutability for a *real* node — were only provable against a stub while
 does: ``test_node_type_key_is_immutable_once_used`` and
 ``test_in_use_taxonomy_cannot_be_deleted`` close Task 5's carry-forward. The two
 monkeypatched tests stay, because they prove the guard branch on its own.
+
+The same two rules are proved for ``AtlasRelationType`` against a real
+``AtlasRelation`` (plan Task 7's carry-forward from the Tasks 4+5 review):
+``test_relation_type_key_is_immutable_once_used``,
+``test_in_use_relation_type_cannot_be_deleted``,
+``test_retiring_an_in_use_relation_type_is_allowed`` and
+``test_the_in_use_guard_is_armed_for_real_relation_rows`` — the last one because
+the guard swallows ``LookupError``, so a typo in the model name would silently
+disable the invariant forever.
 """
 
 import pytest
@@ -23,10 +32,11 @@ from apps.atlas.models import (
     VISUAL_ROLES,
     AtlasNode,
     AtlasNodeType,
+    AtlasRelation,
     AtlasRelationType,
     _referencing_model,
 )
-from apps.atlas.tests.factories import _node, _node_type, _relation_type
+from apps.atlas.tests.factories import _node, _node_type, _relation, _relation_type
 
 pytestmark = pytest.mark.django_db
 
@@ -283,7 +293,8 @@ def test_the_in_use_guard_is_armed_for_real_node_rows():
     A typo in that name — or a model that never lands — would therefore disable
     the immutability and deletion protections silently and forever, so the
     resolution itself is asserted here. The relation half arrives with
-    ``AtlasRelation`` and is asserted by plan Task 7 (recorded as a carry-forward).
+    ``AtlasRelation`` and is asserted by ``test_the_in_use_guard_is_armed_for_real_relation_rows``
+    below (plan Task 7's carry-forward from the Tasks 4+5 review).
     """
     assert _referencing_model("atlas", "AtlasNode") is not None
 
@@ -300,3 +311,60 @@ def test_in_use_detection_reads_through_the_base_manager(monkeypatch):
     node_type.key = "research-area-renamed"
     with pytest.raises(ValidationError):
         node_type.save()
+
+
+# --- AtlasRelationType lifecycle, proved against a real `AtlasRelation` (Task 7) ---
+
+
+def test_relation_type_key_is_immutable_once_used():
+    """Task 7 carry-forward, real rows: an existing relation locks its type's key.
+
+    Mirrors ``test_node_type_key_is_immutable_once_used``: the *real* referencing
+    row is what arms the guard (the monkeypatched
+    ``test_relation_type_key_is_immutable_once_a_relation_uses_it`` above proves
+    the branch itself). The message is the relation-type spelling, mirroring the
+    node-type one word for word (spec §5.3) — a rename would re-key every relation
+    URL, because the public relation key is composed from the type's key.
+    """
+    relation_type = _relation_type("uses")
+    _relation(relation_type=relation_type)
+    relation_type.key = "uses-renamed"
+    with pytest.raises(ValidationError) as exc:
+        relation_type.save()
+    assert exc.value.message_dict == {
+        "key": ["A relation type key is immutable once a relation uses it."]
+    }
+    assert AtlasRelationType.objects.get(pk=relation_type.pk).key == "uses"
+
+
+def test_in_use_relation_type_cannot_be_deleted():
+    """Task 7 carry-forward, real rows: ``PROTECT`` blocks deleting a used type.
+
+    The relation FK is the only thing carrying this protection (no custom code),
+    so the test fails if that FK ever loses ``on_delete=models.PROTECT``.
+    """
+    relation_type = _relation_type("uses")
+    relation = _relation(relation_type=relation_type)
+    with pytest.raises(ProtectedError), transaction.atomic():
+        relation_type.delete()
+    assert AtlasRelationType.objects.filter(pk=relation_type.pk).exists()
+    assert AtlasRelation.objects.filter(pk=relation.pk).exists()
+
+
+def test_retiring_an_in_use_relation_type_is_allowed():
+    """Deletion is blocked; retirement is the sanctioned escape hatch (spec §5.3)."""
+    relation_type = _relation_type("uses")
+    _relation(relation_type=relation_type)
+    relation_type.active = False
+    relation_type.save()
+    assert AtlasRelationType.objects.get(pk=relation_type.pk).active is False
+
+
+def test_the_in_use_guard_is_armed_for_real_relation_rows():
+    """Task 7 carry-forward: the relation half of the armed-guard assertion.
+
+    ``_referencing_model`` swallows ``LookupError``, so a mistyped model name
+    would disable ``AtlasRelationType``'s immutability and deletion protections
+    with no error anywhere.
+    """
+    assert _referencing_model("atlas", "AtlasRelation") is not None
