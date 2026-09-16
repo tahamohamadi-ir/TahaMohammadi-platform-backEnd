@@ -17,7 +17,11 @@ The declared R5 surface:
 * ``atlas_v1`` — draft version, 4 visible core nodes (identity + 3 areas), 3
   ``research-focus`` relations, one pinned node, ``fa_missing_node`` (canonical
   EN only) / ``en_missing_node`` (canonical FA only), ``override(node, *,
-  locale, label)``, ``add_draft_only_node()`` / ``draft_only_key``;
+  locale, label)``, ``add_draft_only_node()`` / ``draft_only_key``, plus the two
+  relation-rule offenders of Task 9: ``bad_relation`` (outside the
+  ``research-focus`` allowed pair ``identity → research-area``) and
+  ``direction_relation`` (``directed`` contradicting its type's
+  ``directed_default`` while ``overridable_direction`` is false);
 * ``atlas_active_version`` — the same mirror with ``status="active"`` (no
   one-sided nodes; ``nodeCount == 4``), plus ``corrupt_layout`` and a companion
   draft version for ``add_draft_only_node()``;
@@ -77,12 +81,42 @@ def test_atlas_v1_topology_surface(atlas_v1):
     assert all(node.node_type.key == "research-area" for node in atlas_v1.areas)
 
     relations = list(atlas_v1.version.relations.all())
-    # 3 `research-focus` edges of the core mirror + 1 per one-sided node.
-    assert len(relations) == 5
-    assert {relation.relation_type.key for relation in relations} == {"research-focus"}
+    # 3 `research-focus` edges of the core mirror + 1 per one-sided node, plus the
+    # Task 9 rule offenders (1 rejected pair, 1 direction contradiction).
+    assert len(relations) == 7
+    assert {relation.relation_type.key for relation in relations} == {
+        "research-focus",
+        "related-to",
+    }
     # The view fixtures depend on a valid layout for every served node (spec §10.3:
     # "every visible node has one"); the coordinates are Task 11/13's, a placeholder here.
     assert atlas_v1.version.layout == {node.public_key: [0.0, 0.0, 0.0] for node in visible}
+
+
+def test_atlas_v1_exposes_the_relation_rule_offenders(atlas_v1):
+    """The Task 9 rule fixtures: one rejected pair and one direction contradiction.
+
+    ``bad_relation`` sits outside ``research-focus``'s allowed pair
+    (``identity → research-area``, spec §6.2) and ``direction_relation`` is
+    authored ``directed=True`` against ``related-to``'s ``directed_default=False``
+    while the type does not allow the override — the two base states
+    ``RELATION_TYPE_NOT_ALLOWED`` and ``DIRECTION_NOT_OVERRIDABLE`` report.
+    """
+    focus = atlas_v1.relation_type
+    assert focus.key == "research-focus"
+    assert list(focus.allowed_source_types.values_list("key", flat=True)) == ["identity"]
+    assert list(focus.allowed_target_types.values_list("key", flat=True)) == ["research-area"]
+    assert focus.overridable_direction is False
+
+    bad = atlas_v1.bad_relation
+    assert bad.relation_type_id == focus.pk
+    assert (bad.source.node_type.key, bad.target.node_type.key) == ("research-area", "identity")
+    assert bad.visible
+
+    direction = atlas_v1.direction_relation
+    assert direction.directed is True
+    assert direction.relation_type.directed_default is False
+    assert direction.relation_type.overridable_direction is False
 
 
 def test_atlas_v1_pins_are_exposed_for_the_clone_test(atlas_v1):

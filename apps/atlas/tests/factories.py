@@ -37,7 +37,11 @@ The ``atlas_v1`` family bundles (ruling R5) expose, beyond ``version``:
   ``en_missing_node`` (resolves FA only) — each an endpoint of a visible
   relation, so hiding one produces both the parity and the dangling-visibility
   effect — plus ``override(node, *, locale, label, …)``,
-  ``add_draft_only_node()``/``draft_only_key`` and ``corrupt_layout(...)``;
+  ``add_draft_only_node()``/``draft_only_key`` and ``corrupt_layout(...)``, and
+  (plan Task 9) the two relation-rule offenders ``bad_relation`` (outside the
+  ``research-focus`` allowed pair) and ``direction_relation`` (a ``related-to``
+  relation whose ``directed`` contradicts the type's ``directed_default``), with
+  ``relation_type`` naming the type the retirement rule is proven on;
 * ``atlas_active_version`` — the same mirror as an *active* version (no
   one-sided nodes, so a servable ``nodeCount == 4``), with ``pk`` delegating to
   the active version and a companion draft version for ``add_draft_only_node()``;
@@ -399,7 +403,10 @@ IDENTITY_TYPE_DEFAULTS = {
 }
 
 #: The relation type the current published Research Universe uses for its three
-#: identity → area edges (spec §6.2): directed, not a hierarchy, priority 95.
+#: identity → area edges (spec §6.2): directed, not a hierarchy, priority 95. Its
+#: allowed pair is part of the seeded vocabulary (identity → research-area), so it
+#: is set by ``_research_focus_type`` — an empty pair would mean "any active type"
+#: (spec §6.2) and no fixture could express ``RELATION_TYPE_NOT_ALLOWED``.
 RESEARCH_FOCUS_TYPE_DEFAULTS = {
     "label_en": "research focus",
     "label_fa": "تمرکز پژوهشی",
@@ -408,6 +415,21 @@ RESEARCH_FOCUS_TYPE_DEFAULTS = {
     "directed_default": True,
     "hierarchy_role": False,
     "visual_priority": 95,
+    "self_loop_policy": "forbid",
+    "semantic_role": "utility",
+}
+
+#: The undirected, any→any type of spec §6.2, used by the Task 9 direction
+#: offender: ``directed_default=False`` plus ``overridable_direction=False`` makes
+#: a relation authored ``directed=True`` a ``DIRECTION_NOT_OVERRIDABLE`` blocker.
+RELATED_TO_TYPE_DEFAULTS = {
+    "label_en": "related to",
+    "label_fa": "مرتبط با",
+    "inverse_label_en": "related to",
+    "inverse_label_fa": "مرتبط با",
+    "directed_default": False,
+    "hierarchy_role": False,
+    "visual_priority": 40,
     "self_loop_policy": "forbid",
     "semantic_role": "utility",
 }
@@ -431,10 +453,27 @@ def _identity_node_type():
 
 
 def _research_focus_type():
-    """The shared `research-focus` relation type (spec §6.2)."""
+    """The shared `research-focus` relation type (spec §6.2) — identity → research-area.
+
+    The allowed pair is applied on every call (``get_or_create`` + ``set``): the
+    fixture must not depend on some earlier builder having created the two node
+    types, because a silently empty pair would turn "any active type" on and hide
+    exactly the violation the Task 9 fixture is here to prove.
+    """
     relation_type, _created = AtlasRelationType.objects.get_or_create(
         key="research-focus",
         defaults=dict(RESEARCH_FOCUS_TYPE_DEFAULTS),
+    )
+    relation_type.allowed_source_types.set([_identity_node_type()])
+    relation_type.allowed_target_types.set([_default_node_type()])
+    return relation_type
+
+
+def _related_to_type():
+    """The shared `related-to` relation type (spec §6.2): undirected, any → any."""
+    relation_type, _created = AtlasRelationType.objects.get_or_create(
+        key="related-to",
+        defaults=dict(RELATED_TO_TYPE_DEFAULTS),
     )
     return relation_type
 
@@ -524,7 +563,14 @@ class _AtlasBundle:
 
 
 class AtlasV1Fixture(_AtlasBundle):
-    """The draft mirror of the current published graph (ruling R5)."""
+    """The draft mirror of the current published graph (ruling R5).
+
+    The last three attributes are the Task 9 rule offenders, so the relation
+    rules are proven against base fixture state instead of test-local setup:
+    ``relation_type`` is the ``research-focus`` type the retirement rule flips,
+    ``bad_relation`` sits outside that type's allowed pair, and
+    ``direction_relation`` contradicts ``related-to``'s ``directed_default``.
+    """
 
     def __init__(
         self,
@@ -536,6 +582,9 @@ class AtlasV1Fixture(_AtlasBundle):
         fa_missing_node: AtlasNode,
         en_missing_node: AtlasNode,
         canonical_keys: dict[str, UUID],
+        relation_type: AtlasRelationType,
+        bad_relation: AtlasRelation,
+        direction_relation: AtlasRelation,
     ) -> None:
         super().__init__()
         self.version = version
@@ -549,6 +598,9 @@ class AtlasV1Fixture(_AtlasBundle):
         #: ``fa_missing``, ``en_missing``. The one-sided keys resolve in exactly
         #: one locale each, which is what the parity matrix asserts.
         self.canonical_keys = canonical_keys
+        self.relation_type = relation_type
+        self.bad_relation = bad_relation
+        self.direction_relation = direction_relation
 
     @property
     def pinned_key(self) -> str:
@@ -740,6 +792,28 @@ def atlas_v1():
     identity, areas, relations, canonical_keys, fa_missing, en_missing = (
         _build_identity_and_areas(version, with_one_sided_nodes=True)
     )
+    focus_type = _research_focus_type()
+    # The Task 9 rule offenders: a `research-focus` relation whose endpoints are
+    # outside the type's allowed pair (area → identity, spec §6.2) and a
+    # `related-to` relation authored directed against its undirected type. Both
+    # are stored rows the model layer accepts on purpose — `directed` is never
+    # coerced on save, and the allowed pair is a validation rule, not a constraint.
+    bad_relation = _relation(
+        source=areas[1],
+        target=identity,
+        relation_type=focus_type,
+        version=version,
+        sort_order=5,
+    )
+    direction_relation = _relation(
+        source=areas[0],
+        target=areas[1],
+        relation_type=_related_to_type(),
+        version=version,
+        directed=True,
+        sort_order=6,
+    )
+    relations = [*relations, bad_relation, direction_relation]
     pinned = areas[0]
     pinned.pin_x, pinned.pin_y, pinned.pin_z = (*ATLAS_V1_PIN, 0.0)
     pinned.save()
@@ -753,6 +827,9 @@ def atlas_v1():
         fa_missing_node=fa_missing,
         en_missing_node=en_missing,
         canonical_keys=canonical_keys,
+        relation_type=focus_type,
+        bad_relation=bad_relation,
+        direction_relation=direction_relation,
     )
 
 
