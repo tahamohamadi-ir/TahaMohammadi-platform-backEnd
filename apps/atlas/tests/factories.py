@@ -4,9 +4,12 @@ One home for the builders the plan's Task 6/7/8 test snippets call by name —
 ``_node_type``, ``_relation_type``, ``_node``, ``_relation``, ``_group`` and the
 two translation builders — plus, from Task 8 (ruling R5), the canonical
 ``seed_pairs`` fixture and the ``atlas_v1`` / ``atlas_active_version`` /
-``atlas_two_versions`` fixture family that Tasks 9–16 consume. Task 18 adds the
-scale fixture. Nothing here is production code: a builder exists so a test
-states only the fields the behaviour under test depends on.
+``atlas_two_versions`` fixture family that Tasks 9–16 consume. The scale family
+(``atlas_scale_fixture``) arrives with Task 11 — the first task whose tests need
+it (its declared home is Task 18) — sized to the composition Task 18 declares,
+so that task extends it with projection data instead of rewriting it. Nothing
+here is production code: a builder exists so a test states only the fields the
+behaviour under test depends on.
 
 Three rules these builders encode:
 
@@ -59,6 +62,17 @@ spec §5.6 permits). Its node keys are fixed and ascending, so the DFS order the
 plan pins (``public_key`` order) is a known order rather than eight random hex
 characters.
 
+Plan Task 11 adds ``atlas_scale_fixture`` for the layout engine and for the
+§19.2 measurement shape: 72 visible nodes (1 identity anchor, 12 research areas,
+24 projects, 20 publications, 8 methods, 7 technologies), 136 relations (a
+three-level ``parent-of`` hierarchy plus ``uses`` / ``implements`` / ``cites`` /
+``related-to``), 6 groups with 36 memberships, four pinned nodes and fixed
+``<type>-<8 hex>`` keys — including the plan's ``project-2b3c4d5e``, which the
+fixture deliberately leaves *unpinned* so a test can pin it. ``version(...)``
+builds a deterministic variant of another size (Task 12's ``visible_nodes=101``,
+the timing test's 80 / 150). It creates **no** canonical rows: the layout engine
+reads none, and Task 18 adds the projection data on top of these types.
+
 **The two active-version bundles are mutually exclusive in one test.** Both
 ``atlas_active_version`` and ``atlas_two_versions`` create a version with
 ``status="active"``; requesting both fixtures in one test makes the second
@@ -71,7 +85,8 @@ test that needs both shapes must build the second version itself, as
 Every bundle writes a placeholder ``layout`` (all-zero coordinates) for each of
 its visible nodes, because the endpoints of Tasks 15/16 fail closed on a missing
 position: real coordinates are Task 11's engine and Task 13's
-``recompute_layout``.
+``recompute_layout``. ``atlas_scale_fixture`` writes the same placeholder (its
+own tests then run the engine over it).
 """
 
 from __future__ import annotations
@@ -120,13 +135,22 @@ __all__ = [
     "PUBLISHED_AT",
     "R5_FIXTURE_NAMES",
     "RELATION_TYPE_DEFAULTS",
+    "SCALE_COMPOSITION",
+    "SCALE_FIRST_PROJECT_KEY",
+    "SCALE_GROUP_TOTAL",
+    "SCALE_NODE_TOTAL",
+    "SCALE_PINNED_TOTAL",
+    "SCALE_PINS",
+    "SCALE_RELATION_TOTAL",
     "AtlasActiveVersionFixture",
     "AtlasDagFixture",
+    "AtlasScaleFixture",
     "AtlasTwoVersionsFixture",
     "AtlasV1Fixture",
     "SeedPairs",
     "atlas_active_version",
     "atlas_dag",
+    "atlas_scale_fixture",
     "atlas_two_versions",
     "atlas_v1",
     "seed_pairs",
@@ -1138,4 +1162,506 @@ def atlas_dag():
         general_type=_dag_general_type(),
         nodes=nodes,
         relations=relations,
+    )
+
+
+# ---------------------------------------------------------------------------
+# The `atlas_scale_fixture` family (plan Tasks 11 and 18) — 72 nodes / 136 relations.
+#
+# Task 18 declares the composition; Task 11 is the first *consumer* (the layout
+# engine's scale tests), so the fixture is created here (rulings R4/R5/R10: one
+# home for shared builders, created at the first task that needs it) and sized to
+# Task 18's declared band, which then extends it with projection data.
+# ---------------------------------------------------------------------------
+
+#: The composition Task 18 declares for the scale fixture (spec §19.2's 40–80 /
+#: 60–150 target band): 1 identity anchor, 12 research areas, 24 projects, 20
+#: publications, 8 methods, 7 technologies = 72 visible nodes.
+SCALE_COMPOSITION: tuple[tuple[str, int], ...] = (
+    ("identity", 1),
+    ("research-area", 12),
+    ("project", 24),
+    ("publication", 20),
+    ("method", 8),
+    ("technology", 7),
+)
+
+#: The declared totals of the default graph. The relation total is the
+#: composition's own edge set — 36 ``parent-of`` + 48 ``uses`` + 24
+#: ``implements`` + 20 ``cites`` + 8 ``related-to`` — not a padded number; a
+#: request for another size pads or truncates that set (see
+#: :func:`_scale_relation_specs`).
+SCALE_NODE_TOTAL = 72
+SCALE_RELATION_TOTAL = 136
+SCALE_GROUP_TOTAL = 6
+SCALE_PINNED_TOTAL = 4
+
+#: The key the plan's Task 11 snippet pins by name
+#: (``with_pin("project-2b3c4d5e", …)``), so the first project carries it
+#: literally. The fixture leaves it **unpinned**: the snippet has to be able to
+#: set a pin at test time.
+SCALE_FIRST_PROJECT_KEY = "project-2b3c4d5e"
+
+#: ``canonical_source`` per scale-only node type (spec §5.3, §6.1). ``identity``
+#: (→ ``profile``) and ``research-area`` (→ ``research_topic``) reuse the shared
+#: types; no canonical *row* is created for any of them — the layout engine reads
+#: no copy, and Task 18 adds the projection data on top of these types.
+SCALE_NODE_TYPE_SOURCES: dict[str, str] = {
+    "project": "project",
+    "publication": "publication",
+    "method": "method",
+    "technology": "technology",
+}
+
+#: Importance per type — a fixed ladder, so radii differ inside a type and the
+#: relaxation has real work to do (spec §12.2 step 2 reads ``importance``).
+SCALE_IMPORTANCE: dict[str, int] = {
+    "identity": 100,
+    "research-area": 78,
+    "project": 60,
+    "publication": 45,
+    "method": 55,
+    "technology": 70,
+}
+
+#: Four pins, spread far enough apart that no pair is closer than the sum of its
+#: radii (spec §12.5). The identity anchor is one of them: a pinned anchor cannot
+#: drift with the spiral, which is what the scene expects of the centre.
+SCALE_PINS: dict[str, tuple[float, float]] = {
+    "identity-00000001": (0.0, 0.0),
+    "research-area-00000001": (40.0, 25.0),
+    "research-area-00000002": (-40.0, 25.0),
+    "research-area-00000003": (0.0, -45.0),
+}
+
+#: The ``related-to`` pairs of the default graph: eight *unordered* pairs over
+#: the twelve areas, no repeated pair and no mirror (``related-to`` is undirected,
+#: so a mirrored pair would be Task 9's ``DUPLICATE_RELATION``).
+SCALE_RELATED_PAIRS: tuple[tuple[int, int], ...] = (
+    (1, 2),
+    (3, 4),
+    (5, 6),
+    (7, 8),
+    (9, 10),
+    (11, 12),
+    (1, 7),
+    (4, 10),
+)
+
+#: The two relation types the scale graph needs beyond the shared ones (``uses``
+#: is the shared ``_default_relation_type``, ``related-to`` the shared undirected
+#: type, ``parent-of`` the Task 10 hierarchy type).
+SCALE_RELATION_TYPE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "implements": {
+        "label_en": "implements",
+        "label_fa": "پیاده‌سازی می‌کند",
+        "inverse_label_en": "implemented by",
+        "inverse_label_fa": "پیاده‌سازی‌شده توسط",
+        "directed_default": True,
+        "semantic_role": "utility",
+        "visual_priority": 60,
+        "self_loop_policy": "forbid",
+    },
+    "cites": {
+        "label_en": "cites",
+        "label_fa": "ارجاع می‌دهد به",
+        "inverse_label_en": "cited by",
+        "inverse_label_fa": "ارجاع داده‌شده توسط",
+        "directed_default": True,
+        "semantic_role": "utility",
+        "visual_priority": 55,
+        "self_loop_policy": "forbid",
+    },
+}
+
+
+def _scale_key(prefix: str, index: int) -> str:
+    """``<prefix>-<8 hex>`` from a counter — deterministic where ``new_node_key`` is not."""
+    return f"{prefix}-{index:08x}"
+
+
+def _scale_project_key(index: int) -> str:
+    """The first project carries the key the plan's Task 11 snippet pins by name."""
+    return SCALE_FIRST_PROJECT_KEY if index == 1 else _scale_key("project", index)
+
+
+def _scale_node_type(key: str) -> AtlasNodeType:
+    """The node type a scale node hangs off: two shared types plus four scale-only."""
+    if key == "identity":
+        return _identity_node_type()
+    if key == "research-area":
+        return _default_node_type()
+    defaults = {
+        "label_en": key.title(),
+        "label_fa": f"برچسب {key}",
+        "semantic_role": "record",
+        "visual_role": "record",
+        "canonical_source": SCALE_NODE_TYPE_SOURCES[key],
+        "default_importance": SCALE_IMPORTANCE[key],
+        "allow_as_root": False,
+    }
+    node_type, _created = AtlasNodeType.objects.get_or_create(key=key, defaults=defaults)
+    return node_type
+
+
+def _scale_relation_type(key: str) -> AtlasRelationType:
+    """One scale-only relation type, from :data:`SCALE_RELATION_TYPE_DEFAULTS`."""
+    relation_type, _created = AtlasRelationType.objects.get_or_create(
+        key=key, defaults=dict(SCALE_RELATION_TYPE_DEFAULTS[key])
+    )
+    return relation_type
+
+
+def _scale_relation_types() -> dict[str, AtlasRelationType]:
+    """``{relation-type key: row}`` — the shared types first, the scale-only ones after."""
+    return {
+        "parent-of": _dag_hierarchy_type(),
+        "uses": _default_relation_type(),
+        "related-to": _related_to_type(),
+        "implements": _scale_relation_type("implements"),
+        "cites": _scale_relation_type("cites"),
+    }
+
+
+def _scale_overview_priority(type_key: str, index: int) -> str:
+    """The deterministic ``featured`` / ``hidden`` / ``auto`` split (spec §5.3).
+
+    One ``featured`` node (the anchor) and a ``hidden`` every ninth node, so the
+    compact-overview filter has something to filter on both ends.
+    """
+    if type_key == "identity":
+        return "featured"
+    return "hidden" if index % 9 == 0 else "auto"
+
+
+def _scale_node_specs(*, visible_nodes: int) -> list[tuple[str, str, int, str]]:
+    """``(type key, public key, importance, mobile priority)`` per visible node.
+
+    ``visible_nodes`` is the requested size. When it exceeds the declared
+    composition the extra nodes are publications (the band's leaf type); when it
+    falls short, the tail of :data:`SCALE_COMPOSITION` is dropped (technologies,
+    then methods, …, only as far as the request needs). Both directions are a
+    function of the request and of the composition as written, so two runs build
+    the same graph and an edited composition still yields the requested size.
+    """
+    counts = dict(SCALE_COMPOSITION)
+    delta = visible_nodes - sum(counts.values())
+    if delta > 0:
+        counts["publication"] += delta
+    else:
+        for type_key in ("technology", "method", "publication", "project", "research-area"):
+            if delta == 0:
+                break
+            dropped = min(counts[type_key], -delta)
+            counts[type_key] -= dropped
+            delta += dropped
+
+    specs: list[tuple[str, str, int, str]] = []
+    for type_key, _declared in SCALE_COMPOSITION:
+        for index in range(1, counts[type_key] + 1):
+            key = (
+                _scale_project_key(index) if type_key == "project" else _scale_key(type_key, index)
+            )
+            importance = min(100, SCALE_IMPORTANCE[type_key] + index % 5)
+            specs.append((type_key, key, importance, _scale_overview_priority(type_key, index)))
+    return sorted(specs, key=lambda spec: spec[1])
+
+
+def _scale_padding_specs(
+    keys: list[str], *, need: int, taken: list[tuple[str, str, str]]
+) -> list[tuple[str, str, str]]:
+    """Deterministic ``related-to`` triples filling a requested relation count.
+
+    Index arithmetic over the sorted key list (``i`` → ``i + step``) for a few
+    fixed steps, deduplicated as an *unordered* pair because ``related-to`` is
+    undirected. Nothing here is random or time-dependent, so a padded size is as
+    reproducible as the declared one.
+    """
+    if len(keys) < 2:
+        return []
+    used = {frozenset((source, target)) for source, kind, target in taken if kind == "related-to"}
+    added: list[tuple[str, str, str]] = []
+    for step in (5, 7, 11, 13, 17, 19):
+        for index, key in enumerate(keys):
+            if len(added) >= need:
+                return added
+            partner = keys[(index + step) % len(keys)]
+            pair = frozenset((key, partner))
+            if key == partner or pair in used:
+                continue
+            used.add(pair)
+            added.append((key, "related-to", partner))
+    return added
+
+
+def _scale_relation_specs(
+    keys_by_type: dict[str, list[str]], *, relations: int
+) -> list[tuple[str, str, str]]:
+    """``(source key, relation-type key, target key)`` triples in a fixed order.
+
+    The hierarchy edges come first, then ``uses``, ``implements``, ``cites`` and
+    the decorative ``related-to`` pairs, so a smaller request truncates the
+    graph's periphery and never its structure.
+    """
+    identity = keys_by_type.get("identity", [])
+    areas = keys_by_type.get("research-area", [])
+    projects = keys_by_type.get("project", [])
+    publications = keys_by_type.get("publication", [])
+    methods = keys_by_type.get("method", [])
+    technologies = keys_by_type.get("technology", [])
+
+    specs: list[tuple[str, str, str]] = []
+    if areas and identity:
+        specs += [(identity[0], "parent-of", key) for key in areas]
+    if areas:
+        # The hierarchy reads parent → child: an area is the parent of its projects.
+        specs += [
+            (areas[index % len(areas)], "parent-of", key) for index, key in enumerate(projects)
+        ]
+    if technologies:
+        for index, key in enumerate(projects):
+            specs.append((key, "uses", technologies[index % len(technologies)]))
+            specs.append((key, "uses", technologies[(index + 3) % len(technologies)]))
+    if methods:
+        specs += [
+            (key, "implements", methods[index % len(methods)]) for index, key in enumerate(projects)
+        ]
+    if projects:
+        specs += [
+            (key, "cites", projects[index % len(projects)])
+            for index, key in enumerate(publications)
+        ]
+    for first, second in SCALE_RELATED_PAIRS:
+        if first <= len(areas) and second <= len(areas):
+            specs.append((areas[first - 1], "related-to", areas[second - 1]))
+
+    if len(specs) > relations:
+        return specs[:relations]
+    if len(specs) < relations:
+        keys = sorted(key for group in keys_by_type.values() for key in group)
+        specs += _scale_padding_specs(keys, need=relations - len(specs), taken=specs)
+    return specs
+
+
+def _scale_topology(
+    version,
+    *,
+    visible_nodes: int = SCALE_NODE_TOTAL,
+    relations: int = SCALE_RELATION_TOTAL,
+    groups: int = SCALE_GROUP_TOTAL,
+):
+    """Build one scale graph: its node rows, its relation rows and its group memberships.
+
+    Returns ``(nodes, relations, groups)`` — the same three values
+    :meth:`AtlasScaleFixture.parts` hands to ``compute_layout``; ``groups`` is the
+    ``{group key: member node keys}`` mapping that engine consumes (member keys
+    sorted, so the mapping carries no row order).
+    """
+    specs = _scale_node_specs(visible_nodes=visible_nodes)
+    nodes = [
+        _node(
+            version=version,
+            node_type=_scale_node_type(type_key),
+            public_key=key,
+            importance=importance,
+            mobile_overview_priority=priority,
+        )
+        for type_key, key, importance, priority in specs
+    ]
+    by_key = {node.public_key: node for node in nodes}
+    keys_by_type: dict[str, list[str]] = {}
+    for type_key, key, _importance, _priority in specs:
+        keys_by_type.setdefault(type_key, []).append(key)
+
+    relation_types = _scale_relation_types()
+    relation_rows = []
+    for index, (source, kind, target) in enumerate(
+        _scale_relation_specs(keys_by_type, relations=relations)
+    ):
+        relation_rows.append(
+            _relation(
+                source=by_key[source],
+                target=by_key[target],
+                relation_type=relation_types[kind],
+                version=version,
+                sort_order=index,
+            )
+        )
+
+    for key, (x, y) in SCALE_PINS.items():
+        node = by_key.get(key)
+        if node is not None:
+            node.pin_x, node.pin_y, node.pin_z = x, y, None
+            node.save(update_fields=["pin_x", "pin_y", "pin_z"])
+
+    members: dict[str, tuple[str, ...]] = {}
+    areas = keys_by_type.get("research-area", [])
+    projects = keys_by_type.get("project", [])
+    for index in range(groups):
+        group = _group(version=version, public_key=_scale_key("group", index + 1), sort_order=index)
+        group_members = list(projects[index * 4 : index * 4 + 4])
+        if areas:
+            group_members.append(areas[index % len(areas)])
+            group_members.append(areas[(index + 1) % len(areas)])
+        for offset, key in enumerate(dict.fromkeys(group_members)):
+            _membership(group, by_key[key], sort_order=offset)
+        members[group.public_key] = tuple(sorted(set(group_members)))
+
+    return nodes, relation_rows, members
+
+
+class AtlasScaleFixture:
+    """The 72-node / 136-relation scale graph the layout engine measures (Tasks 11, 18).
+
+    The plan's Task 11 snippet spells the surface as ``parts`` (splatted into
+    ``compute_layout``), ``parts_reversed()`` (the same three collections with
+    every element — and every group's member list — reversed),
+    ``with_pin(key, x=…, y=…)``, ``is_root(key)``, ``z_by_depth(layout)`` and
+    ``blueprint()``; Task 12 adds ``version(visible_nodes=…)`` and Task 18
+    ``version_obj`` / ``assert_same_bytes_on_rebuild()``.
+    """
+
+    def __init__(
+        self,
+        *,
+        version: AtlasVersion,
+        nodes: list[AtlasNode],
+        relations: list[AtlasRelation],
+        groups: dict[str, tuple[str, ...]],
+        hierarchy_type: AtlasRelationType,
+        related_type: AtlasRelationType,
+        node_types: dict[str, AtlasNodeType],
+        pinned_keys: list[str],
+    ) -> None:
+        self.version_obj = version
+        self.relations = list(relations)
+        self.groups = dict(groups)
+        self.hierarchy_type = hierarchy_type
+        self.related_type = related_type
+        self.node_types = dict(node_types)
+        self.pinned_keys = tuple(pinned_keys)
+        self._parts: dict[int, tuple[list[AtlasNode], list[AtlasRelation], dict]] = {
+            version.pk: (list(nodes), list(relations), dict(groups))
+        }
+        self._requests: dict[int, tuple[int, int]] = {
+            version.pk: (SCALE_NODE_TOTAL, SCALE_RELATION_TOTAL)
+        }
+        self._variants: dict[tuple[int, int], AtlasVersion] = {}
+
+    # --- the graph -------------------------------------------------------
+
+    @property
+    def parts(self):
+        """``(nodes, relations, groups)`` for the default graph, ready to splat."""
+        return self.parts_of(self.version_obj)
+
+    def parts_of(self, version: AtlasVersion):
+        """The three engine inputs of ``version`` (a variant is built on demand)."""
+        if version.pk not in self._parts:
+            visible_nodes, relations = self._requests[version.pk]
+            built = _scale_topology(version, visible_nodes=visible_nodes, relations=relations)
+            _apply_placeholder_layout(version, built[0])
+            self._parts[version.pk] = built
+        return self._parts[version.pk]
+
+    def parts_reversed(self):
+        """The same three collections with every element in the opposite order."""
+        nodes, relations, groups = self.parts
+        return (
+            list(reversed(nodes)),
+            list(reversed(relations)),
+            {key: tuple(reversed(value)) for key, value in groups.items()},
+        )
+
+    def version(self, *, visible_nodes: int | None = None, relations: int | None = None):
+        """The default version, or a deterministic variant of the requested size.
+
+        Task 12 asks for more than 100 visible nodes and the §19.2 timing test for
+        80 / 150; both are this one builder with another request, cached per size.
+        """
+        requested = (
+            SCALE_NODE_TOTAL if visible_nodes is None else visible_nodes,
+            SCALE_RELATION_TOTAL if relations is None else relations,
+        )
+        if requested == (SCALE_NODE_TOTAL, SCALE_RELATION_TOTAL):
+            return self.version_obj
+        if requested not in self._variants:
+            version = _version(status="draft", label=f"atlas-scale-{requested[0]}-{requested[1]}")
+            self._variants[requested] = version
+            self._requests[version.pk] = requested
+            self.parts_of(version)
+        return self._variants[requested]
+
+    def node(self, public_key: str) -> AtlasNode:
+        """The node row registered under ``public_key``."""
+        return AtlasNode.objects.get(version=self.version_obj, public_key=public_key)
+
+    @property
+    def node_keys(self) -> tuple[str, ...]:
+        """Every node key of the default graph, sorted."""
+        return tuple(node.public_key for node in self.parts[0])
+
+    def with_pin(self, public_key: str, *, x: float, y: float, z: float | None = None):
+        """Pin one node and hand back the node rows ``compute_layout`` consumes.
+
+        The rows handed out are the *same objects* the fixture cached, so the pin
+        reaches the caller's next ``compute_layout`` call without a re-query — the
+        plan's snippet reassigns ``nodes = fixture.with_pin(…)`` and expects the
+        engine to see the pin.
+        """
+        node = next(row for row in self.parts[0] if row.public_key == public_key)
+        node.pin_x, node.pin_y, node.pin_z = x, y, z
+        node.save(update_fields=["pin_x", "pin_y", "pin_z"])
+        self.pinned_keys = tuple(sorted({*self.pinned_keys, public_key}))
+        return self.parts[0]
+
+    # --- reading the result ----------------------------------------------
+
+    def is_root(self, public_key: str) -> bool:
+        """True when the node has no visible hierarchy parent (spec §12.2 step 3)."""
+        children = {
+            relation.target.public_key
+            for relation in self.relations
+            if relation.visible and relation.relation_type.hierarchy_role
+        }
+        return public_key not in children
+
+    def z_by_depth(self, layout: dict[str, tuple[float, float, float]]):
+        """``{z: (node keys…)}`` — the depth layers the *coordinates* express.
+
+        Derived from the layout alone (nothing here consults ``z_by_depth``'s own
+        idea of a depth), so ``len(set(result)) > 1`` is a statement about the
+        engine's output: hierarchy hints produced more than one layer.
+        """
+        layers: dict[float, list[str]] = {}
+        for key in sorted(layout):
+            layers.setdefault(round(layout[key][2], 3), []).append(key)
+        return {z: tuple(keys) for z, keys in sorted(layers.items())}
+
+    def blueprint(self):
+        """``[(stage, what it does)]`` — the engine's declared pipeline, in order.
+
+        Read from the implementation rather than copied here, so the test that
+        freezes the order (spec §12.2) freezes the order the engine really runs.
+        """
+        from apps.atlas.layout import LAYOUT_BLUEPRINT
+
+        return [(stage.name, stage.description) for stage in LAYOUT_BLUEPRINT]
+
+
+@pytest.fixture
+def atlas_scale_fixture():
+    """The 72-node / 136-relation scale graph (plan Tasks 11 and 18)."""
+    version = _version(status="draft", label="atlas-scale")
+    nodes, relations, groups = _scale_topology(version)
+    _apply_placeholder_layout(version, nodes)
+    return AtlasScaleFixture(
+        version=version,
+        nodes=nodes,
+        relations=relations,
+        groups=groups,
+        hierarchy_type=_dag_hierarchy_type(),
+        related_type=_related_to_type(),
+        node_types={key: _scale_node_type(key) for key, _count in SCALE_COMPOSITION},
+        pinned_keys=sorted(SCALE_PINS),
     )
