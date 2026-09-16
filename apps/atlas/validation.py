@@ -1,4 +1,4 @@
-"""Publish-gate validation (spec §20) — relation rules first (plan Task 9).
+"""Publish-gate validation (spec §20) — relation rules and the node/locale pass.
 
 The module is **pure**: no HTTP layer, and no queries inside the rule loops.
 :func:`validate_relations` loads a version's relations once (``select_related``)
@@ -13,12 +13,34 @@ never a stored column) and the ``message_token`` the admin renders. Codes are
 stable strings that are never renamed (spec §20); :data:`BLOCKING_CODES` is the
 vocabulary that stops an activation (spec §8.3).
 
-Scope decisions of this task, recorded because the plan leaves them open:
+Task 9 implements the relation rules of §20.1. Task 10 adds the rest of the
+publish gate, one function per question it answers:
+
+* :func:`validate_hierarchy` — is the hierarchy-role subgraph a DAG? (spec §5.6)
+  with :func:`validate_visibility` — does a visible relation reference an
+  invisible node? The two groups the plan's Interfaces line does not name
+  together are split on purpose: ``DANGLING_NODE_HIDDEN_RELATION`` is not a
+  hierarchy, locale, taxonomy or canonical rule, and a separate name keeps each
+  group honest (``validate_version``, Task 12, aggregates every group this module
+  exposes — all five, not four);
+* :func:`validate_locale_projection` — does every visible node resolve in *both*
+  locales, and does every group carry copy in both? (spec §5.4/§5.5; the parity
+  note of §20.1);
+* :func:`validate_taxonomy` — does a node use a retired node type? (the relation
+  half is Task 9's ``RELATION_TYPE_INACTIVE``);
+* :func:`validate_canonical_refs` — is the canonical reference present, published
+  and unambiguous? (spec §5.4).
+
+Scope decisions of Tasks 9–10, recorded because the plan leaves them open:
 
 * **every relation of the version is judged**, ``visible`` or not: the rule texts
   of spec §20.1 are not visibility-conditional, and a hidden row that is invalid
   would pass the gate silently and reopen on the next unhide. Visibility-scoped
-  rules (``DANGLING_NODE_HIDDEN_RELATION``) belong to Task 10's node/locale pass;
+  rules are the ones whose text says so: ``DANGLING_NODE_HIDDEN_RELATION`` (a
+  *visible* relation, spec §20.1) and the locale gate (``visible`` nodes, §20.1's
+  note: "an invisible node is neither published nor traversed — and is therefore
+  not parity-gated") — and the node half of the canonical rules follows the
+  projection, so hiding a node drops its reference issues too;
 * ``directed`` is **judged, never coerced**: spec §5.3's "initialised from
   ``directed_default``" rule is the authoring layer's job, and a relation that
   contradicts its type while ``overridable_direction`` is false is exactly
@@ -26,25 +48,63 @@ Scope decisions of this task, recorded because the plan leaves them open:
 * duplicates are reported **once per duplicated composed key** — the key is the
   wire identity, and the two halves of an undirected mirrored pair compose the
   same key, so "this key is claimed twice" is the honest message and the one the
-  admin can act on.
+  admin can act on;
+* the **hierarchy subgraph is restricted on both ends** — a relation counts only
+  when its type has ``hierarchy_role`` *and* both endpoints are visible nodes of
+  this version (spec §5.6 "restricted to ``visible`` nodes"), and its arcs are
+  walked in ``public_key`` order so the reported node is a property of the graph
+  rather than of row order;
+* ``CANONICAL_SOURCE_UNPUBLISHED`` and ``MISSING_LOCALE_PROJECTION`` are **never
+  each other's alias**: the first is about the referenced *record* (a row exists
+  and does not pass ``objects.public()``), the second about the *locale's*
+  projection (nothing resolves there). Both are blocking; the admin renders the
+  difference between "fix the record" and "you have no copy for this locale";
+* the **taxonomy lifecycle is judged for every node**, visible or not (the Task 9
+  relation decision above), while the two other lifecycle rules stay model-level
+  and are deliberately not duplicated: ``PROTECT`` blocks deleting an in-use type
+  and ``TaxonomyKeyMixin`` blocks renaming its key;
+* a **group is judged for copy in both locales** whatever its ``active`` flag —
+  §20.1's ``GROUP_LOCALE_MISSING`` row has no qualifier, and the same reasoning as
+  the relation rules applies (a retired group can be re-activated).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from uuid import UUID
 
+from apps.atlas.canonical import (
+    CANONICAL_SOURCES,
+    DEFAULT_LOCALES,
+    AmbiguousCanonicalRef,
+    CanonicalResolution,
+    resolve_canonical,
+    resolve_canonical_pair,
+)
 from apps.atlas.models import (
     SELF_LOOP_POLICIES,
+    AtlasNode,
     AtlasRelation,
     AtlasRelationType,
     AtlasVersion,
 )
 
+# ``apps.atlas.models`` also defines a name ``CANONICAL_SOURCES`` — a
+# ``TextChoices`` vocabulary for the ``AtlasNodeType.canonical_source`` /
+# ``AtlasNode.canonical_model`` *columns*. The name imported above is the
+# resolver **registry** (``apps.atlas.canonical``): its keys are that same
+# canonical-source vocabulary and its values are the model classes. This module
+# never needs the column vocabulary — membership in the registry is the question
+# it asks, and ``none`` (an Atlas-only structural node) is not in it.
+
 #: Codes whose violation blocks publication (spec §20.1, plus the plan's
-#: ``DIRECTION_NOT_OVERRIDABLE``). Ordered as the spec's table lists them, with the
-#: plan-added code last; the order is not semantic. Task 12 freezes the complete
-#: vocabulary against spec §20.1 + §20.2 and re-pins this tuple.
+#: ``DIRECTION_NOT_OVERRIDABLE``). Task 9's relation rules first, then Task 10's
+#: node/locale/taxonomy codes — each group in the spec table's order, the
+#: plan-added code at the end of its group; the order is not semantic. Task 12
+#: freezes the complete vocabulary against spec §20.1 + §20.2 and re-pins this
+#: tuple, including the carry-forward recorded in the ledger:
+#: ``DIRECTION_NOT_OVERRIDABLE`` is a real blocker with no §20.1 row of its own.
 BLOCKING_CODES: tuple[str, ...] = (
     "DANGLING_RELATION_ENDPOINT",
     "RELATION_TYPE_INACTIVE",
@@ -52,10 +112,20 @@ BLOCKING_CODES: tuple[str, ...] = (
     "SELF_LOOP_FORBIDDEN",
     "DUPLICATE_RELATION",
     "DIRECTION_NOT_OVERRIDABLE",
+    "DANGLING_NODE_HIDDEN_RELATION",
+    "CANONICAL_SOURCE_MISSING",
+    "CANONICAL_SOURCE_UNPUBLISHED",
+    "MISSING_LOCALE_PROJECTION",
+    "AMBIGUOUS_CANONICAL_REF",
+    "NODE_TYPE_INACTIVE",
+    "HIERARCHY_CYCLE",
+    "GROUP_LOCALE_MISSING",
 )
 
-#: Warnings are never blocking (spec §20.2). Task 9 implements none: the warning
-#: vocabulary arrives with Tasks 10 and 12.
+#: Warnings are never blocking (spec §20.2). Task 9 implemented none and Task 10
+#: adds none — every code of the node/locale pass below blocks publication, and
+#: ``MISSING_LOCALE_PROJECTION`` in particular is never emitted as a warning
+#: (§20.1's note). The warning vocabulary arrives with Task 12.
 WARNING_CODES: tuple[str, ...] = ()
 
 #: The whole implemented vocabulary — every code this module may emit.
@@ -64,9 +134,17 @@ ATLAS_ISSUE_CODES: tuple[str, ...] = BLOCKING_CODES + WARNING_CODES
 #: ``messageToken`` per code: one token per code, ``atlas.*`` namespace, mirroring
 #: the AB-06 validator (``graph.*``). The admin renders the token, never the code.
 _MESSAGE_TOKENS: dict[str, str] = {
+    "AMBIGUOUS_CANONICAL_REF": "atlas.ambiguousCanonicalRef",
+    "CANONICAL_SOURCE_MISSING": "atlas.canonicalSourceMissing",
+    "CANONICAL_SOURCE_UNPUBLISHED": "atlas.canonicalSourceUnpublished",
+    "DANGLING_NODE_HIDDEN_RELATION": "atlas.danglingNodeHiddenRelation",
     "DANGLING_RELATION_ENDPOINT": "atlas.danglingRelationEndpoint",
     "DIRECTION_NOT_OVERRIDABLE": "atlas.directionNotOverridable",
     "DUPLICATE_RELATION": "atlas.duplicateRelation",
+    "GROUP_LOCALE_MISSING": "atlas.groupLocaleMissing",
+    "HIERARCHY_CYCLE": "atlas.hierarchyCycle",
+    "MISSING_LOCALE_PROJECTION": "atlas.missingLocaleProjection",
+    "NODE_TYPE_INACTIVE": "atlas.nodeTypeInactive",
     "RELATION_TYPE_INACTIVE": "atlas.relationTypeInactive",
     "RELATION_TYPE_NOT_ALLOWED": "atlas.relationTypeNotAllowed",
     "SELF_LOOP_FORBIDDEN": "atlas.selfLoopForbidden",
@@ -129,9 +207,21 @@ class AllowedTypes:
         )
 
 
-def _issue(code: str, *, relation_key: str | None = None) -> Issue:
+def _issue(
+    code: str,
+    *,
+    node_key: str | None = None,
+    relation_key: str | None = None,
+    group_key: str | None = None,
+) -> Issue:
     """Build an issue with this module's ``messageToken`` for ``code``."""
-    return Issue(code=code, relation_key=relation_key, message_token=_MESSAGE_TOKENS[code])
+    return Issue(
+        code=code,
+        node_key=node_key,
+        relation_key=relation_key,
+        group_key=group_key,
+        message_token=_MESSAGE_TOKENS[code],
+    )
 
 
 def allowed_types_by_relation_type(relation_type_ids: Iterable[int]) -> dict[int, AllowedTypes]:
@@ -267,3 +357,283 @@ def validate_relations(version: AtlasVersion) -> list[Issue]:
         {relation.relation_type_id for relation in relations}
     )
     return relation_rule_issues(relations, version_id=version.pk, allowed_types=allowed_types)
+
+
+# ---------------------------------------------------------------------------
+# Task 10 — hierarchy, visibility, locale parity, taxonomy and canonical refs.
+# ---------------------------------------------------------------------------
+
+#: Colour of a node in the hierarchy DFS: not reached, on the current path, done.
+_WHITE, _GREY, _BLACK = 0, 1, 2
+
+
+def validate_hierarchy(version: AtlasVersion) -> list[Issue]:
+    """``HIERARCHY_CYCLE`` — the hierarchy-role subgraph must be a DAG (spec §5.6).
+
+    Two queries: the version's visible nodes and its visible relations.
+    :func:`hierarchy_rule_issues` does the DFS; multiple parents, orphan nodes,
+    several relation types between one pair and cycles *outside* the hierarchy
+    subgraph are all permitted and never reported (spec §5.6).
+    """
+    nodes = list(version.nodes.filter(visible=True))
+    relations = list(
+        version.relations.filter(visible=True).select_related(
+            "source", "target", "relation_type"
+        )
+    )
+    return hierarchy_rule_issues(nodes, relations)
+
+
+def hierarchy_rule_issues(
+    nodes: Sequence[AtlasNode], relations: Sequence[AtlasRelation]
+) -> list[Issue]:
+    """The hierarchy DFS — one ``HIERARCHY_CYCLE`` per cycle, naming its first node.
+
+    Pure, like :func:`relation_rule_issues`: ``nodes`` are the version's nodes and
+    ``relations`` its relations, both with endpoints and types loaded. An edge is
+    part of the subgraph when its type has ``hierarchy_role`` and **both** endpoints
+    are among ``nodes`` — spec §5.6's "restricted to ``visible`` nodes". Every other
+    edge is somebody else's finding (``DANGLING_NODE_HIDDEN_RELATION`` for an
+    invisible endpoint, Task 9's ``DANGLING_RELATION_ENDPOINT`` for a foreign one).
+
+    Arcs: a directed relation contributes ``source → target``; an undirected one
+    contributes both directions *minus* the arc walked back along the same relation,
+    so one undirected hierarchy edge is not a cycle of its own while a three-node
+    undirected loop is.
+
+    Determinism: the roots and every node's arcs are walked in ``public_key`` order,
+    so the reported node is a property of the graph, never of arrival order or row
+    order. The node reported for a cycle is the one the DFS returns to — the first
+    node of that cycle in this order.
+    """
+    known = {node.pk: node for node in nodes}
+    arcs: dict[int, list[tuple[str, int, int]]] = {node.pk: [] for node in nodes}
+    for relation in relations:
+        if not relation.relation_type.hierarchy_role:
+            continue
+        if relation.source_id not in known or relation.target_id not in known:
+            continue
+        arcs[relation.source_id].append(
+            (relation.target.public_key, relation.target_id, relation.pk)
+        )
+        if not relation.directed:
+            arcs[relation.target_id].append(
+                (relation.source.public_key, relation.source_id, relation.pk)
+            )
+    for node_arcs in arcs.values():
+        node_arcs.sort(key=lambda arc: arc[0])
+
+    colour = dict.fromkeys(arcs, _WHITE)
+    issues: list[Issue] = []
+    for start in sorted(arcs, key=lambda pk: known[pk].public_key):
+        if colour[start] != _WHITE:
+            continue
+        colour[start] = _GREY
+        stack: list[tuple[int, int | None, int]] = [(start, None, 0)]
+        while stack:
+            node_pk, entry_relation_pk, index = stack[-1]
+            node_arcs = arcs[node_pk]
+            if index >= len(node_arcs):
+                colour[node_pk] = _BLACK
+                stack.pop()
+                continue
+            stack[-1] = (node_pk, entry_relation_pk, index + 1)
+            neighbour_key, neighbour_pk, relation_pk = node_arcs[index]
+            if relation_pk == entry_relation_pk:
+                # The same undirected relation, walked back where it came from: its
+                # reverse arc is not a second edge and cannot close a cycle alone.
+                continue
+            if colour[neighbour_pk] == _GREY:
+                issues.append(_issue("HIERARCHY_CYCLE", node_key=neighbour_key))
+            elif colour[neighbour_pk] == _WHITE:
+                colour[neighbour_pk] = _GREY
+                stack.append((neighbour_pk, relation_pk, 0))
+    return sorted(issues, key=_sort_key)
+
+
+def validate_visibility(version: AtlasVersion) -> list[Issue]:
+    """``DANGLING_NODE_HIDDEN_RELATION`` — a visible relation references a hidden node.
+
+    Two queries. One issue per offending relation, carrying its composed key: the
+    relation is the row the admin acts on (hide it, or unhide the node), and a
+    relation whose *both* endpoints are hidden is one broken edge, not two. An
+    endpoint that is not a node of this version is not "invisible" — Task 9's
+    ``DANGLING_RELATION_ENDPOINT`` owns that case — so only this version's nodes are
+    consulted.
+    """
+    visibility = dict(version.nodes.values_list("pk", "visible"))
+    issues = [
+        _issue("DANGLING_NODE_HIDDEN_RELATION", relation_key=relation.public_key)
+        for relation in version.relations.filter(visible=True).select_related("source", "target")
+        if any(
+            endpoint.pk in visibility and not visibility[endpoint.pk]
+            for endpoint in (relation.source, relation.target)
+        )
+    ]
+    return sorted(issues, key=_sort_key)
+
+
+def validate_locale_projection(version: AtlasVersion) -> list[Issue]:
+    """The locale gates — ``MISSING_LOCALE_PROJECTION`` and ``GROUP_LOCALE_MISSING``.
+
+    Per **visible** node and each locale of :data:`DEFAULT_LOCALES`, the locale must
+    resolve from that locale's own canonical row or from a non-blank
+    ``label_override`` **for that locale** (spec §5.4): a node whose override is for
+    the locale that already resolves leaves the missing one missing — there is no
+    cross-locale fallback, and there is no node-wide override either. A
+    ``canonical_model = "none"`` node has no canonical row by construction and needs
+    both overrides. An invisible node is not parity-gated at all: §20.1's note says
+    the visibility rule governs it and no stricter rule is invented; the same note
+    makes this code a blocker in both directions and never a warning.
+
+    A locale with more than one published row is *not* missing — the payload is
+    ambiguous, which :func:`validate_canonical_refs` reports as
+    ``AMBIGUOUS_CANONICAL_REF``; this gate does not double-report it.
+
+    Groups: every group of the version needs a non-blank label for both locales
+    (spec §5.5). A retired group is judged like any other — the §20.1 rule text has
+    no qualifier, and this module already records that reasoning for Task 9's
+    relation rules.
+
+    Resolution goes through :func:`apps.atlas.canonical.resolve_canonical_pair`, the
+    exact-locale, publish-gated resolver: a node whose every locale is covered by
+    overrides costs no query at all, and a node of a family outside the registry
+    (``none``) is never handed to the resolver, which raises ``KeyError`` for it by
+    design.
+    """
+    issues: list[Issue] = []
+    nodes = version.nodes.filter(visible=True).prefetch_related("translations")
+    for node in nodes:
+        covered = {
+            translation.locale
+            for translation in node.translations.all()
+            if translation.label_override.strip()
+        }
+        missing_locales = [locale for locale in DEFAULT_LOCALES if locale not in covered]
+        if not missing_locales:
+            continue
+        resolutions: Mapping[str, CanonicalResolution | None] = {}
+        if node.canonical_model in CANONICAL_SOURCES and node.canonical_translation_key:
+            try:
+                resolutions = resolve_canonical_pair(
+                    node.canonical_model,
+                    node.canonical_translation_key,
+                    locales=tuple(missing_locales),
+                )
+            except AmbiguousCanonicalRef:
+                continue
+        for locale in missing_locales:
+            if resolutions.get(locale) is None:
+                issues.append(_issue("MISSING_LOCALE_PROJECTION", node_key=node.public_key))
+    for group in version.groups.prefetch_related("translations"):
+        labelled = {
+            translation.locale
+            for translation in group.translations.all()
+            if translation.label.strip()
+        }
+        if set(DEFAULT_LOCALES) - labelled:
+            issues.append(_issue("GROUP_LOCALE_MISSING", group_key=group.public_key))
+    return sorted(issues, key=_sort_key)
+
+
+def validate_taxonomy(version: AtlasVersion) -> list[Issue]:
+    """``NODE_TYPE_INACTIVE`` — a node uses a retired node type (spec §20.1).
+
+    One query. The relation half of the lifecycle is Task 9's
+    ``RELATION_TYPE_INACTIVE`` inside :func:`validate_relations`; this is the node
+    half, and it judges **every** node of the version, visible or not, exactly as
+    Task 9 judges every relation (the rule text is not visibility-conditional, and a
+    hidden node's retired type would otherwise pass the gate silently and reopen on
+    the next unhide).
+
+    The other two lifecycle rules stay where they are enforced and are deliberately
+    not duplicated here: ``AtlasNode.node_type`` is ``PROTECT`` (an in-use type
+    cannot be deleted) and ``TaxonomyKeyMixin`` refuses a rename once a row uses the
+    key.
+    """
+    issues = [
+        _issue("NODE_TYPE_INACTIVE", node_key=node.public_key)
+        for node in version.nodes.filter(node_type__active=False)
+    ]
+    return sorted(issues, key=_sort_key)
+
+
+def validate_canonical_refs(version: AtlasVersion) -> list[Issue]:
+    """The canonical reference itself — present, published, unambiguous (spec §5.4).
+
+    Scoped to the **visible** nodes: the reference exists to fill a projection, and
+    an invisible node is neither published nor traversed (§20.1's note), so hiding a
+    node drops its reference issues together with its parity ones.
+
+    Three questions, three codes, never each other's alias:
+
+    * *is there a reference?* A node whose ``canonical_model`` is not ``none`` must
+      carry a ``canonical_translation_key`` — ``CANONICAL_SOURCE_MISSING``. An
+      override supplies copy, never a reference, so this one blocks even when both
+      locales are covered;
+    * *does the record resolve?* A row that **exists** and does not pass
+      ``objects.public()`` in a locale that lacks an override is
+      ``CANONICAL_SOURCE_UNPUBLISHED``. A locale with no row at all is the parity
+      gate's ``MISSING_LOCALE_PROJECTION``: "fix or publish the record" and "you
+      have no copy for this locale" are different instructions to the admin;
+    * *is it unambiguous?* More than one published row for one
+      ``(family, translation_key, locale)`` is ``AMBIGUOUS_CANONICAL_REF`` — detected
+      by the resolver and never guessed around, reported whether or not an override
+      hides the canonical link, because the reference itself is the defect.
+
+    One issue per node and code: ``Issue`` carries no locale, so repeating the same
+    finding per locale would only inflate the report. A family the closed registry
+    does not list is skipped — ``none`` needs overrides instead (the parity gate) and
+    an unknown family makes the resolver raise ``KeyError`` by design.
+    """
+    issues: list[Issue] = []
+    nodes = version.nodes.filter(visible=True).prefetch_related("translations")
+    for node in nodes:
+        source, key = node.canonical_model, node.canonical_translation_key
+        if source not in CANONICAL_SOURCES:
+            # ``none`` (an Atlas-only structural node) is not in the registry: it has
+            # no record by construction and needs both overrides instead — the parity
+            # gate's rule. A bogus family is skipped for the same reason; the resolver
+            # raises ``KeyError`` for it by design.
+            continue
+        if key is None:
+            issues.append(_issue("CANONICAL_SOURCE_MISSING", node_key=node.public_key))
+            continue
+        covered = {
+            translation.locale
+            for translation in node.translations.all()
+            if translation.label_override.strip()
+        }
+        ambiguous = False
+        unpublished = False
+        for locale in DEFAULT_LOCALES:
+            try:
+                resolution = resolve_canonical(source, key, locale)
+            except AmbiguousCanonicalRef:
+                ambiguous = True
+                continue
+            if resolution is not None or locale in covered:
+                continue
+            if _canonical_row_exists(source, key, locale):
+                unpublished = True
+        if ambiguous:
+            issues.append(_issue("AMBIGUOUS_CANONICAL_REF", node_key=node.public_key))
+        if unpublished:
+            issues.append(_issue("CANONICAL_SOURCE_UNPUBLISHED", node_key=node.public_key))
+    return sorted(issues, key=_sort_key)
+
+
+def _canonical_row_exists(source: str, translation_key: UUID, locale: str) -> bool:
+    """Whether *any* row — published or not — exists for one family/key/locale.
+
+    The proof behind ``CANONICAL_SOURCE_UNPUBLISHED``: the record exists and does not
+    resolve, rather than not existing at all. ``_base_manager`` on purpose, never
+    ``objects.public()`` — the question is existence, and a default manager that
+    later gains a filter would silently turn every unpublished record into a missing
+    one.
+    """
+    return (
+        CANONICAL_SOURCES[source]
+        ._base_manager.filter(translation_key=translation_key, locale=locale)
+        .exists()
+    )

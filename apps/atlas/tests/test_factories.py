@@ -39,8 +39,11 @@ import pytest
 from apps.atlas.canonical import CANONICAL_SOURCES, resolve_canonical
 from apps.atlas.models import AtlasNode, AtlasNodeTranslation, AtlasNodeType, AtlasVersion
 from apps.atlas.tests.factories import (
+    DAG_KEYS,
+    DAG_NODE_NAMES,
     R5_FIXTURE_NAMES,
     atlas_active_version,
+    atlas_dag,
     atlas_two_versions,
     atlas_v1,
     seed_pairs,
@@ -50,7 +53,7 @@ from apps.atlas.tests.factories import (
 #: ``factories.py``; ``__all__`` marks those imports as used-by-design (pyflakes
 #: cannot see a test parameter as a use of a module-level binding, so a bare
 #: import would be reported as unused and its parameter as a redefinition).
-__all__ = ["atlas_active_version", "atlas_two_versions", "atlas_v1", "seed_pairs"]
+__all__ = ["atlas_active_version", "atlas_dag", "atlas_two_versions", "atlas_v1", "seed_pairs"]
 
 pytestmark = pytest.mark.django_db
 
@@ -280,3 +283,54 @@ def test_the_one_sided_nodes_belong_to_real_owned_types(atlas_v1):
             "research-area",
             "identity",
         }
+
+
+def test_atlas_dag_fixture_surface(atlas_dag):
+    """The Task 10 fixture family: a clean diamond with fixed, ascending keys.
+
+    ``DAG_KEYS`` is ascending on purpose — the hierarchy rules iterate ``public_key``
+    order, so a fixture with generated keys could not state which node a cycle
+    reports. The nodes are structural (no canonical record), which is what makes the
+    diamond publishable-shaped without seeding CMS rows.
+    """
+    assert atlas_dag.diamond is atlas_dag.version
+    assert [atlas_dag.node(name).public_key for name in DAG_NODE_NAMES] == [
+        DAG_KEYS[name] for name in DAG_NODE_NAMES
+    ]
+    assert sorted(DAG_KEYS.values()) == [DAG_KEYS[name] for name in DAG_NODE_NAMES]
+
+    version = atlas_dag.version
+    assert version.status == "draft"
+    assert version.nodes.count() == 4
+    assert version.relations.count() == 4
+    assert atlas_dag.hierarchy_type.key == "parent-of"
+    assert atlas_dag.hierarchy_type.hierarchy_role is True
+    assert atlas_dag.general_type.key == "relates-to"
+    assert atlas_dag.general_type.hierarchy_role is False
+    assert set(version.relations.values_list("relation_type__key", flat=True)) == {"parent-of"}
+
+    assert [node.public_key for node in atlas_dag.parents("area-c")] == [
+        DAG_KEYS["area-a"],
+        DAG_KEYS["area-b"],
+    ]
+    assert atlas_dag.parents("area") == []
+
+    for name in DAG_NODE_NAMES:
+        node = atlas_dag.node(name)
+        assert node.canonical_model == "none"
+        assert node.canonical_translation_key is None
+        assert {
+            translation.locale
+            for translation in node.translations.all()
+            if translation.label_override.strip()
+        } == {"en", "fa"}
+
+    closed = atlas_dag.close_cycle()
+    general = atlas_dag.add_related_cycle()
+    assert closed.public_key == f"{DAG_KEYS['area-c']}~parent-of~{DAG_KEYS['area-a']}"
+    assert [relation.public_key for relation in general] == [
+        f"{DAG_KEYS['area-a']}~relates-to~{DAG_KEYS['area-b']}",
+        f"{DAG_KEYS['area-b']}~relates-to~{DAG_KEYS['area-a']}",
+    ]
+    assert version.relations.count() == 7
+    assert atlas_dag.relations[-3:] == [closed, *general]

@@ -49,6 +49,16 @@ The ``atlas_v1`` family bundles (ruling R5) expose, beyond ``version``:
   ``break_/restore_{en,fa}_projection()``, which unpublish/republish one
   canonical row of the draft in exactly one locale.
 
+Plan Task 10 adds the ``atlas_dag`` family on top of the same builders: a legal
+multi-parent hierarchy (``area → {area-a, area-b} → area-c``) whose four nodes are
+Atlas-only *structural* nodes (``canonical_source="none"``), so the parity gate
+levels them through per-locale overrides instead of canonical rows, plus the two
+mutations its tests make — ``close_cycle()`` (a hierarchy back edge, which is a
+``HIERARCHY_CYCLE``) and ``add_related_cycle()`` (a *non*-hierarchy cycle, which
+spec §5.6 permits). Its node keys are fixed and ascending, so the DFS order the
+plan pins (``public_key`` order) is a known order rather than eight random hex
+characters.
+
 **The two active-version bundles are mutually exclusive in one test.** Both
 ``atlas_active_version`` and ``atlas_two_versions`` create a version with
 ``status="active"``; requesting both fixtures in one test makes the second
@@ -102,16 +112,21 @@ from apps.content.models import (
 #: ``test_r5_fixture_functions_are_declared_once_in_the_one_builders_module``).
 __all__ = [
     "CANONICAL_PAIR_DEFAULTS",
+    "DAG_EDGES",
+    "DAG_KEYS",
+    "DAG_NODE_NAMES",
     "DEFAULT_VERSION_LABEL",
     "NODE_TYPE_DEFAULTS",
     "PUBLISHED_AT",
     "R5_FIXTURE_NAMES",
     "RELATION_TYPE_DEFAULTS",
     "AtlasActiveVersionFixture",
+    "AtlasDagFixture",
     "AtlasTwoVersionsFixture",
     "AtlasV1Fixture",
     "SeedPairs",
     "atlas_active_version",
+    "atlas_dag",
     "atlas_two_versions",
     "atlas_v1",
     "seed_pairs",
@@ -883,4 +898,244 @@ def atlas_two_versions():
         previous_active=previous_active,
         draft=draft,
         canonical_key=canonical_keys["area-0"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# The `atlas_dag` fixture (plan Task 10) — a legal multi-parent hierarchy plus a
+# non-hierarchy relation type for the "a general cycle is legal" control.
+# ---------------------------------------------------------------------------
+
+#: Node type of the hierarchy fixture: an Atlas-only *structural* type, so its
+#: nodes need no canonical record at all — each carries a non-blank override in
+#: both locales instead (spec §5.4: a ``canonical_model = "none"`` node "always
+#: requires an override in both locales"). That is exactly what the parity gate
+#: has to level with, and it keeps the fixture free of CMS rows.
+DAG_NODE_TYPE_DEFAULTS = {
+    "label_en": "Structural",
+    "label_fa": "ساختاری",
+    "semantic_role": "area",
+    "visual_role": "domain",
+    "canonical_source": "none",
+}
+
+#: The hierarchy relation type (spec §5.6: hierarchy exists only through types
+#: whose ``hierarchy_role`` is true). ``overridable_direction`` is on so a test
+#: can author an undirected hierarchy edge without tripping Task 9's
+#: ``DIRECTION_NOT_OVERRIDABLE``, and both pair tables stay empty = "any active
+#: type" (spec §6.2), so no fixture edge can be a pair violation.
+DAG_HIERARCHY_TYPE_DEFAULTS = {
+    "label_en": "parent of",
+    "label_fa": "والدِ",
+    "inverse_label_en": "child of",
+    "inverse_label_fa": "فرزندِ",
+    "directed_default": True,
+    "overridable_direction": True,
+    "hierarchy_role": True,
+    "visual_priority": 90,
+    "self_loop_policy": "forbid",
+    "semantic_role": "utility",
+}
+
+#: A *non*-hierarchy relation type, for the general-cycle control (spec §5.6:
+#: "General (non-hierarchy) cycles are legal"). Directed on purpose: the two
+#: edges of a two-node cycle then compose two different keys, while an undirected
+#: pair composes one key and would be Task 9's ``DUPLICATE_RELATION`` instead.
+DAG_GENERAL_TYPE_DEFAULTS = {
+    "label_en": "relates to",
+    "label_fa": "مرتبط با",
+    "inverse_label_en": "relates to",
+    "inverse_label_fa": "مرتبط با",
+    "directed_default": True,
+    "overridable_direction": True,
+    "hierarchy_role": False,
+    "visual_priority": 40,
+    "self_loop_policy": "forbid",
+    "semantic_role": "utility",
+}
+
+#: The fixture's node names in the order the diamond reads: the root, its two
+#: children, then the child they share.
+DAG_NODE_NAMES: tuple[str, ...] = ("area", "area-a", "area-b", "area-c")
+
+#: The fixture's fixed public keys, ascending — ``area`` < ``area-a`` <
+#: ``area-b`` < ``area-c``. The hierarchy DFS iterates ``public_key`` order
+#: (plan Task 10: "iterating nodes in ``public_key`` order for determinism"), so
+#: a fixture with generated keys could not state which node a cycle reports.
+DAG_KEYS: dict[str, str] = {
+    "area": "structural-00000001",
+    "area-a": "structural-00000002",
+    "area-b": "structural-00000003",
+    "area-c": "structural-00000004",
+}
+
+#: The diamond's edges. ``close_cycle()`` adds ``area-c → area-a``, the back edge
+#: that closes the cycle ``area-a → area-c → area-a``.
+DAG_EDGES: tuple[tuple[str, str], ...] = (
+    ("area", "area-a"),
+    ("area", "area-b"),
+    ("area-a", "area-c"),
+    ("area-b", "area-c"),
+)
+
+
+def _dag_node_type():
+    """The shared `structural` node type of the hierarchy fixture."""
+    node_type, _created = AtlasNodeType.objects.get_or_create(
+        key="structural", defaults=dict(DAG_NODE_TYPE_DEFAULTS)
+    )
+    return node_type
+
+
+def _dag_hierarchy_type():
+    """The shared `parent-of` relation type — the fixture's only hierarchy type."""
+    relation_type, _created = AtlasRelationType.objects.get_or_create(
+        key="parent-of", defaults=dict(DAG_HIERARCHY_TYPE_DEFAULTS)
+    )
+    return relation_type
+
+
+def _dag_general_type():
+    """The shared `relates-to` relation type — non-hierarchy, for cycle controls."""
+    relation_type, _created = AtlasRelationType.objects.get_or_create(
+        key="relates-to", defaults=dict(DAG_GENERAL_TYPE_DEFAULTS)
+    )
+    return relation_type
+
+
+def _dag_nodes(version, *, node_type, order=DAG_NODE_NAMES) -> dict[str, AtlasNode]:
+    """Create the four fixed-key nodes, each with both per-locale overrides, in ``order``.
+
+    ``order`` exists so a test can build the same graph with a different *creation*
+    order: the hierarchy rules iterate ``public_key`` order, so the node a cycle
+    reports must not follow insertion order.
+    """
+    nodes: dict[str, AtlasNode] = {}
+    for name in order:
+        node = _node(
+            version=version,
+            node_type=node_type,
+            public_key=DAG_KEYS[name],
+            sort_order=DAG_NODE_NAMES.index(name),
+        )
+        for locale, label in (("en", f"{name} label"), ("fa", f"برچسب {name}")):
+            AtlasNodeTranslation.objects.create(node=node, locale=locale, label_override=label)
+        nodes[name] = node
+    return nodes
+
+
+def _dag_edges(version, nodes, *, hierarchy_type) -> list[AtlasRelation]:
+    """Create the diamond's four hierarchy edges, in ``DAG_EDGES`` order."""
+    return [
+        _relation(
+            source=nodes[source],
+            target=nodes[target],
+            relation_type=hierarchy_type,
+            version=version,
+            sort_order=index,
+        )
+        for index, (source, target) in enumerate(DAG_EDGES)
+    ]
+
+
+class AtlasDagFixture:
+    """A legal multi-parent hierarchy (plan Task 10): ``area → {area-a, area-b} → area-c``.
+
+    ``version`` is the bundle's handle and ``diamond`` the same object under the
+    plan's snippet spelling; :meth:`node` and :meth:`parents` answer by short name,
+    and the two mutations the plan's tests make are methods —
+    :meth:`close_cycle` (a hierarchy back edge) and :meth:`add_related_cycle` (a
+    cycle outside the hierarchy subgraph, which spec §5.6 permits).
+    """
+
+    def __init__(
+        self,
+        *,
+        version: AtlasVersion,
+        node_type: AtlasNodeType,
+        hierarchy_type: AtlasRelationType,
+        general_type: AtlasRelationType,
+        nodes: dict[str, AtlasNode],
+        relations: list[AtlasRelation],
+    ) -> None:
+        self.version = version
+        self.node_type = node_type
+        self.hierarchy_type = hierarchy_type
+        self.general_type = general_type
+        self.nodes = nodes
+        self.relations = list(relations)
+
+    @property
+    def diamond(self) -> AtlasVersion:
+        """The diamond-shaped version — the plan's Task 10 snippet reads ``.diamond``."""
+        return self.version
+
+    def node(self, name: str) -> AtlasNode:
+        """The fixture node registered under ``name`` (``area``, ``area-a``, …)."""
+        return self.nodes[name]
+
+    def parents(self, name: str) -> list[AtlasNode]:
+        """The visible hierarchy parents of ``name``, in ``public_key`` order."""
+        return sorted(
+            [
+                relation.source
+                for relation in AtlasRelation.objects.filter(
+                    version=self.version,
+                    relation_type=self.hierarchy_type,
+                    target=self.node(name),
+                    visible=True,
+                ).select_related("source")
+            ],
+            key=lambda node: node.public_key,
+        )
+
+    def close_cycle(self) -> AtlasRelation:
+        """Add ``area-c → area-a`` — the back edge of ``area-a → area-c → area-a``."""
+        relation = _relation(
+            source=self.node("area-c"),
+            target=self.node("area-a"),
+            relation_type=self.hierarchy_type,
+            version=self.version,
+            sort_order=len(DAG_EDGES) + 1,
+        )
+        self.relations.append(relation)
+        return relation
+
+    def add_related_cycle(self) -> list[AtlasRelation]:
+        """Add ``area-a → area-b`` and ``area-b → area-a`` — a legal general cycle."""
+        added = [
+            _relation(
+                source=self.node("area-a"),
+                target=self.node("area-b"),
+                relation_type=self.general_type,
+                version=self.version,
+                sort_order=len(DAG_EDGES),
+            ),
+            _relation(
+                source=self.node("area-b"),
+                target=self.node("area-a"),
+                relation_type=self.general_type,
+                version=self.version,
+                sort_order=len(DAG_EDGES) + 1,
+            ),
+        ]
+        self.relations.extend(added)
+        return added
+
+
+@pytest.fixture
+def atlas_dag():
+    """A legal four-node hierarchy with two parents for one child (plan Task 10)."""
+    version = _version(status="draft", label="atlas-dag")
+    node_type = _dag_node_type()
+    nodes = _dag_nodes(version, node_type=node_type)
+    relations = _dag_edges(version, nodes, hierarchy_type=_dag_hierarchy_type())
+    _apply_placeholder_layout(version, list(version.nodes.all()))
+    return AtlasDagFixture(
+        version=version,
+        node_type=node_type,
+        hierarchy_type=_dag_hierarchy_type(),
+        general_type=_dag_general_type(),
+        nodes=nodes,
+        relations=relations,
     )
