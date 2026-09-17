@@ -435,7 +435,8 @@ def _witness_walk(
 def hierarchy_rule_issues(
     nodes: Sequence[AtlasNode], relations: Sequence[AtlasRelation]
 ) -> list[Issue]:
-    """The hierarchy gate — ``HIERARCHY_CYCLE`` for every cycle, at its first node.
+    """The hierarchy gate — ``HIERARCHY_CYCLE`` per **named** node, at the first node
+    in ``public_key`` order of the cycle its witness closes.
 
     Pure, like :func:`relation_rule_issues`: ``nodes`` are the version's nodes and
     ``relations`` its relations, both with endpoints and types loaded. A relation is
@@ -456,6 +457,12 @@ def hierarchy_rule_issues(
     ask whether its head still reaches its tail (an undirected relation: either end
     the other). If it does, that walk plus the relation is a cycle through it, and the
     issue names the cycle's **first node in ``public_key`` order**.
+
+    The report is per **named** node, never one issue per cycle: the walk returned is a
+    single shortest witness, so a relation carrying several cycles through it can name
+    only some of them, and a cycle whose first node never becomes a walk's minimum goes
+    unnamed (ledger row ``fix10-b``: 13 of 2 951 swept graphs carry at least one such
+    cycle; the 4-node/6-row shape that pins this is in the module's test file).
 
     Why not a depth-first walk that colours nodes: finishing a node after a reversible
     edge was walked once loses every cycle that would re-enter it — a directed arc

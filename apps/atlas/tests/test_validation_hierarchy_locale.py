@@ -17,7 +17,7 @@ that violates it:
   ``CANONICAL_SOURCE_UNPUBLISHED``, ``AMBIGUOUS_CANONICAL_REF`` — taxonomy lifecycle
   and the canonical reference itself.
 
-Four things the file does deliberately, all of them traced to the plan or the
+Five things the file does deliberately, all of them traced to the plan or the
 ledger (each is spelled out again where it is used):
 
 * the plan's Task 10 snippets call ``validate_version``, which **Task 12** produces
@@ -39,6 +39,17 @@ ledger (each is spelled out again where it is used):
   those shapes (ledger Task 10 review, F1). ``part-of`` is an admin-created
   undirected hierarchy-role type — the seeded §6.2 vocabulary cannot produce either
   shape.
+* the falsification review of the orphaned Task 10 fix left four behaviours unpinned,
+  and each one now has its shape: a directed and an undirected **self-loop** (M3 —
+  removing the walk's ``origin == goal`` short-circuit changes the verdict on
+  511/2000 graphs while no test in the repo asserted ``HIERARCHY_CYCLE`` for one), a
+  **tie-bearing** permutation beside the F1 shapes (M9 — the arc sort follows row
+  order exactly when two witnesses are the same length, and the F1 shapes are
+  tie-free), a shape whose name only the **second walk direction** of an undirected
+  row finds (M2 — walking one way loses a named cycle on 6/2000 graphs), and the
+  4-node/6-row shape where a cycle's first node **goes unnamed** (the counterexample
+  that made the rule's summary sentence honest; the plan-Step-3 deviation it records
+  is in ledger row ``fix10-b``).
 
 Fixtures are imported by name (``factories.py`` is not a conftest), so ``__all__``
 marks the fixture parameters as used-by-design: pyflakes cannot see a test
@@ -251,6 +262,64 @@ def test_a_single_undirected_hierarchy_edge_is_not_a_cycle(atlas_dag):
     ]  # …while the third edge closes one, reported at its first node in key order.
 
 
+def self_loop_hierarchy_type():
+    """A hierarchy-role type that permits self-loops — every seeded type forbids them.
+
+    ``SELF_LOOP_FORBIDDEN`` is Task 9's code for a *different* rule, so the loop has to
+    be **legal** for the hierarchy gate to be the only finding left: the type opts into
+    ``self_loop_policy="allow"``, the same admin-created escape hatch
+    ``test_models_relation_group`` uses. Call once per test: the key is unique.
+    """
+    return _relation_type(
+        "self-of",
+        directed_default=True,
+        overridable_direction=True,
+        hierarchy_role=True,
+        self_loop_policy="allow",
+    )
+
+
+def test_a_directed_self_loop_is_a_cycle_of_one_relation(atlas_dag):
+    """One relation whose two ends are one node is a closed walk — a cycle, named once.
+
+    ``_witness_walk``'s ``origin == goal`` short-circuit is what makes this loop a
+    cycle at all: the walk it answers with is the relation alone, because any longer
+    walk would have to walk that one relation twice (its own docstring). Removing the
+    short-circuit changes the verdict on 511/2000 graphs (fix-10 review M3) and no test
+    anywhere in the repo asserted ``HIERARCHY_CYCLE`` for a self-loop, so this is the
+    guard for it — one issue, at the node, with the rule's token.
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-self-loop-directed",
+        relation_type=self_loop_hierarchy_type(),
+        edges=(("area-a", "area-a", True),),
+    )
+
+    issues = validate_hierarchy(version)
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
+    assert issues[0].message_token == "atlas.hierarchyCycle"
+
+
+def test_an_undirected_self_loop_is_reported_once_not_twice(atlas_dag):
+    """Both directions of an undirected self-loop are the one closed walk.
+
+    The second direction the rule walks for an undirected row collapses onto the first
+    when the row's ends are one node, so the node is named once — a report appending one
+    issue per direction would state two, and the missing short-circuit would state none.
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-self-loop-undirected",
+        relation_type=self_loop_hierarchy_type(),
+        edges=(("area-c", "area-c", False),),
+    )
+
+    issues = validate_hierarchy(version)
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-c"])]
+    assert issues[0].message_token == "atlas.hierarchyCycle"
+
+
 def test_a_hidden_hierarchy_edge_and_a_hidden_node_are_not_traversed(atlas_dag):
     """The subgraph is restricted to visible nodes *and* visible relations (§5.6)."""
     atlas_dag.close_cycle()
@@ -263,7 +332,8 @@ def test_a_hidden_hierarchy_edge_and_a_hidden_node_are_not_traversed(atlas_dag):
 
 
 # ---------------------------------------------------------------------------
-# F1/R11 — the hierarchy verdict is a property of the graph, not of row order
+# F1/R11 — the hierarchy verdict is a property of the graph, not of row order,
+# plus the fix-10 review's tie, second-direction and unnamed-cycle guards.
 # ---------------------------------------------------------------------------
 
 #: The two shapes the reviewed walk reported **nothing** for (ledger Task 10 review,
@@ -287,6 +357,25 @@ F1_SHAPES: dict[str, tuple[tuple[str, str, bool], ...]] = {
         ("area-b", "area-a", False),
     ),
 }
+
+#: The fix-10 review's tie-bearing shape (its M9): a directed triangle plus one
+#: undirected spoke from ``area`` (…0001) to each of its nodes. Every triangle row has
+#: two equal-length witnesses — one detours through ``area``, one runs around the
+#: triangle — so the walk has to *choose*, and with the arc sort reverted to
+#: ``relation.pk`` (arrival order) the choice follows the rows' insertion order: the
+#: same graph yields ``[area, area-a]`` as written here and ``[area]`` reversed, two
+#: verdicts across 31 sampled orders. The F1 shapes are tie-free, which is why that
+#: mutant survived the whole suite. The same rows are the unnamed-cycle guard's shape
+#: (a cycle whose first node never wins a witness) — one shape, two claims about the
+#: walk.
+TIE_BEARING_SHAPE: tuple[tuple[str, str, bool], ...] = (
+    ("area-a", "area-b", True),
+    ("area-b", "area-c", True),
+    ("area-c", "area-a", True),
+    ("area", "area-a", False),
+    ("area", "area-b", False),
+    ("area", "area-c", False),
+)
 
 
 def undirected_hierarchy_type():
@@ -374,6 +463,36 @@ def test_an_undirected_row_is_walkable_against_its_authored_order(atlas_dag):
     assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area"])]
 
 
+def test_a_name_that_only_the_second_walk_direction_finds_is_reported(atlas_dag):
+    """The undirected row's second walk direction is load-bearing, not symmetry.
+
+    The directed triangle ``area → area-a → area-c → area`` plus the undirected chain
+    ``area-a—area-b—area-c``: ``area-a`` (…0002) first becomes a walk's minimum only
+    when ``area-a—area-b`` is walked from its stored **source** to its stored target —
+    the direction the rule adds *after* the target-first one. Walking every undirected
+    row one way only is order-independent and still reports ``area``, but it loses this
+    name; the review measured 6 of 2000 graphs losing at least one name that way (M2),
+    so this shape is a report-completeness guard, not a determinism one.
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-second-direction",
+        relation_type=undirected_hierarchy_type(),
+        edges=(
+            ("area", "area-a", True),
+            ("area-a", "area-c", True),
+            ("area-c", "area", True),
+            ("area-a", "area-b", False),
+            ("area-b", "area-c", False),
+        ),
+    )
+
+    assert hierarchy_verdict(version) == [
+        ("HIERARCHY_CYCLE", DAG_KEYS["area"]),
+        ("HIERARCHY_CYCLE", DAG_KEYS["area-a"]),
+    ]
+
+
 @pytest.mark.parametrize("edges", list(F1_SHAPES.values()), ids=list(F1_SHAPES))
 def test_the_hierarchy_verdict_does_not_follow_relation_row_order(atlas_dag, edges):
     """Ruling R11: one logical graph, rows inserted in both orders, one verdict.
@@ -400,6 +519,33 @@ def test_the_hierarchy_verdict_does_not_follow_relation_row_order(atlas_dag, edg
     assert hierarchy_verdict(forward) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
 
 
+def test_a_tie_bearing_verdict_does_not_follow_relation_row_order(atlas_dag):
+    """R11 on a shape whose witnesses tie: same length, different cycle, one verdict.
+
+    Every directed triangle row of :data:`TIE_BEARING_SHAPE` has two shortest witnesses
+    — one detours through ``area`` (…0001), one runs around the triangle — so the walk
+    has to pick one, and with the arc sort keyed on ``relation.pk`` (arrival order) that
+    pick follows the rows' insertion order: this order reports ``[area, area-a]`` and the
+    reversed one ``[area]``, i.e. a relation *arrival* decided a publish gate. The
+    committed ``(public_key, pk)`` sort answers both orders with one verdict. The F1
+    shapes the test above permutes are tie-free, which is why the review's M9 mutant
+    survived that permutation (6-row witness, 2 verdicts across 31 sampled orders).
+    """
+    hierarchy_type = undirected_hierarchy_type()
+    forward = hierarchy_probe(
+        atlas_dag, "atlas-tie-forward", relation_type=hierarchy_type, edges=TIE_BEARING_SHAPE
+    )
+    permuted = hierarchy_probe(
+        atlas_dag,
+        "atlas-tie-permuted",
+        relation_type=hierarchy_type,
+        edges=tuple(reversed(TIE_BEARING_SHAPE)),
+    )
+
+    assert hierarchy_verdict(permuted) == hierarchy_verdict(forward)
+    assert hierarchy_verdict(forward) == [("HIERARCHY_CYCLE", DAG_KEYS["area"])]
+
+
 def test_a_cycle_is_reported_at_its_first_node_in_public_key_order(atlas_dag):
     """F2: the node named is the cycle's **first** node in ``public_key`` order.
 
@@ -420,6 +566,34 @@ def test_a_cycle_is_reported_at_its_first_node_in_public_key_order(atlas_dag):
         ),
     )
 
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
+
+
+def test_a_cycle_whose_first_node_never_wins_a_witness_goes_unnamed(atlas_dag):
+    """``HIERARCHY_CYCLE`` names nodes, not cycles — one cycle here goes unnamed.
+
+    The triangle ``area-a → area-b → area-c → area-a`` is a cycle whose first node in
+    ``public_key`` order is ``area-a`` (…0002), and while ``area`` (…0001) is in the
+    graph it is never named: all its cycles' witnesses are shortest walks, a
+    same-length detour through ``area`` wins the tie, and ``area-a`` never becomes a
+    walk's minimum. That is why the rule's summary sentence could not say "for every
+    cycle, at its first node" — the fix-10 review's counterexample, 13 of 2 951 swept
+    graphs carrying at least one such cycle, and the shape this test pins so the
+    docstring's per-named-node wording can never drift back.
+
+    Hiding ``area`` proves the cycle was there all along: what remains is the triangle
+    alone, and now its own first node is the minimum every witness walks through.
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-unnamed-cycle",
+        relation_type=undirected_hierarchy_type(),
+        edges=TIE_BEARING_SHAPE,
+    )
+
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area"])]
+
+    AtlasNode.objects.filter(version=version, public_key=DAG_KEYS["area"]).update(visible=False)
     assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
 
 
