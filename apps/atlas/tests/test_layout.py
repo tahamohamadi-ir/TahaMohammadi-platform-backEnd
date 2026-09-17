@@ -13,8 +13,9 @@ can express them:
   same three collections over with every element reversed);
 * **quantisation** — every stored coordinate is a 3-decimal multiple (spec §12.2
   step 9), asserted on the stored JSON rather than on an intermediate value;
-* **pins are inputs** — a pinned coordinate is copied, never derived, and it
-  survives the final collision pass (spec §12.2 steps 7/8);
+* **pins are inputs** — a pinned coordinate is copied, never derived, it survives
+  the final collision pass and no unpinned neighbour is left inside it (spec §12.2
+  steps 7/8, whose guarantee the expulsion post-pass has to enforce);
 * **revision and key source** — ``layout_revision`` moves on every apply
   (spec §8.3, the plan's ``recompute_layout`` contract) and the stored dict is
   keyed by ``public_key``, so it survives a clone that copies its source's keys
@@ -86,6 +87,13 @@ SCALE_DEPTH_LAYERS = 3
 #: that quietly moves a node between hierarchy levels is visible.
 SCALE_ROOT_TOTAL = 36
 
+#: The counterexample of the expulsion rule: a pinned research area placed on the
+#: project's own unpinned coordinate (``baseline[project][:2]``). The project is
+#: the one whose spot the final relaxation cannot repair, and the area is the one
+#: the reviewer pinned there.
+SCALE_EXPULSION_AREA_KEY = "research-area-00000002"
+SCALE_EXPULSION_PROJECT_KEY = "project-0000000e"
+
 
 def _visible_keys(version) -> set[str]:
     """The public keys of the version's visible nodes, read back from the database."""
@@ -104,6 +112,18 @@ def _node_state(nodes) -> list[tuple]:
     ]
 
 
+def _drawn_radii(atlas_scale_fixture) -> dict[str, float]:
+    """The spec's own radius formula (§12.2 step 2, anchor ratio included) per node."""
+    low, high = LAYOUT_CONSTANTS["r_min"], LAYOUT_CONSTANTS["r_max"]
+    rows = {node.public_key: node for node in atlas_scale_fixture.parts[0]}
+    radius = {key: low + (high - low) * (row.importance / 100) for key, row in rows.items()}
+    anchor = next((key for key, row in rows.items() if row.node_type.key == "identity"), None)
+    if anchor is not None:
+        widest = max(value for key, value in radius.items() if key != anchor)
+        radius[anchor] = LAYOUT_CONSTANTS["anchor_ratio"] * widest
+    return radius
+
+
 def _pin_separation(atlas_scale_fixture, layout: dict) -> float:
     """The tightest pinned↔unpinned slack: distance minus the two drawn radii.
 
@@ -113,14 +133,7 @@ def _pin_separation(atlas_scale_fixture, layout: dict) -> float:
     pairs are excluded on purpose: neither endpoint may move, so an overlap there
     is spec §12.5's ``OVERLAPPING_PINS`` warning (Task 12's), not a layout defect.
     """
-    low, high = LAYOUT_CONSTANTS["r_min"], LAYOUT_CONSTANTS["r_max"]
-    rows = {node.public_key: node for node in atlas_scale_fixture.parts[0]}
-    radius = {key: low + (high - low) * (row.importance / 100) for key, row in rows.items()}
-    anchor = next((key for key, row in rows.items() if row.node_type.key == "identity"), None)
-    if anchor is not None:
-        widest = max(value for key, value in radius.items() if key != anchor)
-        radius[anchor] = LAYOUT_CONSTANTS["anchor_ratio"] * widest
-
+    radius = _drawn_radii(atlas_scale_fixture)
     pinned = set(atlas_scale_fixture.pinned_keys)
     slack = [
         math.dist(layout[pinned_key][:2], layout[key][:2]) - (radius[pinned_key] + radius[key])
@@ -130,6 +143,21 @@ def _pin_separation(atlas_scale_fixture, layout: dict) -> float:
     ]
     assert slack, "the fixture pins at least one node and lays out more"
     return min(slack)
+
+
+def _pin_to_pin_separation(atlas_scale_fixture, layout: dict) -> float:
+    """The tightest pinned↔pinned slack — spec §12.5's ``OVERLAPPING_PINS`` boundary.
+
+    A pinned spot that measures below zero here is not a legal pin at all: the
+    warning Task 12 raises is the engine's input problem, not its output's.
+    """
+    radius = _drawn_radii(atlas_scale_fixture)
+    pinned = sorted(atlas_scale_fixture.pinned_keys)
+    return min(
+        math.dist(layout[first][:2], layout[second][:2]) - (radius[first] + radius[second])
+        for index, first in enumerate(pinned)
+        for second in pinned[index + 1 :]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +212,49 @@ def test_pins_win_over_every_derived_coordinate(atlas_scale_fixture):
 
     assert _pin_separation(atlas_scale_fixture, layout) >= 0.0, (
         "the final collision pass must push unpinned neighbours clear of a pin"
+    )
+
+
+def test_a_legal_pin_expels_every_neighbour_the_relaxation_cannot(atlas_scale_fixture):
+    """Spec §12.2 step 8's guarantee, at the one shape the fixture's own pins cannot reach.
+
+    "A pin cannot leave an unpinned neighbour overlapping it" — the fixture's four
+    pins satisfy it, but a *legal* pin placed on an unpinned project's own
+    coordinate does not: the project's still-overlapping neighbours cancel the
+    pin's push for the whole iteration budget and the final relaxation ends with
+    the project inside the pin (5.632 units, measured before the expulsion
+    post-pass). The spot is finite and clear of every other pin, so the guarantee
+    has to hold here — the expulsion pass is what makes it true, because a force
+    pass cannot promise a placement a geometry pass can.
+    """
+    baseline = compute_layout(*atlas_scale_fixture.parts)
+    spot = baseline[SCALE_EXPULSION_PROJECT_KEY][:2]
+    assert all(math.isfinite(value) for value in spot), "the counterexample's spot is in bounds"
+
+    nodes = atlas_scale_fixture.with_pin(SCALE_EXPULSION_AREA_KEY, x=spot[0], y=spot[1])
+    layout = compute_layout(nodes, atlas_scale_fixture.relations, atlas_scale_fixture.groups)
+
+    assert layout[SCALE_EXPULSION_AREA_KEY][:2] == (spot[0], spot[1]), (
+        "a pin is copied in, never derived — the expulsion pass may not move it"
+    )
+    assert _pin_to_pin_separation(atlas_scale_fixture, layout) >= 0.0, (
+        "the counterexample's spot is legal: it clears every other pin (spec §12.5)"
+    )
+    assert _pin_separation(atlas_scale_fixture, layout) >= 0.0, (
+        "no unpinned neighbour may be left inside a pin (spec §12.2 step 8)"
+    )
+
+    digest = json.dumps(layout, sort_keys=True)
+    assert (
+        json.dumps(
+            compute_layout(nodes, atlas_scale_fixture.relations, atlas_scale_fixture.groups),
+            sort_keys=True,
+        )
+        == digest
+    ), "the expulsion post-pass must not move a recomputation"
+    reversed_order = compute_layout(*atlas_scale_fixture.parts_reversed())
+    assert json.dumps(reversed_order, sort_keys=True) == digest, (
+        "and the arrival order of the rows must not change the digest"
     )
 
 
@@ -247,6 +318,29 @@ def test_layout_constants_are_the_frozen_numbers():
         "depth_spread": 9.0,
         "coordinate_decimals": 3,
     }
+
+
+def test_compute_layout_materialises_a_one_shot_relations_iterator(atlas_scale_fixture):
+    """The annotation says ``Iterable``, so a generator must be as good as a list.
+
+    ``_prepare`` used to build the hierarchy arcs from the iterator and *then*
+    store ``tuple(relations)`` — empty for anything one-shot. Stage 1 then
+    recomputed every depth as 0, the seed stage walked the projects before their
+    parent areas and the call raised ``KeyError``. Materialising once at the top
+    is the whole contract of the annotation: same coordinates, same digest, for a
+    generator, a ``filter`` and a list.
+    """
+    nodes, relations, groups = atlas_scale_fixture.parts
+    expected = compute_layout(nodes, relations, groups)
+    digest = json.dumps(expected, sort_keys=True)
+
+    from_generator = compute_layout(nodes, (relation for relation in relations), groups)
+    from_filter = compute_layout(nodes, filter(lambda relation: True, relations), groups)
+
+    assert from_generator == expected, "a generator must lay out exactly like a list"
+    assert from_filter == expected, "and so must a filter"
+    assert json.dumps(from_generator, sort_keys=True) == digest
+    assert json.dumps(from_filter, sort_keys=True) == digest
 
 
 def test_scale_fixture_matches_the_declared_composition(atlas_scale_fixture):
@@ -340,6 +434,56 @@ def test_hierarchy_depths_use_the_longest_path_and_zero_for_the_unreachable(atla
         "research-area-0000000d": 0,
         "research-area-0000000e": 0,
     }
+
+
+def test_a_cyclic_hierarchy_is_tolerated_deterministically(atlas_scale_fixture):
+    """F3: validation rejects a cycle first (``HIERARCHY_CYCLE``), but a direct call may not crash.
+
+    ``hierarchy_depths`` answers a 2-cycle with 0 for every node of the cycle, and
+    the engine has to agree: the seed stage used to raise a bare ``KeyError`` while
+    looking for a parent no root ever seeded. The documented fallback places a node
+    no seeded parent reaches on the root spiral, after the roots, in ``public_key``
+    order — the same coordinates on every call and in every arrival order.
+    """
+    version = _version(status="draft", label="atlas-layout-cycle")
+    node_type = atlas_scale_fixture.node_types["research-area"]
+    first = _node(version=version, node_type=node_type, public_key="research-area-00000031")
+    second = _node(version=version, node_type=node_type, public_key="research-area-00000032")
+    tail = _node(version=version, node_type=node_type, public_key="research-area-00000033")
+    cycle = [
+        _relation(
+            source=first,
+            target=second,
+            relation_type=atlas_scale_fixture.hierarchy_type,
+            version=version,
+        ),
+        _relation(
+            source=second,
+            target=first,
+            relation_type=atlas_scale_fixture.hierarchy_type,
+            version=version,
+        ),
+        _relation(
+            source=second,
+            target=tail,
+            relation_type=atlas_scale_fixture.hierarchy_type,
+            version=version,
+        ),
+    ]
+    nodes = [first, second, tail]
+
+    assert hierarchy_depths(nodes, cycle) == {
+        "research-area-00000031": 0,
+        "research-area-00000032": 0,
+        "research-area-00000033": 0,
+    }, "no root reaches a cycle, and the cycle's tail is unreachable with it"
+
+    layout = compute_layout(nodes, cycle, [])
+    assert set(layout) == {node.public_key for node in nodes}
+    assert compute_layout(nodes, cycle, []) == layout, "the fallback is deterministic"
+    assert compute_layout(list(reversed(nodes)), list(reversed(cycle)), []) == layout, (
+        "and it does not depend on the arrival order of the rows"
+    )
 
 
 def test_apply_layout_stores_public_keyed_quantised_coordinates(atlas_v1):

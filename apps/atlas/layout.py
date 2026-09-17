@@ -21,7 +21,8 @@ constant *is* the execution order, not documentation about it):
    one scene unit of movement per node per iteration at most);
 6. depth layering (``z`` spread by depth — ``z`` has no other author);
 7. pins (copied in, never derived);
-8. a final relaxation restricted to unpinned nodes, so a pin cannot leave a
+8. a final relaxation restricted to unpinned nodes, then an exact expulsion of any
+   unpinned mover the relaxation left inside a pin, so a pin cannot leave a
    neighbour overlapping it;
 9. rounding to 3 decimals, once.
 
@@ -41,7 +42,18 @@ to re-derive them:
   step 8 calls it "one more relaxation pass restricted to unpinned nodes, so a pin
   cannot leave an unpinned neighbour overlapping it" — a single iteration bounded
   at one scene unit per node cannot discharge that purpose, so the pass repeats
-  the frozen iteration count with the pinned nodes held still as obstacles;
+  the frozen iteration count with the pinned nodes held still as obstacles. A force
+  pass cannot *promise* the outcome either (a pinned area sitting on an unpinned
+  project's own coordinate holds it inside the pin for the whole budget), so step 8
+  ends with :func:`_expel_from_pins` — a geometric pass that puts any unpinned mover
+  still inside a pin exactly on the pin's clearance circle, and with it the
+  guarantee becomes true of the output rather than of the intent;
+* **a cyclic hierarchy is tolerated deterministically.** Validation rejects one
+  first (``HIERARCHY_CYCLE``), but the engine is also callable on its own rows: a
+  node no *seeded* parent reaches is seeded on the root spiral after the roots, in
+  ``public_key`` order (step 3's documented fallback), and its depth stays ``0`` —
+  the same answer :func:`hierarchy_depths` gives. No input raises a bare
+  ``KeyError``;
 * **groups arrive as membership, not as rows.** ``AtlasGroup`` carries no members,
   so the engine's ``groups`` argument is ``{group key: member node keys}`` (a
   mapping, or ``(key, keys)`` pairs). That keeps the engine query-free and lets
@@ -111,9 +123,9 @@ class LayoutStage:
 class _Run:
     """The working state of one layout run — everything the stages read and write."""
 
-    #: Visible nodes, in ``public_key`` order.
-    nodes: tuple[AtlasNode, ...]
-    relations: Sequence[AtlasRelation]
+    #: The visible hierarchy subgraph, as sorted ``(parent, child)`` arcs — built
+    #: **once**, from the materialised relations, and read by stage 1 alone.
+    arcs: tuple[tuple[str, str], ...]
     #: ``{group key: member node keys}``, members sorted and visible-only.
     members: dict[str, tuple[str, ...]]
     #: Every visible node key, sorted — the single ordered walk of every stage.
@@ -186,7 +198,8 @@ def _depth_by_arcs(keys: Iterable[str], arcs: Iterable[tuple[str, str]]) -> dict
     is a property of the keys rather than of the row order (spec §12.2 step 1).
     Depth is the **longest** path, and a node no root reaches is ``0`` — including
     every node of a cyclic input, which validation rejects long before this point
-    (``HIERARCHY_CYCLE``).
+    (``HIERARCHY_CYCLE``) and which the seed stage places with its documented
+    fallback, so the two functions answer the same 2-cycle with the same zeros.
     """
     depth = dict.fromkeys(keys, 0)
     children: dict[str, set[str]] = {}
@@ -257,7 +270,7 @@ def _mean_root_spacing(root_keys: Sequence[str], seed: Mapping[str, tuple[float,
 
 def _stage_hierarchy_depth(run: _Run) -> None:
     """Step 1 — the longest path from any root; the spiral's root order is set up here."""
-    run.depth = _depth_by_arcs(run.keys, _hierarchy_arcs(run.by_pk, run.relations))
+    run.depth = _depth_by_arcs(run.keys, run.arcs)
     run.max_depth = max(run.depth.values(), default=0)
 
 
@@ -282,6 +295,12 @@ def _stage_seed_placement(run: _Run) -> None:
     always exists first; a node with several hierarchy parents follows the first
     of them in ``public_key`` order, which is the one the sorted arc list names
     first.
+
+    A node no *seeded* parent reaches — a member of a cycle, which validation
+    rejects long before this point (``HIERARCHY_CYCLE``) and which a direct call
+    may still hand the engine — is deferred and then seeded on the root spiral,
+    after the roots, in ``public_key`` order: the fallback is a documented order,
+    not an error and not an accident of iteration.
     """
     spacing = LAYOUT_CONSTANTS["seed_spacing"]
     angle = LAYOUT_CONSTANTS["golden_angle"]
@@ -290,12 +309,18 @@ def _stage_seed_placement(run: _Run) -> None:
     seed: dict[str, tuple[float, float]] = {
         key: _spiral(spacing, index, angle) for index, key in enumerate(run.root_keys)
     }
+    deferred: list[str] = []
     for key in sorted(run.parents, key=lambda child: (run.depth[child], child)):
         parent = run.parents[key][0]
+        if parent not in seed:
+            deferred.append(key)
+            continue
         siblings = run.children.get(parent, ())
         offset = _spiral(spacing * child_scale, siblings.index(key), angle)
         base = seed[parent]
         seed[key] = (base[0] + offset[0], base[1] + offset[1])
+    for index, key in enumerate(deferred, start=len(run.root_keys)):
+        seed[key] = _spiral(spacing, index, angle)
 
     run.seed = seed
     run.position = {key: [seed[key][0], seed[key][1], 0.0] for key in run.keys}
@@ -365,8 +390,9 @@ def _stage_pins(run: _Run) -> None:
 
 
 def _stage_final_collision(run: _Run) -> None:
-    """Step 8 — the same relaxation with the pinned nodes held still."""
+    """Step 8 — the same relaxation with the pinned nodes held still, then the expulsion."""
     _relax(run, movers=tuple(key for key in run.keys if key not in run.pinned))
+    _expel_from_pins(run)
 
 
 def _stage_rounding(run: _Run) -> None:
@@ -462,6 +488,57 @@ def _relax(run: _Run, *, movers: Sequence[str]) -> None:
             run.position[key][1] += delta[1]
 
 
+def _expel_from_pins(run: _Run) -> None:
+    """Place every unpinned mover still inside a pin on the pin's clearance circle.
+
+    The relaxation above is a *force* pass: each iteration moves a node by a damped
+    share of every push it receives, and a mover whose still-overlapping neighbours
+    push against the pin can be held inside it for the whole iteration budget — for
+    such a node spec §12.2 step 8's guarantee is false however many iterations run
+    (the counterexample in ``test_layout.py`` measures 5.632 scene units of it). This
+    pass is *geometric*: a mover inside a pin is set exactly on the clearance circle,
+    along the ray that joins the two, so the pair ends with no overlap at all. Only
+    unpinned movers move — a pinned coordinate is an input (step 7).
+
+    Determinism (spec §12.3): pins and movers are walked in ``public_key`` order —
+    the tie-break when a mover lies inside several pins — and a mover sitting
+    exactly *on* a pin, which has no ray of its own, takes the golden-angle turn of
+    its key's position in the ordered walk, so the direction is a function of
+    ``public_key`` too. The pass repeats until a round displaces nothing, bounded by
+    one round per pin plus one. The clearance carries one quantisation unit
+    (``10 ** -coordinate_decimals``) because step 9 rounds afterwards, and rounding
+    can steal up to ``√2 · 5·10⁻⁴`` scene units of any distance: the guarantee has
+    to survive the rounding that ends the pipeline.
+    """
+    pinned = tuple(key for key in run.keys if key in run.pinned)
+    if not pinned:
+        return
+    guard = 10.0 ** -LAYOUT_CONSTANTS["coordinate_decimals"]
+    angle = LAYOUT_CONSTANTS["golden_angle"]
+    for _round in range(len(pinned) + 1):
+        displaced = False
+        for index, key in enumerate(run.keys):
+            if key in run.pinned:
+                continue
+            position = run.position[key]
+            for pin in pinned:
+                pin_position = run.position[pin]
+                wanted = run.radius[key] + run.radius[pin] + guard
+                dx = position[0] - pin_position[0]
+                dy = position[1] - pin_position[1]
+                distance = math.hypot(dx, dy)
+                if distance >= wanted:
+                    continue
+                if distance == 0.0:
+                    turn = (index + 1) * angle
+                    dx, dy, distance = math.cos(turn), math.sin(turn), 1.0
+                position[0] = pin_position[0] + dx * wanted / distance
+                position[1] = pin_position[1] + dy * wanted / distance
+                displaced = True
+        if not displaced:
+            break
+
+
 # ---------------------------------------------------------------------------
 # The public surface (the plan's Task 11 interfaces)
 # ---------------------------------------------------------------------------
@@ -489,7 +566,16 @@ def _anchor_key(visible_nodes: Sequence[AtlasNode]) -> str | None:
 
 
 def _prepare(nodes: Iterable[AtlasNode], relations: Iterable[AtlasRelation], groups) -> _Run:
-    """Build a run's immutable input state: rows sorted, groups normalised, pins read."""
+    """Build a run's immutable input state: rows sorted, relations materialised, pins read.
+
+    ``relations`` is annotated ``Iterable``, so it is materialised **once, first**:
+    a generator or a ``filter`` is a legal input, and building the arcs and reading
+    the rows later must both see the same sequence (an iterator drained by the first
+    reader used to leave stage 1 with nothing and the seed stage with a bare
+    ``KeyError``). The arcs are then built once and shared, which is what removes
+    the duplicate arc build stage 1 used to perform.
+    """
+    relations = tuple(relations)
     visible_nodes = tuple(sorted((node for node in nodes if node.visible), key=_public_key))
     keys = tuple(node.public_key for node in visible_nodes)
     by_pk = {node.pk: node.public_key for node in visible_nodes}
@@ -508,8 +594,7 @@ def _prepare(nodes: Iterable[AtlasNode], relations: Iterable[AtlasRelation], gro
             node_groups.setdefault(member, []).append(group_key)
 
     return _Run(
-        nodes=visible_nodes,
-        relations=tuple(relations),
+        arcs=arcs,
         members=members,
         keys=keys,
         by_pk=by_pk,
@@ -532,8 +617,12 @@ def compute_layout(
 
     Pure: it reads the rows and the group membership mapping it is handed, walks
     every collection in ``public_key`` order and returns 3-decimal tuples. The
-    same input produces byte-identical output on every run and every machine;
-    hidden nodes get no coordinate at all (they are not part of the projection).
+    annotation is honest, too — ``nodes`` and ``relations`` may be any iterable
+    (list, generator, ``filter``), because both are materialised before the first
+    read, and the same input produces byte-identical output on every run and every
+    machine. Hidden nodes get no coordinate at all (they are not part of the
+    projection), and a cyclic hierarchy is tolerated deterministically rather than
+    raising (see the module docstring's fallback note).
     """
     run = _prepare(nodes, relations, groups)
     for stage in LAYOUT_BLUEPRINT:
@@ -552,7 +641,10 @@ def apply_layout(version: AtlasVersion) -> dict[str, list[float]]:
     and Plan D's seed).
     """
     nodes = list(version.nodes.select_related("node_type"))
-    relations = list(version.relations.select_related("source", "target", "relation_type"))
+    # The engine resolves a relation's endpoints by id (``source_id``/``target_id``),
+    # so the endpoint rows are never loaded — only the type carries a field the
+    # stages read (``hierarchy_role``).
+    relations = list(version.relations.select_related("relation_type"))
     computed = compute_layout(nodes, relations, _stored_groups(version))
 
     layout = {key: list(coordinate) for key, coordinate in computed.items()}
