@@ -131,11 +131,47 @@ COINCIDENT_MOVER_IMPORTANCE = 70
 #: defect (21.8% of legal pin sets ended with a mover inside a pin, 13.2% of all
 #: trials were not fixed points), and no test exercised the round bound at all.
 #: The sweep below is the same family, bounded and seeded, so a regression in the
-#: shape space fails a test instead of a review.
+#: shape space fails a test instead of a review. `11-fix3` widened the generator
+#: from pin pairs to **two to four** pins on a regular ring: the pair-only
+#: generator never built the class where the obligation broke (three or more pins
+#: enclosing a mover — the C5 triangle and the C6 rings below), which is what made
+#: the earlier "240/240" reading overclaim its scope.
 SWEEP_SEED = "atlas-layout-11-fix2-sweep"
 SWEEP_TRIALS = 240
+SWEEP_MIN_PINS = 2
+SWEEP_MAX_PINS = 4
 SWEEP_MAX_MOVERS = 3
 SWEEP_MIDPOINT_SHARE = 1.0 / 3.0
+#: The widened sweep has to *generate* the enclosure class: multi-pin geometries
+#: whose mover starts inside a pin. Measured on this seed: **90 of 240** (118 start
+#: inside a pin at all) — the floor is a conservative third of the measured count,
+#: so a generator that silently stopped drawing rings fails.
+SWEEP_ENCLOSURE_FLOOR = 30
+
+#: C5 — the three-pin triangle enclosure (ledger `11-fix3`). Three pins of radius
+#: 13.2 sit on a circumradius of 20 (chord 34.641, pin-to-pin slack +8.241, legal
+#: per §12.5) with the r = 14.4 mover on the centroid, inside all three by 7.600.
+#: Every candidate the rebuild tries — the ray from each violated pin, one
+#: `wanted` long, and the golden-angle turn — lands 17.486 from a *second* pin
+#: (clearance −10.114), and the relaxation pulls the mover straight back to the
+#: centroid, so the loop two-cycles to `_FIXPOINT_CYCLES` and exits inside two
+#: pins: R12 (a) and (b) both violated, with a valid placement 2·`wanted` along
+#: the first ray away (+2.985) and +44.4 in the reviewer's dense scan.
+TRIANGLE_PIN_KEYS = ("project-0000000a", "project-0000000b", "project-0000000c")
+TRIANGLE_CIRCUMRADIUS = 20.0
+TRIANGLE_PIN_IMPORTANCE = 60  # r = 13.2
+TRIANGLE_MOVER_KEY = "technology-00000001"  # r = 14.4 (LENS_MOVER_IMPORTANCE)
+
+#: C6 — the ring enclosures. `total` pins of radius 6.0 (importance 0) on a
+#: radius-20 circle — the chord 2·20·sin(π/total) is ≥ 12 for every total ≤ 10, so
+#: each ring is a legal pin set — with the r = 14.4 mover on the centre, inside
+#: every pin by 0.400. Each candidate ray runs through the ring and lands short of
+#: the far side (the antipodal pin for even totals), so the maximin fallback plants
+#: the mover 0.597–0.801 *inside* a pin: five overlaps deepened at total = 10.
+RING_TOTALS = (3, 5, 6, 8, 9, 10)
+RING_RADIUS = 20.0
+RING_PIN_IMPORTANCE = 0  # r = 6.0
+RING_MOVER_KEY = "technology-00000001"  # r = 14.4 (LENS_MOVER_IMPORTANCE)
 
 
 def _visible_keys(version) -> set[str]:
@@ -275,6 +311,31 @@ def _hand_built_run(nodes, positions: dict):
     layout_module._stage_pins(run)
     before = {key: tuple(run.position[key]) for key in run.keys}
     return run, before
+
+
+def _enclosure_around_the_mover_spot(nodes, mover_key: str, pinned_keys, ring: float):
+    """The reviewer's end-to-end enclosure: pins planted around the mover's own spot.
+
+    ``nodes`` arrive without pin coordinates. Stages 1-6 read no pin at all —
+    step 7 is the copy-in — so the mover's post-step-5 position is the same state
+    with or without pins on the rows; the pins are then planted at ``ring``
+    around that unrounded spot, which is the construction ledger `11-fix3` used
+    to reproduce the triangle and the rings *through* ``compute_layout``: the
+    mover's own trajectory is what puts it inside the pins, and the pin set is a
+    legal draft (spec §12.5). Returns ``(spot, before, layout)``: the unrounded
+    spot so a test can state it, the pass-entry snapshot (steps 1-7, unrounded)
+    and the pipeline's rounded output.
+    """
+    run = layout_module._prepare(nodes, (), ())
+    for stage in layout_module.LAYOUT_BLUEPRINT[:6]:
+        stage.run(run)
+    spot = (run.position[mover_key][0], run.position[mover_key][1])
+    for index, key in enumerate(pinned_keys):
+        row = next(node for node in nodes if node.public_key == key)
+        angle = 2.0 * math.pi * index / len(pinned_keys)
+        row.pin_x = spot[0] + ring * math.cos(angle)
+        row.pin_y = spot[1] + ring * math.sin(angle)
+    return spot, _pipeline_positions(nodes)[0], compute_layout(nodes, (), ())
 
 
 def _mover_slack(pairs: dict, mover_keys: set[str], pinned_keys: set[str]) -> float:
@@ -995,6 +1056,275 @@ def test_a_hand_built_ping_pong_settles_and_stays_settled(atlas_scale_fixture):
     )
 
 
+def test_a_three_pin_triangle_enclosure_is_escaped(atlas_scale_fixture):
+    """C5: a mover enclosed by three pins — the triangle the rebuild cannot clear.
+
+    Three pins of radius 13.2 sit on a circumradius of 20 (every chord is 34.641,
+    pin-to-pin slack **+8.241**, legal per §12.5) and the radius-14.4 mover starts
+    on the centroid, inside all three by 7.600. Every candidate the rebuild can
+    reach — the ray from each violated pin, ``wanted`` long, plus the golden-angle
+    turn — lands 17.486 from a *second* pin, clearance **−10.114**, and the
+    relaxation pulls the mover straight back to the centroid: the loop two-cycles
+    to `_FIXPOINT_CYCLES` and exits with two overlaps *deepened*, violating R12 (a)
+    and (b) on a shape whose escape is one more ``wanted`` along the same ray
+    (+2.985) and +44.4 in the reviewer's dense scan (ledger `11-fix3`).
+
+    Two constructions, because they fail in different places: the pass is handed
+    the enclosed state directly (the honest worst case — what the pipeline's own
+    step-5 relaxation leaves when the pins sit on the mover's spot), and the same
+    triangle is planted around the mover's *own* post-step-5 spot and run through
+    ``compute_layout`` from scratch, which is where the reviewer reproduced
+    −10.1145 end to end.
+    """
+    version = _version(status="draft", label="atlas-layout-triangle-enclosure")
+    node_types = atlas_scale_fixture.node_types
+    pins = [
+        (
+            key,
+            (
+                TRIANGLE_CIRCUMRADIUS * math.cos(2.0 * math.pi * index / 3.0),
+                TRIANGLE_CIRCUMRADIUS * math.sin(2.0 * math.pi * index / 3.0),
+            ),
+        )
+        for index, key in enumerate(TRIANGLE_PIN_KEYS)
+    ]
+    nodes = [
+        _node(
+            version=version,
+            node_type=node_types["project"],
+            public_key=key,
+            importance=TRIANGLE_PIN_IMPORTANCE,
+            pin_x=x,
+            pin_y=y,
+        )
+        for key, (x, y) in pins
+    ]
+    nodes.append(
+        _node(
+            version=version,
+            node_type=node_types["technology"],
+            public_key=TRIANGLE_MOVER_KEY,
+            importance=LENS_MOVER_IMPORTANCE,
+        )
+    )
+    radius = _radii_of(nodes)
+    pinned = set(TRIANGLE_PIN_KEYS)
+    movers = {TRIANGLE_MOVER_KEY}
+
+    run, before = _hand_built_run(nodes, dict(pins, **{TRIANGLE_MOVER_KEY: (0.0, 0.0)}))
+    before_pairs = _pair_slacks(before, radius)
+    assert min(before_pairs[pair] for pair in combinations(TRIANGLE_PIN_KEYS, 2)) >= 0.0, (
+        "the pin set is legal: a chord of 34.641 clears the two 13.2 radii (spec §12.5)"
+    )
+    assert _mover_slack(before_pairs, movers, pinned) == pytest.approx(-7.6), (
+        "the mover starts on the circumcentre, 20.000 from every pin"
+    )
+
+    layout_module._stage_final_collision(run)
+    after = {key: tuple(run.position[key]) for key in run.keys}
+    after_pairs = _pair_slacks(after, radius)
+
+    assert _mover_slack(after_pairs, movers, pinned) >= 0.0, (
+        "an enclosure must be escapable: the rebuild's rays all land inside a second "
+        "pin (clearance −10.114) and its loop two-cycles until the bound, leaving the "
+        "mover inside two pins — deeper than the −7.600 it was handed"
+    )
+    worsened = {
+        pair: (before_pairs[pair], after_pairs[pair])
+        for pair in before_pairs
+        if after_pairs[pair] < before_pairs[pair]
+    }
+    assert not worsened, f"the pass left {len(worsened)} pair(s) slacker: {worsened}"
+    assert min(after_pairs.values()) >= min(before_pairs.values()), (
+        "and the tightest pair may not come out slacker than it went in (R12 (b))"
+    )
+
+    spot, entry, layout = _enclosure_around_the_mover_spot(
+        nodes, TRIANGLE_MOVER_KEY, TRIANGLE_PIN_KEYS, TRIANGLE_CIRCUMRADIUS
+    )
+    entry_pairs = _pair_slacks(entry, radius)
+    assert _mover_slack(entry_pairs, movers, pinned) == pytest.approx(-7.6), (
+        f"planted at the mover's own post-step-5 spot ({spot[0]:.3f}, {spot[1]:.3f}), "
+        "the triangle hands the pass the same enclosed state end to end"
+    )
+    layout_pairs = _pair_slacks(layout, radius)
+    assert _mover_slack(layout_pairs, movers, pinned) >= 0.0, (
+        "end to end through compute_layout, no rounded coordinate may leave the mover "
+        "inside a pin (the reviewer measured −10.1145 here)"
+    )
+
+
+def test_pin_ring_enclosures_are_escaped(atlas_scale_fixture):
+    """C6: a mover enclosed by a ring of pins — every ring in the family clears.
+
+    ``total`` pins of radius 6.0 on a radius-20 circle are legal for every total
+    ≤ 10 (the k = 10 chord is 12.360 ≥ 12) and the radius-14.4 mover sits on the
+    centre, inside every pin by 0.400. The rebuild's rays run *through* the ring
+    and land short of the far side — for even totals, short of the antipodal pin —
+    so the maximin fallback plants the mover 0.597–0.801 inside a pin and deepens
+    two to five of the pin↔mover overlaps (ledger `11-fix3`: 23.7% of rings fail
+    the pin obligation, and the five deepened overlaps at total = 10). Each ring
+    is checked twice: handed to the pass directly, and planted around the mover's
+    own post-step-5 spot through ``compute_layout``.
+    """
+    node_types = atlas_scale_fixture.node_types
+    for total in RING_TOTALS:
+        version = _version(status="draft", label=f"atlas-layout-ring-{total:02d}")
+        pin_keys = [f"project-{index:08x}" for index in range(1, total + 1)]
+        pins = [
+            (
+                key,
+                (
+                    RING_RADIUS * math.cos(2.0 * math.pi * index / total),
+                    RING_RADIUS * math.sin(2.0 * math.pi * index / total),
+                ),
+            )
+            for index, key in enumerate(pin_keys)
+        ]
+        nodes = [
+            _node(
+                version=version,
+                node_type=node_types["project"],
+                public_key=key,
+                importance=RING_PIN_IMPORTANCE,
+                pin_x=x,
+                pin_y=y,
+            )
+            for key, (x, y) in pins
+        ]
+        nodes.append(
+            _node(
+                version=version,
+                node_type=node_types["technology"],
+                public_key=RING_MOVER_KEY,
+                importance=LENS_MOVER_IMPORTANCE,
+            )
+        )
+        radius = _radii_of(nodes)
+        pinned = set(pin_keys)
+        movers = {RING_MOVER_KEY}
+
+        run, before = _hand_built_run(nodes, dict(pins, **{RING_MOVER_KEY: (0.0, 0.0)}))
+        before_pairs = _pair_slacks(before, radius)
+        assert min(before_pairs[pair] for pair in combinations(pin_keys, 2)) >= 0.0, (
+            f"ring {total}: the pin set is legal (spec §12.5)"
+        )
+        assert _mover_slack(before_pairs, movers, pinned) == pytest.approx(-0.4), (
+            f"ring {total}: the mover starts on the centre, inside every pin"
+        )
+
+        layout_module._stage_final_collision(run)
+        after = {key: tuple(run.position[key]) for key in run.keys}
+        after_pairs = _pair_slacks(after, radius)
+
+        assert _mover_slack(after_pairs, movers, pinned) >= 0.0, (
+            f"ring {total}: a ring enclosure must be escapable — the rebuild's rays "
+            "all land short of the far side and the fallback plants the mover inside "
+            "a pin"
+        )
+        worsened = {
+            pair: (before_pairs[pair], after_pairs[pair])
+            for pair in before_pairs
+            if after_pairs[pair] < before_pairs[pair]
+        }
+        assert not worsened, (
+            f"ring {total}: the pass left {len(worsened)} pair(s) slacker: {worsened}"
+        )
+        assert min(after_pairs.values()) >= min(before_pairs.values()), (
+            f"ring {total}: the tightest pair may not come out slacker than it went in"
+        )
+
+        spot, entry, layout = _enclosure_around_the_mover_spot(
+            nodes, RING_MOVER_KEY, pin_keys, RING_RADIUS
+        )
+        entry_pairs = _pair_slacks(entry, radius)
+        assert _mover_slack(entry_pairs, movers, pinned) == pytest.approx(-0.4), (
+            f"ring {total}: planted at the mover's own spot "
+            f"({spot[0]:.3f}, {spot[1]:.3f}), the ring encloses it end to end"
+        )
+        layout_pairs = _pair_slacks(layout, radius)
+        assert _mover_slack(layout_pairs, movers, pinned) >= 0.0, (
+            f"ring {total}: end to end through compute_layout, no rounded coordinate "
+            "may leave the mover inside a pin"
+        )
+
+
+def test_a_clear_pin_is_not_spent_to_buy_a_pair_slack(atlas_scale_fixture):
+    """C7: the guard's first key — a clear pin may not be traded for a pair slack.
+
+    The sweep's pair draw hands this shape over on its trial 26: two pins of radius
+    9.24 on the x axis, 25.459 from the midpoint (so the midpoint is already clear
+    of both, **+6.979**) and two radius-9.24 movers stacked on it (**−18.480**).
+    The relaxation's coincident-mover direction is the fixed x axis — straight at
+    the pins — so the state that separates the stack is the state that pushes it
+    *into* the pins (−1.507): a guard ordered by pair slack alone prefers that state
+    (tightest −1.507 against the input's −18.480) and spends a clear pin to buy a
+    pair slack, which is how the first cut of this guard came out with a mover 1.507
+    inside a pin on a shape the pre-`11-fix3` rebuild cleared. R12 (a) is step 8's
+    purpose, so the guard scores it first, and the honest output of this shape is
+    the input unchanged: the pass has nothing to fix here, and separating the stack
+    is step 5's operator's job — not a licence to break a pin.
+    """
+    version = _version(status="draft", label="atlas-layout-clear-pin")
+    node_types = atlas_scale_fixture.node_types
+    arm = 25.4594417948081  # the sweep's own trial-26 draw: +6.979 clear of the midpoint
+    pin_keys = ("project-00000001", "project-00000002")
+    mover_keys = ("technology-00000001", "technology-00000002")
+    nodes = [
+        _node(
+            version=version,
+            node_type=node_types["project"],
+            public_key=key,
+            importance=27,  # r = 9.24
+            pin_x=x,
+            pin_y=0.0,
+        )
+        for key, x in zip(pin_keys, (-arm, arm), strict=True)
+    ]
+    nodes += [
+        _node(
+            version=version,
+            node_type=node_types["technology"],
+            public_key=key,
+            importance=27,  # r = 9.24
+        )
+        for key in mover_keys
+    ]
+    radius = _radii_of(nodes)
+    pinned, movers = set(pin_keys), set(mover_keys)
+    plan = {"project-00000001": (-arm, 0.0), "project-00000002": (arm, 0.0)}
+    plan.update({key: (0.0, 0.0) for key in mover_keys})
+
+    run, before = _hand_built_run(nodes, plan)
+    before_pairs = _pair_slacks(before, radius)
+    before_pin_slack = _mover_slack(before_pairs, movers, pinned)
+    assert before_pin_slack == pytest.approx(arm - 2 * 9.24), (
+        "the input is already clear of both pins"
+    )
+    assert before_pairs[tuple(sorted(mover_keys))] == pytest.approx(-2 * 9.24), (
+        "and the two movers start stacked on the midpoint"
+    )
+
+    layout_module._stage_final_collision(run)
+    after = {key: tuple(run.position[key]) for key in run.keys}
+    after_pairs = _pair_slacks(after, radius)
+
+    assert _mover_slack(after_pairs, movers, pinned) >= before_pin_slack, (
+        "the pass may not hand back a pin slack worse than it was given: a guard "
+        "ordered by pair slack alone spends the +6.979 clearance to separate the "
+        "stack and ends 1.507 inside a pin"
+    )
+    deepened = {
+        pair: (before_pairs[pair], after_pairs[pair])
+        for pair in before_pairs
+        if before_pairs[pair] < 0.0 and after_pairs[pair] < before_pairs[pair]
+    }
+    assert not deepened, f"and the stacked pair may not come out deeper: {deepened}"
+    assert min(after_pairs.values()) >= min(before_pairs.values()), (
+        "nor may the tightest pair come out slacker than it went in"
+    )
+
+
 @pytest.mark.slow
 def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
     atlas_scale_fixture,
@@ -1005,29 +1335,48 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
     21 945 legal pin sets ended with a mover still inside a pin, 1 788 of them
     never converging (one needed 153 rounds) — and *no test exercised the round
     bound at all*, which is how the round loop shipped. This sweep rebuilds the
-    same family on a fixed seed, at the level the defect lives on: two pins whose
-    separation makes them legal (spec §12.5) with one to three unpinned movers
-    placed in their neighbourhood, so the lens, coincident and single-pin shapes
-    all occur (a third of the movers sit exactly on the pins' midpoint).
+    same family on a fixed seed, at the level the defect lives on: **two to four**
+    pins on a regular ring whose chords make the set legal (spec §12.5) with one to
+    three unpinned movers placed in their neighbourhood, so the lens, the
+    coincident, the single-pin and the ring shapes all occur (a third of the movers
+    sit exactly on the pins' centre).
+
+    `11-fix3` widened the generator: the first version drew pin *pairs* only — the
+    class where the obligation held — while the class where it broke (three or
+    more pins enclosing a mover: the C5 triangle and the C6 rings) was never
+    generated, which is what made the earlier "240/240" reading overclaim its
+    scope. `enclosure_trials` now counts the geometries that start with a mover
+    inside a pin of a multi-pin set, so a generator that stopped drawing rings
+    fails instead of passing quietly.
 
     Three obligations, each measured on every geometry: no mover may end inside a
     pin; the tightest pair may not come out slacker than it went in; and no pair
     that was already overlapping may end *deeper* — the literal R12 (b) shape
     (pairs that were clear are allowed to come closer, because the relaxation in
     the same pass is doing its own work, and it does so in a quarter of these
-    geometries; an overlap going deeper is never allowed). The old pass fails the
-    first two on 33 and 26 geometries of this seed respectively, and the overlap
-    obligation on the same 33.
+    geometries; an overlap going deeper is never allowed). On this seed the old
+    round-loop pass fails the three obligations on 13, 5 and 11 geometries
+    respectively and the pre-`11-fix3` rebuild — whose expulsion reached only one
+    clearance radius — on 5, 1 and 4, all of them multi-pin enclosures; the widest
+    of the three is measured with the same generator side by side
+    (`task11-fix3-08-sweep-rates.txt`). The *committed* pair-only draw is replayed
+    byte-for-byte in that same comparison — it reproduces the old pass's 33/26/33
+    failures and reads 0/0/0 both before and after this change, because the guard
+    must not lose a single geometry the previous rebuild handled while it gains the
+    enclosure class (it did, on one pair-only trial, and `_state_score`'s R12 (a)
+    key is what fixed it).
     """
     node_types = atlas_scale_fixture.node_types
     checked = 0
     start_inside = 0
+    enclosure_trials = 0
     for trial in range(SWEEP_TRIALS):
         rng = random.Random(f"{SWEEP_SEED}:{trial}")
         version = _version(status="draft", label=f"atlas-layout-sweep-{trial:04d}")
         pin_importance = rng.randint(20, 90)
         mover_importance = rng.randint(20, 90)
-        pin_keys = [f"project-{index:08x}" for index in (1, 2)]
+        pin_total = rng.randint(SWEEP_MIN_PINS, SWEEP_MAX_PINS)
+        pin_keys = [f"project-{index:08x}" for index in range(1, pin_total + 1)]
         nodes = [
             _node(
                 version=version,
@@ -1049,19 +1398,26 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
         radius = _radii_of(nodes)
         mover_keys = {node.public_key for node in nodes if node.public_key not in pin_keys}
 
-        # A legal pin pair (spec §12.5), symmetric about the origin; the angle is
-        # an axis half the time, so the mover's two distances are bit-equal and
-        # the lens is an exact saddle rather than a one-ulp accident.
-        separation = 2 * radius[pin_keys[0]] + rng.uniform(
-            0.0, 2.0 * (radius[next(iter(mover_keys))] + radius[pin_keys[0]])
+        # A legal pin set (spec §12.5) on a regular ring about the origin: the
+        # shortest chord is 2·ring·sin(π/pin_total), so the ring has to clear the
+        # widest pin pair. Rings, not one pair at a time, because an enclosure is
+        # the shape the pass could not escape; the rotation is an axis half the
+        # time, so a mover on the centre has bit-equal distances to its pins.
+        pin_radius = radius[pin_keys[0]]
+        ring_floor = (
+            pin_radius / math.sin(math.pi / pin_total) if pin_total > 2 else pin_radius
         )
-        angle = rng.choice((0.0, 0.5 * math.pi, rng.uniform(0.0, 2.0 * math.pi)))
-        half = 0.5 * separation
+        mover_radius = radius[next(iter(mover_keys))]
+        ring = ring_floor + rng.uniform(0.0, 2.0 * (mover_radius + pin_radius))
+        rotation = rng.choice((0.0, 0.5 * math.pi, rng.uniform(0.0, 2.0 * math.pi)))
         plan = {
-            pin_keys[0]: (-half * math.cos(angle), -half * math.sin(angle)),
-            pin_keys[1]: (half * math.cos(angle), half * math.sin(angle)),
+            key: (
+                ring * math.cos(rotation + 2.0 * math.pi * index / pin_total),
+                ring * math.sin(rotation + 2.0 * math.pi * index / pin_total),
+            )
+            for index, key in enumerate(pin_keys)
         }
-        reach = 1.5 * (radius[next(iter(mover_keys))] + radius[pin_keys[0]])
+        reach = 1.5 * (mover_radius + pin_radius)
         for key in sorted(mover_keys):
             plan[key] = (
                 (0.0, 0.0)
@@ -1074,7 +1430,7 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
         ):
             continue  # cannot happen with the draw above; kept as a real legality gate
 
-        for key in pin_keys:  # only the pin pair carries a pin; the movers stay movers
+        for key in pin_keys:  # only the pins carry a pin; the movers stay movers
             x, y = plan[key]
             row = next(row for row in nodes if row.public_key == key)
             row.pin_x, row.pin_y = x, y
@@ -1083,6 +1439,8 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
         before_pairs = _pair_slacks(before, radius)
         if _mover_slack(before_pairs, mover_keys, set(pin_keys)) < 0.0:
             start_inside += 1
+            if pin_total > 2:
+                enclosure_trials += 1
 
         layout_module._stage_final_collision(run)
         after = {key: tuple(run.position[key]) for key in run.keys}
@@ -1090,7 +1448,8 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
 
         worst_pin = _mover_slack(after_pairs, mover_keys, set(pin_keys))
         assert worst_pin >= 0.0, (
-            f"trial {trial}: a mover ended inside a pin (slack {worst_pin:.6f}); pins={plan}"
+            f"trial {trial}: a mover ended inside a pin (slack {worst_pin:.6f}); "
+            f"pins={ {key: plan[key] for key in pin_keys} }"
         )
         assert min(after_pairs.values()) >= min(before_pairs.values()), (
             f"trial {trial}: the tightest pair came out slacker than it went in "
@@ -1109,5 +1468,9 @@ def test_a_seeded_sweep_of_legal_pin_sets_clears_every_pin_and_worsens_no_pair(
     assert start_inside >= SWEEP_TRIALS // 3, (
         f"only {start_inside} of {SWEEP_TRIALS} geometries started with a mover inside a "
         "pin — the sweep is meant to target the shapes the pass exists for"
+    )
+    assert enclosure_trials >= SWEEP_ENCLOSURE_FLOOR, (
+        f"only {enclosure_trials} of {SWEEP_TRIALS} geometries started with a mover inside "
+        "a pin of a multi-pin set — the widened sweep is what covers the enclosure class"
     )
     assert checked == SWEEP_TRIALS

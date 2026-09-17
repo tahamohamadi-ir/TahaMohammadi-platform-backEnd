@@ -48,9 +48,16 @@ to re-derive them:
   pass cannot *promise* the outcome either (a pinned area sitting on an unpinned
   project's own coordinate holds it inside the pin for the whole budget), so step 8
   alternates the relaxation with :func:`_expel_from_pins` — a geometric pass that
-  clears **every** pin in one shot — until neither moves: the expulsion then cannot
-  trade a pin overlap for another overlap, which ledger ruling R12 makes binding by
-  reading step 8's pair set as every pair, with the pinned endpoint held still;
+  walks a mover out of every pin it sits in, one to three clearance radii along the
+  pin's own ray, so a **multi-pin enclosure** is escapable too. The expulsion alone
+  cannot promise the outcome either, so the exit also keeps the **best-seen** state:
+  ordered by R12 (a) first — no mover inside a pin — and by the tightest pair the
+  pass can affect second, and filtered to the states that add no overlap to a pair
+  that was already overlapping and that are not slacker than the incoming state,
+  which is itself a candidate. That is what makes "no pair comes out worse than it
+  went in" structural rather than dependent on the loop converging. Ledger ruling
+  R12 makes the obligation binding by reading step 8's pair set as every pair, with
+  the pinned endpoint held still;
 * **a cyclic hierarchy is tolerated deterministically.** Validation rejects one
   first (``HIERARCHY_CYCLE``), but the engine is also callable on its own rows: a
   node no *seeded* parent reaches is seeded on the root spiral after the roots, in
@@ -107,6 +114,11 @@ LAYOUT_CONSTANTS: dict[str, float | int] = {
 #: The node type whose single node is the scene's anchor (spec §6.1): it draws at
 #: ``anchor_ratio`` × the widest domain radius.
 ANCHOR_NODE_TYPE_KEY = "identity"
+
+#: The clearance radii :func:`_expel_from_pins` tries along a violated pin's ray, in
+#: order. One radius clears a mover a single pin holds; the second and third are
+#: what make a multi-pin **enclosure** escapable (see that function's docstring).
+_EXPULSION_STEPS = (1.0, 2.0, 3.0)
 
 def _public_key(row: Any) -> str:
     """The ``public_key`` of a row — the one ordering rule of the pipeline (spec §12.3)."""
@@ -388,10 +400,131 @@ def _stage_pins(run: _Run) -> None:
 
 
 #: Step 8's fixpoint bound: at most this many `relax → expel` cycles after the
-#: first relaxation. The loop stops as soon as neither pass displaces a node, and
-#: every counterexample in ``test_layout.py`` settles well inside the bound; the
-#: number is a runaway guard, not the convergence criterion.
+#: first relaxation. The exit test is exact float equality, so a cycle that keeps
+#: moving a node by one ulp never breaks early and the loop **normally runs its
+#: full bound**: the number is a structural cost multiplier rather than a rare
+#: escape hatch. Measured: the twelve-coincident shape in ``test_layout.py`` needs
+#: more cycles than this bound grants (20 in the reviewer's count, which is why
+#: that test asks the second pass for its invariants rather than for coordinate
+#: equality) and a 72-node replica converges at cycle **13**. Step 8 therefore
+#: costs ≈ 9–10 relaxation passes: 0.459 s / 0.611 s / 0.936 s at 72 / 80 / 100
+#: nodes — 28–31 % of spec §19.2's 2 s ceiling, and **47 %** at 100 nodes.
 _FIXPOINT_CYCLES = 8
+
+
+def _positions(run: _Run, keys: Sequence[str]) -> dict[str, tuple[float, float]]:
+    """The planar coordinates of ``keys`` — the only part of a run's state a pass moves."""
+    return {key: (run.position[key][0], run.position[key][1]) for key in keys}
+
+
+def _slacks_by_pair(run: _Run) -> dict[tuple[str, str], float]:
+    """``{(key a, key b): distance − (r_a + r_b)}`` for every pair, in ``public_key`` order.
+
+    Every pair, pinned endpoints included: the guard's baseline has to be the same
+    ground truth the tests measure, and the pinned↔pinned pairs are constant, so
+    they only ever keep two states' tightest pairs comparable.
+    """
+    slacks = {}
+    keys = run.keys
+    for index, first in enumerate(keys):
+        first_position = run.position[first]
+        first_radius = run.radius[first]
+        for second in keys[index + 1 :]:
+            second_position = run.position[second]
+            dx = first_position[0] - second_position[0]
+            dy = first_position[1] - second_position[1]
+            slacks[(first, second)] = (
+                math.sqrt(dx * dx + dy * dy) - (first_radius + run.radius[second])
+            )
+    return slacks
+
+
+#: Slack changes the guard treats as float noise rather than damage. The relaxation
+#: is double arithmetic, and an exactly symmetric shape — a mover on a ring's own
+#: centre — comes out displaced by ~1e-15 with every one of its slacks shifted by
+#: ~1e-15; a guard that called that "damage" would prefer the state it was handed
+#: over actually escaping the enclosure (measured: 3.55e-15 outranked a +0.0128
+#: escape while this tolerance was absent). Every real deepening the
+#: counterexamples measure is orders of magnitude larger (0.197–2.514 in the
+#: enclosure table), so this only ever classifies noise as noise.
+_DAMAGE_TOLERANCE = 1e-9
+
+
+def _state_score(
+    run: _Run,
+    entry_slacks: Mapping[tuple[str, str], float],
+    entry_minimum: float,
+):
+    """``(deepest pin overlap, tightest movable pair)``, or ``None`` when inadmissible.
+
+    Larger is better on both components. The first is R12 (a) — the deepest slack
+    between a pinned node and an unpinned one, so ``0.0`` means every mover is clear
+    of every pin — and the second is the ledger's min-slack key over the pairs the
+    pass can affect (a pinned↔pinned pair is the same number in every state and
+    would mask the difference).
+
+    A state is **admissible** when it satisfies the ledger guard's own condition —
+    no pair that was already overlapping comes out deeper than
+    :data:`_DAMAGE_TOLERANCE` — *and* its tightest pair, over every pair, is not
+    below the incoming state's. The incoming state itself always satisfies both
+    (the damage of a state measured against itself is zero), so there is always a
+    candidate, and the state the guard keeps can never deepen an overlap or come
+    out slacker than its input.
+
+    R12 (a) comes *first* because it is step 8's whole purpose, and because a guard
+    ordered by pair slack alone can undo an expulsion that worked: on the sweep's
+    trial 26 the pass left two coincident movers 1.507 inside a pin, preferring the
+    relaxed state (−1.508 tightest, movers inside a pin) to the pin-clear state the
+    expulsion had produced (−3.016 tightest, every pin clear) — a shape the
+    pre-`11-fix3` rebuild cleared. The ledger's "(deepest-overlap, then min-slack)"
+    order lives on in the admissibility filter and the second key.
+    """
+    pinned = run.pinned
+    keys = run.keys
+    pin_slack = math.inf
+    tightest = math.inf
+    minimum = math.inf
+    damage = 0.0
+    for index, first in enumerate(keys):
+        first_position = run.position[first]
+        first_radius = run.radius[first]
+        first_moves = first not in pinned
+        for second in keys[index + 1 :]:
+            second_position = run.position[second]
+            dx = first_position[0] - second_position[0]
+            dy = first_position[1] - second_position[1]
+            slack = math.sqrt(dx * dx + dy * dy) - (first_radius + run.radius[second])
+            if slack < minimum:
+                minimum = slack
+            if first_moves or second not in pinned:
+                if slack < tightest:
+                    tightest = slack
+                if first_moves != (second not in pinned) and slack < pin_slack:
+                    pin_slack = slack
+            before = entry_slacks[(first, second)]
+            if before < 0.0 and before - slack > _DAMAGE_TOLERANCE:
+                damage = max(damage, before - slack)
+    if damage > 0.0 or minimum < entry_minimum:
+        return None
+    return pin_slack, tightest
+
+
+def _best_seen(
+    run: _Run,
+    movers: Sequence[str],
+    entry_slacks: Mapping[tuple[str, str], float],
+    entry_minimum: float,
+    best: tuple[tuple[float, float], dict[str, tuple[float, float]]],
+) -> tuple[tuple[float, float], dict[str, tuple[float, float]]]:
+    """The better of ``best`` and the state the run is in now; ties keep the earlier state.
+
+    Determinism (spec §12.3): the comparison is strict, so equal scores resolve to
+    the state seen first and the choice never depends on iteration order.
+    """
+    score = _state_score(run, entry_slacks, entry_minimum)
+    if score is not None and (best[0] is None or score > best[0]):
+        return score, _positions(run, movers)
+    return best
 
 
 def _stage_final_collision(run: _Run) -> None:
@@ -399,26 +532,46 @@ def _stage_final_collision(run: _Run) -> None:
 
     Spec §12.2 step 8 is one more relaxation restricted to unpinned nodes *so a pin
     cannot leave an unpinned neighbour overlapping it*, and ledger ruling R12 reads
-    its pair set as **every** pair, with the pinned endpoint held still: the pass
-    may not trade a pin overlap for another overlap. :func:`_expel_from_pins`
-    removes the pin overlaps geometrically, but a repair can put a mover into a
-    neighbour (the reviewer measured −2.976 go to −9.095 that way), and only the
-    relaxation can absorb that — so the two passes alternate until neither
-    displaces anything, which is what makes the output no slacker than its input
-    for the pairs the repair touched.
+    its pair set as **every** pair, with the pinned endpoint held still. Two
+    mechanisms carry the two obligations:
+
+    * the **expulsion** (:func:`_expel_from_pins`) is geometric — it walks a mover
+      out of every pin it sits in, along that pin's ray, stepping past one clearance
+      radius so a multi-pin *enclosure* is escapable — and the relaxation then
+      absorbs an overlap a repair can create between two movers, which only the
+      relaxation can do (the reviewer measured −2.976 go to −9.095 that way);
+      the two alternate until neither displaces anything;
+    * the **best-seen guard** makes R12 (b) structural rather than
+      convergence-dependent: the pair slacks of the incoming state are snapshotted,
+      every state the loop reaches (and the incoming one) is scored under
+      :func:`_state_score`, and the exit keeps the best admissible state — ordered
+      by R12 (a) first (a mover may not sit inside a pin) and the tightest pair
+      second, and *filtered* to states that add no overlap to any pair that was
+      already overlapping and that are not slacker than the incoming state. A state
+      that failed either condition loses to the incoming state's own score, so no
+      pair it touches can come out worse than it went in and no pin overlap can
+      reappear, however the loop ends (including at the bound, which is where an
+      oscillation like the triangle's ends).
     """
     movers = tuple(key for key in run.keys if key not in run.pinned)
+    entry_slacks = _slacks_by_pair(run)
+    entry_minimum = min(entry_slacks.values())
+    best = (_state_score(run, entry_slacks, entry_minimum), _positions(run, movers))
     _relax(run, movers=movers)
+    best = _best_seen(run, movers, entry_slacks, entry_minimum, best)
     _expel_from_pins(run)
+    best = _best_seen(run, movers, entry_slacks, entry_minimum, best)
     for _cycle in range(_FIXPOINT_CYCLES):
-        settled = {key: (run.position[key][0], run.position[key][1]) for key in movers}
+        settled = _positions(run, movers)
         _relax(run, movers=movers)
-        relaxed = any(
-            (run.position[key][0], run.position[key][1]) != settled[key] for key in movers
-        )
+        relaxed = _positions(run, movers) != settled
+        best = _best_seen(run, movers, entry_slacks, entry_minimum, best)
         repaired = _expel_from_pins(run)
+        best = _best_seen(run, movers, entry_slacks, entry_minimum, best)
         if not relaxed and not repaired:
             break
+    for key, (x, y) in best[1].items():
+        run.position[key][0], run.position[key][1] = x, y
 
 
 def _stage_rounding(run: _Run) -> None:
@@ -532,13 +685,24 @@ def _expel_from_pins(run: _Run) -> bool:
     round bound stopped it — inside one of the pins it was supposed to clear.
 
     The candidates are tried in order, and each is measured against *all* pins: the
-    rays away from each violated pin, ordered by ``public_key``, then the
-    golden-angle turn of the mover's key position, for a mover sitting exactly *on*
-    a pin and so having no ray of its own. The first candidate that clears every
-    pin wins; when the pins are tight enough that none can (the mover sits inside a
-    cluster whose clearance circles cover every candidate) the candidate maximising
-    the minimum clearance wins, keeping the earlier candidate on a tie — so the
-    choice stays a pure function of ``public_key`` order (spec §12.3).
+    ray away from each violated pin at one, two and three clearance radii, ordered
+    by ``public_key``, then the golden-angle turn of the mover's key position at the
+    same three radii, for a mover sitting exactly *on* a pin and so having no ray of
+    its own. The first candidate that clears every pin wins; when the pins are tight
+    enough that none can (the mover sits inside a cluster whose clearance circles
+    cover every candidate) the candidate maximising the minimum clearance wins,
+    keeping the earlier candidate on a tie — so the choice stays a pure function of
+    ``public_key`` order (spec §12.3).
+
+    The 2- and 3-radius steps are what make an **enclosure** escapable. A mover
+    enclosed by three or more pins has no clearing point at one clearance radius
+    from any of them — every ray lands inside a *second* pin (the triangle in
+    ``test_layout.py`` measured −10.114 there with +2.985 one step further out) —
+    and the relaxation then pulls it straight back to the cluster's centre, so the
+    single-radius pass two-cycled until the loop bound and exited inside a pin. One
+    step further out clears the triangle, and a ring of pins needs the third step
+    for its antipodal member (the k = 6 ring clears at 3·``wanted``, its neighbours
+    at 2·``wanted``).
 
     Only unpinned movers move — a pinned coordinate is an input (step 7) — and the
     clearance carries one quantisation unit (``10 ** -coordinate_decimals``)
@@ -568,18 +732,22 @@ def _expel_from_pins(run: _Run) -> bool:
             continue
 
         candidates = []
-        for pin_position, wanted in violations:
-            dx = position[0] - pin_position[0]
-            dy = position[1] - pin_position[1]
-            distance = math.hypot(dx, dy)
-            if distance == 0.0:
-                turn = (index + 1) * angle
-                dx, dy, distance = math.cos(turn), math.sin(turn), 1.0
-            candidates.append((pin_position, dx / distance, dy / distance, wanted))
+        for scale in _EXPULSION_STEPS:
+            for pin_position, wanted in violations:
+                dx = position[0] - pin_position[0]
+                dy = position[1] - pin_position[1]
+                distance = math.hypot(dx, dy)
+                if distance == 0.0:
+                    turn = (index + 1) * angle
+                    dx, dy, distance = math.cos(turn), math.sin(turn), 1.0
+                candidates.append(
+                    (pin_position, dx / distance, dy / distance, wanted * scale)
+                )
         turn = (index + 1) * angle
-        candidates.append(
-            (violations[0][0], math.cos(turn), math.sin(turn), violations[0][1])
-        )
+        candidates += [
+            (violations[0][0], math.cos(turn), math.sin(turn), violations[0][1] * scale)
+            for scale in _EXPULSION_STEPS
+        ]
 
         target = None
         best_clearance = None
