@@ -54,9 +54,10 @@ Scope decisions of Tasks 9–10, recorded because the plan leaves them open:
   requires — and each involved key spelling is reported once;
 * the **hierarchy subgraph is restricted on both ends** — a relation counts only
   when its type has ``hierarchy_role`` *and* both endpoints are visible nodes of
-  this version (spec §5.6 "restricted to ``visible`` nodes"), and its arcs are
-  walked in ``public_key`` order so the reported node is a property of the graph
-  rather than of row order;
+  this version (spec §5.6 "restricted to ``visible`` nodes"), and every walk of the
+  cycle rule reads ``public_key`` order alone, so a verdict and the node it names
+  are properties of the graph rather than of relation row order (the Task 10 review
+  found a row-order-dependent false negative there — ruling R11);
 * ``CANONICAL_SOURCE_UNPUBLISHED`` and ``MISSING_LOCALE_PROJECTION`` are **never
   each other's alias**: the first is about the referenced *record* (a row exists
   and does not pass ``objects.public()``), the second about the *locale's*
@@ -73,6 +74,7 @@ Scope decisions of Tasks 9–10, recorded because the plan leaves them open:
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from uuid import UUID
@@ -376,17 +378,14 @@ def validate_relations(version: AtlasVersion) -> list[Issue]:
 # Task 10 — hierarchy, visibility, locale parity, taxonomy and canonical refs.
 # ---------------------------------------------------------------------------
 
-#: Colour of a node in the hierarchy DFS: not reached, on the current path, done.
-_WHITE, _GREY, _BLACK = 0, 1, 2
-
 
 def validate_hierarchy(version: AtlasVersion) -> list[Issue]:
     """``HIERARCHY_CYCLE`` — the hierarchy-role subgraph must be a DAG (spec §5.6).
 
     Two queries: the version's visible nodes and its visible relations.
-    :func:`hierarchy_rule_issues` does the DFS; multiple parents, orphan nodes,
-    several relation types between one pair and cycles *outside* the hierarchy
-    subgraph are all permitted and never reported (spec §5.6).
+    :func:`hierarchy_rule_issues` owns the cycle rule; multiple parents, orphan
+    nodes, several relation types between one pair and cycles *outside* the
+    hierarchy subgraph are all permitted and never reported (spec §5.6).
     """
     nodes = list(version.nodes.filter(visible=True))
     relations = list(
@@ -397,70 +396,110 @@ def validate_hierarchy(version: AtlasVersion) -> list[Issue]:
     return hierarchy_rule_issues(nodes, relations)
 
 
+def _witness_walk(
+    arcs: Mapping[int, list[tuple[int, int]]],
+    *,
+    origin: int,
+    goal: int,
+    relation_pk: int,
+) -> list[int] | None:
+    """A shortest ``origin → goal`` walk that avoids one relation's arcs, or ``None``.
+
+    Breadth-first over the node-level arcs, so the walk handed back is a property of
+    the graph: neighbours are followed in ``public_key`` order (see
+    :func:`hierarchy_rule_issues`), and two arcs to one neighbour are interchangeable
+    for a walk whose nodes are all that is read. ``origin == goal`` answers with the
+    trivial walk — that is a relation whose two ends are one node, and the relation
+    alone is the whole cycle; any longer walk would have to walk it twice.
+    """
+    if origin == goal:
+        return [origin]
+    previous: dict[int, int] = {origin: origin}
+    queue: deque[int] = deque([origin])
+    while queue:
+        node_pk = queue.popleft()
+        for neighbour_pk, walk_relation_pk in arcs[node_pk]:
+            if walk_relation_pk == relation_pk or neighbour_pk in previous:
+                continue
+            previous[neighbour_pk] = node_pk
+            if neighbour_pk == goal:
+                walk = [goal]
+                while walk[-1] != origin:
+                    walk.append(previous[walk[-1]])
+                walk.reverse()
+                return walk
+            queue.append(neighbour_pk)
+    return None
+
+
 def hierarchy_rule_issues(
     nodes: Sequence[AtlasNode], relations: Sequence[AtlasRelation]
 ) -> list[Issue]:
-    """The hierarchy DFS — one ``HIERARCHY_CYCLE`` per cycle, naming its first node.
+    """The hierarchy gate — ``HIERARCHY_CYCLE`` for every cycle, at its first node.
 
     Pure, like :func:`relation_rule_issues`: ``nodes`` are the version's nodes and
-    ``relations`` its relations, both with endpoints and types loaded. An edge is
+    ``relations`` its relations, both with endpoints and types loaded. A relation is
     part of the subgraph when its type has ``hierarchy_role`` and **both** endpoints
     are among ``nodes`` — spec §5.6's "restricted to ``visible`` nodes". Every other
-    edge is somebody else's finding (``DANGLING_NODE_HIDDEN_RELATION`` for an
+    relation is somebody else's finding (``DANGLING_NODE_HIDDEN_RELATION`` for an
     invisible endpoint, Task 9's ``DANGLING_RELATION_ENDPOINT`` for a foreign one).
 
-    Arcs: a directed relation contributes ``source → target``; an undirected one
-    contributes both directions *minus* the arc walked back along the same relation,
-    so one undirected hierarchy edge is not a cycle of its own while a three-node
-    undirected loop is.
+    What counts as a cycle: a closed walk of **distinct relations**. A directed
+    relation is one arc ``source → target``; an undirected one is the same edge
+    traversable in *both* directions — so walking one undirected edge out and back is
+    one relation twice and not a cycle (a single undirected hierarchy edge is not a
+    cycle, a three-node undirected loop is), while a directed arc **parallel** to an
+    undirected edge closes a real cycle with it. Multiple parents, orphan nodes and
+    cycles outside the subgraph stay legal (spec §5.6).
 
-    Determinism: the roots and every node's arcs are walked in ``public_key`` order,
-    so the reported node is a property of the graph, never of arrival order or row
-    order. The node reported for a cycle is the one the DFS returns to — the first
-    node of that cycle in this order.
+    How it is decided: for each relation of the subgraph, remove that one relation and
+    ask whether its head still reaches its tail (an undirected relation: either end
+    the other). If it does, that walk plus the relation is a cycle through it, and the
+    issue names the cycle's **first node in ``public_key`` order**.
+
+    Why not a depth-first walk that colours nodes: finishing a node after a reversible
+    edge was walked once loses every cycle that would re-enter it — a directed arc
+    parallel to an undirected edge and a directed arc running into an undirected path
+    were both reported as nothing, and the verdict followed the relations' row order
+    (ledger Task 10 review, F1). This rule carries no such state: "is there a cycle"
+    is a question about the graph, and it is answered from the graph.
+
+    Determinism: nodes, every walk's neighbours and the reported node all follow
+    ``public_key`` order, so both the verdict and the node it names are properties of
+    the graph — never of relation row order, creation order or arrival order (ruling
+    R11). Cycles that name the same node are reported once: ``Issue`` carries a single
+    node key and the admin's next action is the same.
     """
     known = {node.pk: node for node in nodes}
-    arcs: dict[int, list[tuple[str, int, int]]] = {node.pk: [] for node in nodes}
-    for relation in relations:
-        if not relation.relation_type.hierarchy_role:
-            continue
-        if relation.source_id not in known or relation.target_id not in known:
-            continue
-        arcs[relation.source_id].append(
-            (relation.target.public_key, relation.target_id, relation.pk)
-        )
+    rows = [
+        relation
+        for relation in relations
+        if relation.relation_type.hierarchy_role
+        and relation.source_id in known
+        and relation.target_id in known
+    ]
+    arcs: dict[int, list[tuple[int, int]]] = {node.pk: [] for node in nodes}
+    for relation in rows:
+        arcs[relation.source_id].append((relation.target_id, relation.pk))
         if not relation.directed:
-            arcs[relation.target_id].append(
-                (relation.source.public_key, relation.source_id, relation.pk)
-            )
+            arcs[relation.target_id].append((relation.source_id, relation.pk))
     for node_arcs in arcs.values():
-        node_arcs.sort(key=lambda arc: arc[0])
+        # ``(neighbour key, relation pk)`` — total, so the arc list itself is a
+        # property of the graph instead of following the rows' arrival order. The
+        # relation pk only decides which of a node's *parallel* arcs comes first, and
+        # the walk below reads nodes alone, so no verdict can turn on it.
+        node_arcs.sort(key=lambda arc: (known[arc[0]].public_key, arc[1]))
 
-    colour = dict.fromkeys(arcs, _WHITE)
-    issues: list[Issue] = []
-    for start in sorted(arcs, key=lambda pk: known[pk].public_key):
-        if colour[start] != _WHITE:
-            continue
-        colour[start] = _GREY
-        stack: list[tuple[int, int | None, int]] = [(start, None, 0)]
-        while stack:
-            node_pk, entry_relation_pk, index = stack[-1]
-            node_arcs = arcs[node_pk]
-            if index >= len(node_arcs):
-                colour[node_pk] = _BLACK
-                stack.pop()
-                continue
-            stack[-1] = (node_pk, entry_relation_pk, index + 1)
-            neighbour_key, neighbour_pk, relation_pk = node_arcs[index]
-            if relation_pk == entry_relation_pk:
-                # The same undirected relation, walked back where it came from: its
-                # reverse arc is not a second edge and cannot close a cycle alone.
-                continue
-            if colour[neighbour_pk] == _GREY:
-                issues.append(_issue("HIERARCHY_CYCLE", node_key=neighbour_key))
-            elif colour[neighbour_pk] == _WHITE:
-                colour[neighbour_pk] = _GREY
-                stack.append((neighbour_pk, relation_pk, 0))
+    reported: set[str] = set()
+    for relation in rows:
+        directions = [(relation.target_id, relation.source_id)]
+        if not relation.directed:
+            directions.append((relation.source_id, relation.target_id))
+        for origin, goal in directions:
+            walk = _witness_walk(arcs, origin=origin, goal=goal, relation_pk=relation.pk)
+            if walk is not None:
+                reported.add(min(known[node_pk].public_key for node_pk in walk))
+    issues = [_issue("HIERARCHY_CYCLE", node_key=key) for key in reported]
     return sorted(issues, key=_sort_key)
 
 
@@ -512,7 +551,10 @@ def validate_locale_projection(version: AtlasVersion) -> list[Issue]:
     exact-locale, publish-gated resolver: a node whose every locale is covered by
     overrides costs no query at all, and a node of a family outside the registry
     (``none``) is never handed to the resolver, which raises ``KeyError`` for it by
-    design.
+    design. A pair resolution that trips over an ambiguous locale is finished per
+    locale instead, so an ambiguous locale masks only itself (ledger Task 10 review,
+    F3): the ambiguity is the *reference* gate's finding, and another locale's gap is
+    still reported here.
     """
     issues: list[Issue] = []
     nodes = version.nodes.filter(visible=True).prefetch_related("translations")
@@ -525,7 +567,8 @@ def validate_locale_projection(version: AtlasVersion) -> list[Issue]:
         missing_locales = [locale for locale in DEFAULT_LOCALES if locale not in covered]
         if not missing_locales:
             continue
-        resolutions: Mapping[str, CanonicalResolution | None] = {}
+        resolutions: dict[str, CanonicalResolution | None] = {}
+        ambiguous: set[str] = set()
         if node.canonical_model in CANONICAL_SOURCES and node.canonical_translation_key:
             try:
                 resolutions = resolve_canonical_pair(
@@ -533,9 +576,26 @@ def validate_locale_projection(version: AtlasVersion) -> list[Issue]:
                     node.canonical_translation_key,
                     locales=tuple(missing_locales),
                 )
-            except AmbiguousCanonicalRef:
-                continue
+            except AmbiguousCanonicalRef as error:
+                # The pair resolver abandons every locale it has not answered yet when
+                # one of them is ambiguous, so abandoning the *node* would let that one
+                # locale mask the others. Re-resolve them one by one: an ambiguous
+                # locale can then only mask itself — it is a reference finding
+                # (``validate_canonical_refs`` reports it as ``AMBIGUOUS_CANONICAL_REF``),
+                # never this gate's missing projection.
+                ambiguous = {error.locale}
+                for locale in missing_locales:
+                    if locale in ambiguous:
+                        continue
+                    try:
+                        resolutions[locale] = resolve_canonical(
+                            node.canonical_model, node.canonical_translation_key, locale
+                        )
+                    except AmbiguousCanonicalRef as locale_error:
+                        ambiguous.add(locale_error.locale)
         for locale in missing_locales:
+            if locale in ambiguous:
+                continue
             if resolutions.get(locale) is None:
                 issues.append(_issue("MISSING_LOCALE_PROJECTION", node_key=node.public_key))
     for group in version.groups.prefetch_related("translations"):

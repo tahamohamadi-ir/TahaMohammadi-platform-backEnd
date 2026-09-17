@@ -17,7 +17,7 @@ that violates it:
   ``CANONICAL_SOURCE_UNPUBLISHED``, ``AMBIGUOUS_CANONICAL_REF`` — taxonomy lifecycle
   and the canonical reference itself.
 
-Three things the file does deliberately, all of them traced to the plan or the
+Four things the file does deliberately, all of them traced to the plan or the
 ledger (each is spelled out again where it is used):
 
 * the plan's Task 10 snippets call ``validate_version``, which **Task 12** produces
@@ -31,7 +31,14 @@ ledger (each is spelled out again where it is used):
 * no assertion pins the fixture's *overall* blocker set: ``atlas_v1`` carries Task
   9's relation offenders (``bad_relation``, ``direction_relation``), so every
   parity assertion filters to ``MISSING_LOCALE_PROJECTION`` first (as the plan's
-  Phase-0 parity-matrix test does) instead of expecting exactly two entries.
+  Phase-0 parity-matrix test does) instead of expecting exactly two entries;
+* the F1/R11 block builds each of its two hierarchy shapes **twice, with the rows
+  inserted in both orders**, and compares the two verdicts of one logical graph.
+  That is ruling R11's falsification form, not a ``public_key``-order assertion on
+  the report: the reviewed walk's verdict followed relation *row order* for exactly
+  those shapes (ledger Task 10 review, F1). ``part-of`` is an admin-created
+  undirected hierarchy-role type — the seeded §6.2 vocabulary cannot produce either
+  shape.
 
 Fixtures are imported by name (``factories.py`` is not a conftest), so ``__all__``
 marks the fixture parameters as used-by-design: pyflakes cannot see a test
@@ -166,9 +173,9 @@ def test_a_hierarchy_cycle_blocks_publish(atlas_dag):
     issues = validate_hierarchy(atlas_dag.diamond)
 
     assert [issue.code for issue in issues] == ["HIERARCHY_CYCLE"]
-    # "Report the first node on every cycle" (plan Step 3) — the DFS enters the
-    # cycle at its first member in public_key order: area-a (…0002) < area-c (…0004),
-    # and the cycle is area-a → area-c → area-a.
+    # "Report the first node on every cycle" (plan Step 3) — the cycle is
+    # area-a → area-c → area-a, and the node named is its first member in
+    # public_key order: area-a (…0002) < area-c (…0004).
     assert issues[0].node_key == DAG_KEYS["area-a"]
     assert issues[0].message_token == "atlas.hierarchyCycle"
     assert "HIERARCHY_CYCLE" in BLOCKING_CODES and "HIERARCHY_CYCLE" not in WARNING_CODES
@@ -253,6 +260,167 @@ def test_a_hidden_hierarchy_edge_and_a_hidden_node_are_not_traversed(atlas_dag):
     AtlasRelation.objects.filter(version=atlas_dag.version).update(visible=True)
     AtlasNode.objects.filter(pk=atlas_dag.node("area-c").pk).update(visible=False)
     assert validate_hierarchy(atlas_dag.version) == []
+
+
+# ---------------------------------------------------------------------------
+# F1/R11 — the hierarchy verdict is a property of the graph, not of row order
+# ---------------------------------------------------------------------------
+
+#: The two shapes the reviewed walk reported **nothing** for (ledger Task 10 review,
+#: F1 (a) and (b)), as ``(source, target, directed)`` rows over :data:`DAG_KEYS`
+#: names. Each is built once per insertion order so a test can compare the verdicts
+#: of one logical graph.
+#:
+#: Shape (a) authors its undirected row ``B → A`` and its directed row ``A → B``:
+#: the two rows are the same *logical* edge set (an undirected edge has no
+#: orientation), and the differing stored triple is what
+#: ``atlas_relation_unique_version_pair_rel`` requires — a reachable authoring
+#: state, not a contrived one (Task 9's review found the same pair reachable).
+F1_SHAPES: dict[str, tuple[tuple[str, str, bool], ...]] = {
+    "undirected-pair-with-directed-parallel": (
+        ("area-b", "area-a", False),
+        ("area-a", "area-b", True),
+    ),
+    "directed-arc-into-undirected-path": (
+        ("area-a", "area-c", True),
+        ("area-c", "area-b", False),
+        ("area-b", "area-a", False),
+    ),
+}
+
+
+def undirected_hierarchy_type():
+    """An admin-created undirected ``hierarchy_role`` type — the seeded set has none.
+
+    ``overridable_direction`` is on, so a row of this type can be authored directed
+    without tripping Task 9's ``DIRECTION_NOT_OVERRIDABLE``, and both pair tables stay
+    empty ("any active type", spec §6.2). Call once per test: the key is unique.
+    """
+    return _relation_type(
+        "part-of", directed_default=False, overridable_direction=True, hierarchy_role=True
+    )
+
+
+def hierarchy_probe(atlas_dag, label, *, relation_type, edges):
+    """One fresh version with the four fixed-key nodes and ``edges`` as its rows.
+
+    Only the rows' *order* changes between the forward and the permuted build of one
+    shape, so the two verdicts a test compares can differ in nothing else.
+    """
+    version = _version(status="draft", label=label)
+    nodes = {
+        name: _node(version=version, node_type=atlas_dag.node_type, public_key=DAG_KEYS[name])
+        for name in DAG_NODE_NAMES
+    }
+    for source, target, directed in edges:
+        _relation(
+            source=nodes[source],
+            target=nodes[target],
+            relation_type=relation_type,
+            version=version,
+            directed=directed,
+        )
+    return version
+
+
+def hierarchy_verdict(version) -> list[tuple[str, str | None]]:
+    """The hierarchy verdict as ``(code, node key)`` pairs — what a test compares."""
+    return [(issue.code, issue.node_key) for issue in validate_hierarchy(version)]
+
+
+@pytest.mark.parametrize("edges", list(F1_SHAPES.values()), ids=list(F1_SHAPES))
+def test_a_cycle_closed_through_an_undirected_row_is_reported(atlas_dag, edges):
+    """F1 (a) and (b): a cycle the reviewed walk returned no issue for.
+
+    (a) An undirected ``area-a—area-b`` with a directed ``area-a → area-b`` parallel
+    to it: the undirected row contributes *both* directions (the model this module
+    documents), so ``A → B → A`` is a closed walk of two distinct relations — a cycle
+    — while the walk out and back along the single undirected row alone would not be
+    one. The reviewed walk found the walk-back only and reported nothing.
+    (b) A directed ``area-a → area-c`` running into an undirected ``area-c—area-b—area-a``
+    path: ``A → C → B → A`` closes the same way, three distinct relations.
+
+    Both shapes are reachable through an admin-created undirected hierarchy-role
+    type, which the seeded §6.2 vocabulary cannot produce — so this file builds it —
+    and both are reported at the cycle's first node in ``public_key`` order.
+    """
+    version = hierarchy_probe(
+        atlas_dag, "atlas-f1-shape", relation_type=undirected_hierarchy_type(), edges=edges
+    )
+
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
+
+
+def test_an_undirected_row_is_walkable_against_its_authored_order(atlas_dag):
+    """An undirected edge has no orientation: a cycle walking it backwards counts.
+
+    The three rows form one triangle, and the closed walk it must be recognised on
+    takes its last step *against* the ends that step was authored from (the ``area-a``
+    row stored ``area-a → area-c`` is walked ``area-c → area-a``). A rule reading each
+    row's stored direction alone would call this graph a DAG — this test is the guard
+    for the model's "both directions" half, because none of the F1 shapes needs it.
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-undirected-reversed",
+        relation_type=undirected_hierarchy_type(),
+        edges=(
+            ("area-a", "area", False),
+            ("area-a", "area-c", False),
+            ("area", "area-c", False),
+        ),
+    )
+
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area"])]
+
+
+@pytest.mark.parametrize("edges", list(F1_SHAPES.values()), ids=list(F1_SHAPES))
+def test_the_hierarchy_verdict_does_not_follow_relation_row_order(atlas_dag, edges):
+    """Ruling R11: one logical graph, rows inserted in both orders, one verdict.
+
+    Shape (a) failed this on the reviewed walk: the undirected row authored first
+    produced ``[]`` and the directed row authored first produced ``[area-a]`` — the
+    *row* order decided a publish gate. A determinism claim is falsified by this
+    permutation, never by an order assertion on the report, so the same graph is
+    built twice and the two verdicts are compared — and the shared verdict cannot be
+    the empty one, because the graph has a cycle.
+    """
+    hierarchy_type = undirected_hierarchy_type()
+    forward = hierarchy_probe(
+        atlas_dag, "atlas-r11-forward", relation_type=hierarchy_type, edges=edges
+    )
+    permuted = hierarchy_probe(
+        atlas_dag,
+        "atlas-r11-permuted",
+        relation_type=hierarchy_type,
+        edges=tuple(reversed(edges)),
+    )
+
+    assert hierarchy_verdict(permuted) == hierarchy_verdict(forward)
+    assert hierarchy_verdict(forward) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
+
+
+def test_a_cycle_is_reported_at_its_first_node_in_public_key_order(atlas_dag):
+    """F2: the node named is the cycle's **first** node in ``public_key`` order.
+
+    The walk that closes this cycle enters it through ``area-b`` (…0003) from
+    ``area`` and returns to it, but the cycle is ``area-a (…0002) ↔ area-b (…0003)``
+    and the finding names ``area-a``. "The DFS enters the cycle at its first member"
+    held for the fixture's diamond and was overstated in general — exactly the claim
+    the Task 10 review flagged (the node a walk returns to is not the first node).
+    """
+    version = hierarchy_probe(
+        atlas_dag,
+        "atlas-f2-first-node",
+        relation_type=atlas_dag.hierarchy_type,
+        edges=(
+            ("area", "area-b", True),  # the outside arc: the cycle is entered at …0003
+            ("area-b", "area-a", True),
+            ("area-a", "area-b", True),
+        ),
+    )
+
+    assert hierarchy_verdict(version) == [("HIERARCHY_CYCLE", DAG_KEYS["area-a"])]
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +670,61 @@ def test_an_ambiguous_canonical_reference_blocks_publish(atlas_v1):
     assert "AMBIGUOUS_CANONICAL_REF" in BLOCKING_CODES
     # An ambiguous locale is not a *missing* one: the parity gate does not double-report it.
     assert node.public_key not in parity_keys(atlas_v1.version)
+
+
+@pytest.mark.parametrize(
+    "ambiguous_locale",
+    ("en", "fa"),
+    ids=("en-ambiguous-fa-empty", "fa-ambiguous-en-empty"),
+)
+def test_an_ambiguous_locale_does_not_mask_the_other_locale_s_missing_projection(
+    atlas_v1, ambiguous_locale
+):
+    """F3: one locale's ambiguity masks only itself, never the other locale's gap.
+
+    ``resolve_canonical_pair`` abandons *every* remaining locale when one of them is
+    ambiguous, so abandoning the whole node (the reviewed ``except …: continue``)
+    dropped one of the two facts this node carries: two published rows in one locale
+    (``AMBIGUOUS_CANONICAL_REF`` — the reference itself is the defect) and **no row at
+    all** in the other (``MISSING_LOCALE_PROJECTION`` — the locale cannot project).
+    The gate still blocked, so this is report precision, not a hole; the two codes
+    answer different questions and neither may mask the other.
+    """
+    missing_locale = "fa" if ambiguous_locale == "en" else "en"
+    node_type = _node_type("ambiguity-probe", canonical_source="research_topic")
+    key = uuid4()
+    for index in range(2):
+        ResearchTopic.objects.create(
+            locale=ambiguous_locale,
+            slug=f"research-topic-{ambiguous_locale}-probe-{index}",
+            title=f"Research topic {ambiguous_locale} probe {index}",
+            status="published",
+            published_at=PUBLISHED_AT,
+            translation_key=key,
+            summary="Twin summary",
+        )
+    node = _node(version=atlas_v1.version, node_type=node_type, canonical_translation_key=key)
+
+    # The other locale has no row at all: a missing projection, not an unpublished
+    # record — the refs gate names the ambiguity alone, never an alias of the gap.
+    assert not ResearchTopic.objects.filter(
+        translation_key=key, locale=missing_locale
+    ).exists()
+    assert codes_for_node(validate_canonical_refs(atlas_v1.version), node) == {
+        "AMBIGUOUS_CANONICAL_REF"
+    }
+
+    assert node.public_key in parity_keys(atlas_v1.version)
+    # Exactly one issue, and it is the missing locale's: the ambiguous locale is not
+    # *missing* (the refs gate names it), so a count of two would mean the handler
+    # turned the ambiguity into a gap as well.
+    assert len(
+        [
+            issue
+            for issue in validate_locale_projection(atlas_v1.version)
+            if issue.node_key == node.public_key
+        ]
+    ) == 1
 
 
 # ---------------------------------------------------------------------------
