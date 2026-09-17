@@ -599,7 +599,8 @@ def hierarchy_rule_issues(
     The report is per **named** node, never one issue per cycle: the walk returned is a
     single shortest witness, so a relation carrying several cycles through it can name
     only some of them, and a cycle whose first node never becomes a walk's minimum goes
-    unnamed (ledger row ``fix10-b``: 13 of 2 951 swept graphs carry at least one such
+    unnamed (the ledger's **fix-10 review block** — the scar-hunting review of the
+    orphaned Task 10 fix — records 13 of 2 951 swept graphs carrying at least one such
     cycle; the 4-node/6-row shape that pins this is in the module's test file).
 
     Why not a depth-first walk that colours nodes: finishing a node after a reversible
