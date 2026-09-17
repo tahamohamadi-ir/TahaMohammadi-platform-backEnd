@@ -51,9 +51,9 @@ __all__ = ["atlas_active_version", "atlas_v1"]
 pytestmark = pytest.mark.django_db
 
 #: ``messageToken`` per code (the plan's ``atlas.relationTypeNotAllowed`` shape).
-#: Extended additively: Task 9's six codes here, Task 10's eight below — this table
-#: has to cover every blocking code, so each task that adds one extends it (a shared
-#: file is extended, never narrowed).
+#: Extended additively: Task 9's six codes here, Task 10's eight below, Task 12's
+#: four more — this table has to cover every blocking code, so each task that adds
+#: one extends it (a shared file is extended, never narrowed).
 MESSAGE_TOKENS = {
     "AMBIGUOUS_CANONICAL_REF": "atlas.ambiguousCanonicalRef",
     "CANONICAL_SOURCE_MISSING": "atlas.canonicalSourceMissing",
@@ -61,11 +61,15 @@ MESSAGE_TOKENS = {
     "DANGLING_NODE_HIDDEN_RELATION": "atlas.danglingNodeHiddenRelation",
     "DANGLING_RELATION_ENDPOINT": "atlas.danglingRelationEndpoint",
     "DIRECTION_NOT_OVERRIDABLE": "atlas.directionNotOverridable",
+    "DUPLICATE_PUBLIC_KEY": "atlas.duplicatePublicKey",
     "DUPLICATE_RELATION": "atlas.duplicateRelation",
     "GROUP_LOCALE_MISSING": "atlas.groupLocaleMissing",
     "HIERARCHY_CYCLE": "atlas.hierarchyCycle",
+    "INVALID_PIN": "atlas.invalidPin",
+    "MISSING_LAYOUT": "atlas.missingLayout",
     "MISSING_LOCALE_PROJECTION": "atlas.missingLocaleProjection",
     "NODE_TYPE_INACTIVE": "atlas.nodeTypeInactive",
+    "PAYLOAD_CONTRACT_INVALID": "atlas.payloadContractInvalid",
     "RELATION_TYPE_INACTIVE": "atlas.relationTypeInactive",
     "RELATION_TYPE_NOT_ALLOWED": "atlas.relationTypeNotAllowed",
     "SELF_LOOP_FORBIDDEN": "atlas.selfLoopForbidden",
@@ -367,10 +371,23 @@ def test_the_declared_code_sets_are_consistent():
     assert set(ATLAS_ISSUE_CODES) == set(BLOCKING_CODES) | set(WARNING_CODES)
     assert not set(BLOCKING_CODES) & set(WARNING_CODES)
     assert set(BLOCKING_CODES) == set(MESSAGE_TOKENS)
-    # Task 9 implemented the relation rules, Task 10 the node/locale/taxonomy codes;
-    # both emit blockers only. Spec §20.2's warnings arrive with Task 12 (which
-    # freezes the full vocabulary against §20.1 + §20.2).
-    assert WARNING_CODES == ()
+    # Task 9 implemented the relation rules, Task 10 the node/locale/taxonomy
+    # codes; Task 12 froze the full vocabulary against §20.1 + §20.2 +
+    # ``DIRECTION_NOT_OVERRIDABLE`` (ledger row ``9-cf``) and added the warning
+    # vocabulary, so this file's own empty-tuple pin is now the frozen table.
+    assert WARNING_CODES == (
+        "ISOLATED_NODE",
+        "NO_INBOUND_RELATIONS",
+        "NO_OUTBOUND_RELATIONS",
+        "HIGH_DEGREE_HUB",
+        "SUMMARY_MISSING",
+        "UNUSED_NODE_TYPE",
+        "UNUSED_RELATION_TYPE",
+        "OVERLAPPING_PINS",
+        "SCALE_NODES",
+        "SCALE_RELATIONS",
+        "SINGLE_LEVEL_HIERARCHY",
+    )
 
 
 def test_the_rule_output_is_stable_across_runs(atlas_v1):
