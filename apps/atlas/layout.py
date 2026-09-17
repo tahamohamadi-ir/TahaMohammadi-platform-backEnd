@@ -21,9 +21,11 @@ constant *is* the execution order, not documentation about it):
    one scene unit of movement per node per iteration at most);
 6. depth layering (``z`` spread by depth — ``z`` has no other author);
 7. pins (copied in, never derived);
-8. a final relaxation restricted to unpinned nodes, then an exact expulsion of any
-   unpinned mover the relaxation left inside a pin, so a pin cannot leave a
-   neighbour overlapping it;
+8. a final relaxation restricted to unpinned nodes, alternating with a single-pass
+   expulsion of any unpinned mover the relaxation left inside a pin until neither
+   moves (bounded), so a pin cannot leave a neighbour overlapping it — and the
+   repair cannot leave another pair overlapping in its place (ledger ruling R12:
+   step 8's pair set is every pair, with the pinned endpoint held still);
 9. rounding to 3 decimals, once.
 
 Determinism (spec §12.3, binding): every collection is walked in ``public_key``
@@ -45,9 +47,10 @@ to re-derive them:
   the frozen iteration count with the pinned nodes held still as obstacles. A force
   pass cannot *promise* the outcome either (a pinned area sitting on an unpinned
   project's own coordinate holds it inside the pin for the whole budget), so step 8
-  ends with :func:`_expel_from_pins` — a geometric pass that puts any unpinned mover
-  still inside a pin exactly on the pin's clearance circle, and with it the
-  guarantee becomes true of the output rather than of the intent;
+  alternates the relaxation with :func:`_expel_from_pins` — a geometric pass that
+  clears **every** pin in one shot — until neither moves: the expulsion then cannot
+  trade a pin overlap for another overlap, which ledger ruling R12 makes binding by
+  reading step 8's pair set as every pair, with the pinned endpoint held still;
 * **a cyclic hierarchy is tolerated deterministically.** Validation rejects one
   first (``HIERARCHY_CYCLE``), but the engine is also callable on its own rows: a
   node no *seeded* parent reaches is seeded on the root spiral after the roots, in
@@ -163,11 +166,6 @@ class _Run:
 def _visible_by_pk(nodes: Iterable[AtlasNode]) -> dict[int, str]:
     """``{node pk: public key}`` for the visible nodes of the passed rows."""
     return {node.pk: node.public_key for node in nodes if node.visible}
-
-
-def _visible_keys(nodes: Iterable[AtlasNode]) -> tuple[str, ...]:
-    """Every visible node key, sorted — the order every stage walks."""
-    return tuple(sorted(node.public_key for node in nodes if node.visible))
 
 
 def _hierarchy_arcs(by_pk: Mapping[int, str], relations: Iterable[AtlasRelation]):
@@ -389,10 +387,38 @@ def _stage_pins(run: _Run) -> None:
         run.pinned.add(key)
 
 
+#: Step 8's fixpoint bound: at most this many `relax → expel` cycles after the
+#: first relaxation. The loop stops as soon as neither pass displaces a node, and
+#: every counterexample in ``test_layout.py`` settles well inside the bound; the
+#: number is a runaway guard, not the convergence criterion.
+_FIXPOINT_CYCLES = 8
+
+
 def _stage_final_collision(run: _Run) -> None:
-    """Step 8 — the same relaxation with the pinned nodes held still, then the expulsion."""
-    _relax(run, movers=tuple(key for key in run.keys if key not in run.pinned))
+    """Step 8 — the same relaxation with the pinned nodes held still, to a fixpoint.
+
+    Spec §12.2 step 8 is one more relaxation restricted to unpinned nodes *so a pin
+    cannot leave an unpinned neighbour overlapping it*, and ledger ruling R12 reads
+    its pair set as **every** pair, with the pinned endpoint held still: the pass
+    may not trade a pin overlap for another overlap. :func:`_expel_from_pins`
+    removes the pin overlaps geometrically, but a repair can put a mover into a
+    neighbour (the reviewer measured −2.976 go to −9.095 that way), and only the
+    relaxation can absorb that — so the two passes alternate until neither
+    displaces anything, which is what makes the output no slacker than its input
+    for the pairs the repair touched.
+    """
+    movers = tuple(key for key in run.keys if key not in run.pinned)
+    _relax(run, movers=movers)
     _expel_from_pins(run)
+    for _cycle in range(_FIXPOINT_CYCLES):
+        settled = {key: (run.position[key][0], run.position[key][1]) for key in movers}
+        _relax(run, movers=movers)
+        relaxed = any(
+            (run.position[key][0], run.position[key][1]) != settled[key] for key in movers
+        )
+        repaired = _expel_from_pins(run)
+        if not relaxed and not repaired:
+            break
 
 
 def _stage_rounding(run: _Run) -> None:
@@ -429,7 +455,11 @@ LAYOUT_BLUEPRINT: tuple[LayoutStage, ...] = (
     ),
     LayoutStage("depth-layering", "z spread by depth", _stage_depth_layering),
     LayoutStage("pins", "pinned coordinates copied in, never derived", _stage_pins),
-    LayoutStage("final-collision", "relaxation with pins held still", _stage_final_collision),
+    LayoutStage(
+        "final-collision",
+        "relaxation with pins held still, cycled with the expulsion to a fixpoint",
+        _stage_final_collision,
+    ),
     LayoutStage("rounding", "3-decimal quantisation, once", _stage_rounding),
 )
 
@@ -488,55 +518,87 @@ def _relax(run: _Run, *, movers: Sequence[str]) -> None:
             run.position[key][1] += delta[1]
 
 
-def _expel_from_pins(run: _Run) -> None:
-    """Place every unpinned mover still inside a pin on the pin's clearance circle.
+def _expel_from_pins(run: _Run) -> bool:
+    """Clear every unpinned mover that sits inside a pin, in **one** geometric pass.
 
     The relaxation above is a *force* pass: each iteration moves a node by a damped
     share of every push it receives, and a mover whose still-overlapping neighbours
     push against the pin can be held inside it for the whole iteration budget — for
     such a node spec §12.2 step 8's guarantee is false however many iterations run
-    (the counterexample in ``test_layout.py`` measures 5.632 scene units of it). This
-    pass is *geometric*: a mover inside a pin is set exactly on the clearance circle,
-    along the ray that joins the two, so the pair ends with no overlap at all. Only
-    unpinned movers move — a pinned coordinate is an input (step 7).
+    (the counterexamples in ``test_layout.py`` measure it). This pass is
+    *geometric*: a mover inside a pin gets a target chosen to clear **every** pin at
+    once, so one pass is enough and there is nothing left to oscillate. The old
+    pass resolved one pin per round and ping-ponged between two of them until a
+    round bound stopped it — inside one of the pins it was supposed to clear.
 
-    Determinism (spec §12.3): pins and movers are walked in ``public_key`` order —
-    the tie-break when a mover lies inside several pins — and a mover sitting
-    exactly *on* a pin, which has no ray of its own, takes the golden-angle turn of
-    its key's position in the ordered walk, so the direction is a function of
-    ``public_key`` too. The pass repeats until a round displaces nothing, bounded by
-    one round per pin plus one. The clearance carries one quantisation unit
-    (``10 ** -coordinate_decimals``) because step 9 rounds afterwards, and rounding
-    can steal up to ``√2 · 5·10⁻⁴`` scene units of any distance: the guarantee has
-    to survive the rounding that ends the pipeline.
+    The candidates are tried in order, and each is measured against *all* pins: the
+    rays away from each violated pin, ordered by ``public_key``, then the
+    golden-angle turn of the mover's key position, for a mover sitting exactly *on*
+    a pin and so having no ray of its own. The first candidate that clears every
+    pin wins; when the pins are tight enough that none can (the mover sits inside a
+    cluster whose clearance circles cover every candidate) the candidate maximising
+    the minimum clearance wins, keeping the earlier candidate on a tie — so the
+    choice stays a pure function of ``public_key`` order (spec §12.3).
+
+    Only unpinned movers move — a pinned coordinate is an input (step 7) — and the
+    clearance carries one quantisation unit (``10 ** -coordinate_decimals``)
+    because step 9 rounds afterwards, and rounding can steal up to ``√2 · 5·10⁻⁴``
+    scene units of any distance: the guarantee has to survive the rounding that
+    ends the pipeline. Returns whether any mover was displaced, which is how
+    :func:`_stage_final_collision` knows a repair is still outstanding.
     """
     pinned = tuple(key for key in run.keys if key in run.pinned)
     if not pinned:
-        return
+        return False
     guard = 10.0 ** -LAYOUT_CONSTANTS["coordinate_decimals"]
     angle = LAYOUT_CONSTANTS["golden_angle"]
-    for _round in range(len(pinned) + 1):
-        displaced = False
-        for index, key in enumerate(run.keys):
-            if key in run.pinned:
-                continue
-            position = run.position[key]
-            for pin in pinned:
-                pin_position = run.position[pin]
-                wanted = run.radius[key] + run.radius[pin] + guard
-                dx = position[0] - pin_position[0]
-                dy = position[1] - pin_position[1]
-                distance = math.hypot(dx, dy)
-                if distance >= wanted:
-                    continue
-                if distance == 0.0:
-                    turn = (index + 1) * angle
-                    dx, dy, distance = math.cos(turn), math.sin(turn), 1.0
-                position[0] = pin_position[0] + dx * wanted / distance
-                position[1] = pin_position[1] + dy * wanted / distance
-                displaced = True
-        if not displaced:
-            break
+    displaced = False
+    for index, key in enumerate(run.keys):
+        if key in run.pinned:
+            continue
+        position = run.position[key]
+        radius = run.radius[key]
+        violations = []
+        for pin in pinned:
+            pin_position = run.position[pin]
+            wanted = radius + run.radius[pin] + guard
+            if math.hypot(position[0] - pin_position[0], position[1] - pin_position[1]) < wanted:
+                violations.append((pin_position, wanted))
+        if not violations:
+            continue
+
+        candidates = []
+        for pin_position, wanted in violations:
+            dx = position[0] - pin_position[0]
+            dy = position[1] - pin_position[1]
+            distance = math.hypot(dx, dy)
+            if distance == 0.0:
+                turn = (index + 1) * angle
+                dx, dy, distance = math.cos(turn), math.sin(turn), 1.0
+            candidates.append((pin_position, dx / distance, dy / distance, wanted))
+        turn = (index + 1) * angle
+        candidates.append(
+            (violations[0][0], math.cos(turn), math.sin(turn), violations[0][1])
+        )
+
+        target = None
+        best_clearance = None
+        for origin, unit_x, unit_y, wanted in candidates:
+            point_x = origin[0] + unit_x * wanted
+            point_y = origin[1] + unit_y * wanted
+            clearance = min(
+                math.hypot(point_x - run.position[pin][0], point_y - run.position[pin][1])
+                - (radius + run.radius[pin] + guard)
+                for pin in pinned
+            )
+            if clearance >= 0.0:
+                target = (point_x, point_y)
+                break
+            if best_clearance is None or clearance > best_clearance:
+                target, best_clearance = (point_x, point_y), clearance
+        position[0], position[1] = target
+        displaced = True
+    return displaced
 
 
 # ---------------------------------------------------------------------------
