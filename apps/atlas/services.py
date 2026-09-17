@@ -158,7 +158,11 @@ def _locked_rows(*, version_id: int) -> dict[int, AtlasVersion]:
     SQLite ignores the clause (``connection.features.has_select_for_update`` is
     ``False``), so on the development database this is a plain read; the call is
     still made — and pinned by a test — so the production semantics are not a
-    per-backend accident.
+    per-backend accident. What that test pins is the **request and its read**: one
+    ``select_for_update`` on ``AtlasVersion``, iterated inside the atomic block
+    before the first status write. It cannot pin the ``FOR UPDATE`` clause itself,
+    mutual exclusion between concurrent activations, or lock ordering, and it
+    touches no PostgreSQL (see its docstring).
     """
     return {
         row.pk: row
@@ -193,8 +197,15 @@ def _require_draft(version: AtlasVersion) -> None:
 # ---------------------------------------------------------------------------
 
 
+@transaction.atomic
 def clone_version(source_id: AtlasVersion | int, label: str) -> AtlasVersion:
     """Copy a version's whole graph into a new draft (spec §8.1/§8.2).
+
+    One ``transaction.atomic`` block, like the other two services: the new row and
+    every row copied out of the source commit together or not at all, so a failure
+    anywhere in the copy — a write error, a cross-version endpoint (below) — leaves
+    **no** orphan draft behind (a bare read snapshot would otherwise survive on any
+    backend, ``ATOMIC_REQUESTS`` being unset).
 
     ``source_id`` may be the row or its primary key; only its **identity** is
     used — the source's stored state is re-read inside the transaction, so a
@@ -207,6 +218,13 @@ def clone_version(source_id: AtlasVersion | int, label: str) -> AtlasVersion:
     invisible rows and retired groups are copied with their flags — they are part
     of the topology, and an unpublished edit must not vanish on the way to the
     next version.
+
+    Endpoints are assumed **same-version**: relations and memberships are
+    re-pointed by ``public_key``, so an endpoint row living in another version —
+    reachable only through a write that bypasses ``clean()``, where the model
+    forbids it — is silently re-pointed onto the clone's node if the foreign row
+    happens to *share* a key, and raises a bare ``KeyError`` if it does not. Both
+    are outside this service's contract rather than defended against.
 
     ``created_from`` records the source row (spec §5's "clone provenance"), the
     label is taken verbatim — the caller owns the naming — and the new row is a

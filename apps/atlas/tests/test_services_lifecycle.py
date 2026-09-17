@@ -79,6 +79,7 @@ from apps.atlas.tests.factories import (
     _group,
     _group_translation,
     _membership,
+    _node,
     _relation,
     _relation_translation,
     _version,
@@ -504,21 +505,39 @@ def test_activation_validates_the_stored_row_not_the_callers_view(atlas_two_vers
 def test_activation_locks_the_version_rows_before_it_writes(monkeypatch, atlas_two_versions):
     """``select_for_update`` on ``atlas_version``, once, before the first write.
 
-    SQLite ignores the clause (``connection.features.has_select_for_update`` is
-    ``False``), so what a test on this backend pins is the *request*: the service
-    asks for the row lock, in the same transaction as the writes, and the locked
-    read precedes them. On PostgreSQL the same call is the ``FOR UPDATE`` that
-    makes two concurrent activations serialize — and the transaction is what
-    makes it legal there at all.
+    What this proves: exactly **one** lock request on ``AtlasVersion``, made inside
+    the atomic block, whose queryset is the one that is then **read** (the spied
+    ``_fetch_all`` on that very queryset fires before the first status write) — so a
+    ``select_for_update()`` that is requested and never iterated (the mutation the
+    Task 13 review survived the file with) fails here.
+
+    What it cannot prove, and must not be read as proving: the ``FOR UPDATE`` clause
+    itself — SQLite sets ``connection.features.has_select_for_update`` to ``False``,
+    so no row lock is taken on this backend and the SQL is a plain read; that two
+    concurrent activations are mutually excluded (that is the backend's lock plus
+    the transaction, unverified here); the lock *ordering* against other readers;
+    and PostgreSQL, which no test in this suite touches. The call is made and its
+    read is pinned so the production semantics are not a per-backend accident.
     """
     lock_calls: list[str] = []
-    original = QuerySet.select_for_update
+    locked_reads: list[str] = []
+    original_lock = QuerySet.select_for_update
+    original_fetch_all = QuerySet._fetch_all
 
-    def spy(self, *args, **kwargs):
+    def spy_lock(self, *args, **kwargs):
         lock_calls.append(self.model.__name__)
-        return original(self, *args, **kwargs)
+        return original_lock(self, *args, **kwargs)
 
-    monkeypatch.setattr(QuerySet, "select_for_update", spy)
+    def spy_fetch_all(self):
+        # The fetch is recorded on the *class*: ``_clone`` builds a new queryset
+        # for every ``.filter()``/``.order_by()`` link, so a patch on the instance
+        # a spy returned never reaches the queryset that is actually iterated.
+        if self.model.__name__ == "AtlasVersion" and self.query.select_for_update:
+            locked_reads.append(self.model.__name__)
+        return original_fetch_all(self)
+
+    monkeypatch.setattr(QuerySet, "select_for_update", spy_lock)
+    monkeypatch.setattr(QuerySet, "_fetch_all", spy_fetch_all)
     with CaptureQueriesContext(connection) as captured:
         activate_version(
             atlas_two_versions.draft.pk,
@@ -526,6 +545,10 @@ def test_activation_locks_the_version_rows_before_it_writes(monkeypatch, atlas_t
         )
 
     assert lock_calls == ["AtlasVersion"]
+    assert locked_reads == ["AtlasVersion"], (
+        "the locked queryset has to be the one that is read: a lock request whose "
+        "rows are never fetched asks for nothing"
+    )
     statements = [query["sql"] for query in captured.captured_queries]
     locked_read = next(
         index
@@ -538,6 +561,50 @@ def test_activation_locks_the_version_rows_before_it_writes(monkeypatch, atlas_t
         if sql.startswith('UPDATE "atlas_version"') and '"status"' in sql
     )
     assert locked_read < first_status_write
+
+
+def test_a_failed_clone_leaves_no_rows(atlas_scale_fixture):
+    """Ledger Task 13 review F1: a clone is one atomic block, or nothing at all.
+
+    The reviewer's construction: a membership whose **node** lives in another
+    version is reachable through a write that bypasses ``clean()`` (the model
+    forbids the cross-version pair only there), and its key is not one of the keys
+    the copy re-points to, so the membership write raises ``KeyError`` *after* the
+    draft row, its nodes, their translations, its relations and its groups have
+    already been written. Without ``transaction.atomic`` the orphan survives —
+    ``<AtlasVersion: … (draft)>`` plus every row copied before it — and no settings
+    module sets ``ATOMIC_REQUESTS``, so it survives on the real backend too, with
+    the single read snapshot the module's "one block" language implies lost as
+    well. With the decorator the failure leaves the database exactly as it found
+    it, which is what "There is no partially published state" (spec §8.3) means one
+    level down.
+    """
+    source = atlas_scale_fixture.version_obj
+    other = _version(status="draft", label="atlas-failed-clone-other")
+    foreign = _node(version=other, public_key="technology-feedface")
+    group = source.groups.order_by("public_key").first()
+    assert group is not None, "the scale graph carries groups"
+    AtlasGroupMembership.objects.create(group=group, node=foreign)
+
+    before = {
+        "versions": AtlasVersion.objects.count(),
+        "nodes": AtlasNode.objects.count(),
+        "groups": AtlasGroup.objects.count(),
+        "memberships": AtlasGroupMembership.objects.count(),
+    }
+    with pytest.raises(KeyError):
+        clone_version(source, label="atlas-failed-clone")
+
+    assert AtlasVersion.objects.filter(label="atlas-failed-clone").count() == 0, (
+        "the failed clone left its draft version row behind"
+    )
+    after = {
+        "versions": AtlasVersion.objects.count(),
+        "nodes": AtlasNode.objects.count(),
+        "groups": AtlasGroup.objects.count(),
+        "memberships": AtlasGroupMembership.objects.count(),
+    }
+    assert after == before, f"the failed clone left rows behind: {after} != {before}"
 
 
 def test_activation_archives_before_it_activates(atlas_two_versions):
