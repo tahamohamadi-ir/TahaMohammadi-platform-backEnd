@@ -65,6 +65,7 @@ from apps.atlas.tests.factories import (
     _node_type,
     _relation,
     _relation_translation,
+    _relation_type,
     _research_focus_type,
     _seed_pair,
     _version,
@@ -640,6 +641,25 @@ def test_etag_is_stable_for_an_unchanged_version_and_changes_on_projection_chang
     assert projection_etag(build_locale_projection(version, "en")) != first
 
 
+def test_canonical_json_key_order_does_not_depend_on_insertion_order(atlas_scale_fixture):
+    """REVIEW-14 fix: ``sort_keys=True`` is the ETag input's contract (§10.5).
+
+    ``_redirect`` only checked this because the projection always *builds* the
+    payload in the same order. Two callers assembling identical content in
+    different insertion orders (the preview path, an OpenAPI snapshot) must get
+    the same digest, so the key-sorted contract has to be falsifiable rather
+    than assumed; the projection fixtures make that assertion real.
+    """
+    payload = build_locale_projection(atlas_scale_fixture.version_obj, "en")
+    reordered = dict(reversed(list(payload.items())))
+    assert canonical_json(payload) == canonical_json(reordered)
+
+    for node in payload["nodes"][:2]:
+        assert canonical_json(node) == canonical_json(
+            dict(reversed(list(node.items())))
+        )
+
+
 def test_payload_size_stays_inside_the_budget(atlas_scale_fixture):
     """The plan's fourth snippet, on the 72-node graph (spec §10.4's ceiling).
 
@@ -866,6 +886,23 @@ def test_catalogs_are_limited_to_active_types_actually_used(atlas_v1):
     assert {issue.node_key for issue in issues} == {
         entry["key"] for entry in retired["nodes"] if entry["type"] == "research-area"
     }
+
+    # REVIEW-14 fix: the relation-type half of the same rule. The original test
+    # only retired a node type, so deleting the ``active`` filter in
+    # ``_relation_type_catalog`` (projection.py:466) survived every test while a
+    # §10.3-forbidden catalog entry stayed served and the payload gate went
+    # silent — the inverse of the fail-closed contract Tasks 15/16 rely on.
+    relation_type = _relation_type("co-occurs")
+    _relation(atlas_v1.identity, atlas_v1.areas[0], relation_type=relation_type)
+    relation_type.active = False
+    relation_type.save(update_fields=["active"])
+    retired_types = build_locale_projection(version, "en")
+    assert relation_type.key not in {entry["key"] for entry in retired_types["relationTypes"]}
+    relation_issues = validate_payload_contract(retired_types)
+    assert any(
+        issue.code == "PAYLOAD_CONTRACT_INVALID" and issue.relation_key is not None
+        for issue in relation_issues
+    )
 
 
 def test_groups_serve_the_locale_copy_and_only_visible_members(atlas_v1):
