@@ -91,14 +91,19 @@ own tests then run the engine over it).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import hashlib
+import json
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from django.utils.dateparse import parse_datetime
 
+from apps.atlas.canonical import CANONICAL_SOURCES as _CANONICAL_MODEL
 from apps.atlas.keys import new_group_key, new_node_key
 from apps.atlas.models import (
     AtlasGroup,
@@ -153,6 +158,8 @@ __all__ = [
     "atlas_scale_fixture",
     "atlas_two_versions",
     "atlas_v1",
+    "dump_atlas_version",
+    "load_atlas_dump",
     "seed_pairs",
 ]
 
@@ -1648,6 +1655,41 @@ class AtlasScaleFixture:
 
         return [(stage.name, stage.description) for stage in LAYOUT_BLUEPRINT]
 
+    def apply_layout(self):
+        """Run the layout engine over the default graph and store the result.
+
+        The plan's Task 11 snippet runs the engine through the fixture's parts;
+        Task 18's dump tests apply the layout *before* dumping so the dump's
+        ``layout`` block carries the engine's real coordinates, not the
+        all-zero placeholders the builders write. Delegates to
+        :func:`apps.atlas.layout.apply_layout` — the one layout authority (§12.1).
+        """
+        from apps.atlas.layout import apply_layout as _engine_apply_layout
+
+        return _engine_apply_layout(self.version_obj)
+
+    # --- dump / load (Task 18's dual serialization) -----------------------
+
+    def dump(self) -> str:
+        """This fixture's default graph as a deterministic dump.
+
+        Routes through :func:`dump_atlas_version` — the one serialization home
+        (the schema-freeze test asserts the two spellings are the same bytes),
+        so the fixture's ``dump()`` is never a second spelling of the freeze.
+        """
+        return dump_atlas_version(self.version_obj)
+
+    def load_dump(self, path) -> AtlasScaleFixture:
+        """Read the dump file at ``path`` and reload it.
+
+        The file form of :func:`load_atlas_dump` — the surface a second
+        process holds is the path, not the string. Validation (digest, taxonomy,
+        canonical, layout slots) is the loader's, so a tampered file is refused
+        exactly as a tampered string.
+        """
+        text = Path(path).read_text(encoding="utf-8")
+        return load_atlas_dump(text)
+
 
 @pytest.fixture
 def atlas_scale_fixture():
@@ -1655,6 +1697,14 @@ def atlas_scale_fixture():
     version = _version(status="draft", label="atlas-scale")
     nodes, relations, groups = _scale_topology(version)
     _apply_placeholder_layout(version, nodes)
+    # ONE canonical reference in the whole graph, on the identity anchor: the
+    # dump/loader's canonical gate (``CANONICAL_SOURCE_MISSING``) needs a node
+    # whose ``canonicalTranslationKey`` the document actually carries — spec §5.4
+    # resolution is exercised by resolving it, once, against a live profile pair.
+    en_profile, fa_profile = _seed_pair(Profile, uuid4(), en={}, fa={})
+    anchor = next(node for node in nodes if node.node_type.key == "identity")
+    anchor.canonical_translation_key = en_profile.translation_key
+    anchor.save(update_fields=["canonical_translation_key"])
     return AtlasScaleFixture(
         version=version,
         nodes=nodes,
@@ -1664,4 +1714,664 @@ def atlas_scale_fixture():
         related_type=_related_to_type(),
         node_types={key: _scale_node_type(key) for key, _count in SCALE_COMPOSITION},
         pinned_keys=sorted(SCALE_PINS),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The `atlas_scale_fixture` family — dump/reload dual serialization (Task 18).
+#
+# Task 18's remaining obligation: ``dump_atlas_version(version)`` captures the
+# stored whole-graph state of one version as a JSON string, and
+# ``load_atlas_dump(text)`` rebuilds it — every reference resolved **exactly**
+# or refused. Test-file anchors: ``apps/atlas/tests/test_scale_dump.py``
+# ("The scale fixture's dump/reload surface") and
+# ``docs/contracts/ATLAS-PAYLOAD-CONTRACT.md`` (ATLAS-PAYLOAD-CONTRACT: the
+# frozen dump one home / frozen-keys rule).
+#
+# The trade-off, stated in plain view (the schema-freeze test looks for these
+# two phrases here): a dump is a **secondary cache** — Plan C's frontend
+# fixtures can rebuild the §19.2 graph from it without re-running the ORM
+# builders, and a test process can round-trip a graph through a fresh primary-key
+# space. The cache can go stale: that is why the loader validates every
+# reference against the *live* database (taxonomy rows, canonical triples, the
+# layout's slot uniqueness) and fails closed on any mismatch, instead of
+# trusting the file. The dump is rebuilt from the ORM, never the reverse.
+#
+# Determinism (ruling R11): all rows are read in ``public_key`` order and the
+# JSON is sorted-key, so a dump is a pure function of the stored graph and is
+# byte-identical across processes. The loader is the mirror: it re-verifies the
+# digest, re-inserts every row in dump order (or reversed — the projection is a
+# pure function of the stored rows, so the rebuilt projection is byte-identical
+# either way), and each verification failure raises with the same named prefix
+# the live gates use.
+#
+# A canonical ``AtlasNodeTranslation`` override written by the dump's *loader*
+# keeps the node's canonical reference resolvable in both locales, so a reload
+# satisfies the locale-parity gate for both directions (broken only by real
+# corruption, never by the round-trip itself).
+# ---------------------------------------------------------------------------
+
+#: The schema version of the dump document format.
+DUMP_MODEL_VERSION = 1
+
+#: Prefix of the digest value — names the algorithm and the shape it signs.
+DUMP_DIGEST_PREFIX = "atlas-dump-v1:"
+
+#: Locales the loader pins: the dumped copy minus its canonical row must not
+#: leave a node unresolvable in either projected locale (spec §10.1 closes the
+#: locale set; the loader keeps it closed on import too).
+DUMP_LOCALES: tuple[str, ...] = ("en", "fa")
+
+
+#: The document's frozen key set — the surface Tasks 19/20 consume; it is also
+#: the loader's schema gate (an unexpected key set is not the digest's business,
+#: so it has its own named refusal).
+DUMP_DOCUMENT_KEYS: tuple[str, ...] = (
+    "digest",
+    "groups",
+    "layout",
+    "modelVersion",
+    "nodeTypes",
+    "nodes",
+    "relationItems",
+    "relationTypes",
+    "layoutRevision",
+    "canonicalSources",
+)
+
+
+def _dump_text(document: dict) -> str:
+    """The one canonical JSON spelling this module's serialization uses.
+
+    Every dump and every re-sign goes through here: the corruption tests'
+    ``_resign`` replicates these kwargs exactly, so all three paths — a fresh
+    dump, an edited document re-signed in a test, the loader's own digest
+    check — hash the same spelling of the same document.
+    """
+    return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _dump_digest(six_payload: dict) -> str:
+    """SHA-256 of the canonical JSON of the document's six payload keys."""
+    payload_bytes = _dump_text(six_payload).encode("utf-8")
+    return f"{DUMP_DIGEST_PREFIX}{hashlib.sha256(payload_bytes).hexdigest()}"
+
+
+def _uuid(text: str | None) -> UUID | None:
+    """The document's nullable uuid string as a ``UUID``, or ``None``."""
+    if text is None:
+        return None
+    return UUID(str(text))
+
+
+def _dump_node_entry(node: AtlasNode) -> dict:
+    """One ``nodes`` entry: identity, type, copy reference, stored flags."""
+    stored_override = None
+    for translation in node.translations.order_by("locale"):
+        if translation.label_override.strip():
+            stored_override = translation
+            break
+    return {
+        "publicKey": node.public_key,
+        "type": node.node_type.key,
+        "label": stored_override.label_override if stored_override else node.node_type.label_en,
+        "overrides": {  # per-locale stored overrides (may be empty)
+            translation.locale: {
+                "labelOverride": translation.label_override,
+                "summaryOverride": translation.summary_override,
+                "accessibleLabelOverride": translation.accessible_label_override,
+                "aliases": list(translation.aliases or []),
+            }
+            for translation in node.translations.order_by("locale")
+        },
+        "canonicalTranslationKey": (
+            str(node.canonical_translation_key) if node.canonical_translation_key else None
+        ),
+        "importance": node.importance,
+        "visible": node.visible,
+        "mobileOverviewPriority": node.mobile_overview_priority,
+        "pinX": node.pin_x,
+        "pinY": node.pin_y,
+        "pinZ": node.pin_z,
+        "sortOrder": node.sort_order,
+    }
+
+
+def _dump_relation_entry(relation: AtlasRelation) -> dict:
+    """One ``relationItems`` entry — every authored column plus per-locale copy."""
+    return {
+        "sourceKey": relation.source.public_key,
+        "targetKey": relation.target.public_key,
+        "relationType": relation.relation_type.key,
+        "directed": relation.directed,
+        "weight": relation.weight,
+        "visible": relation.visible,
+        "sortOrder": relation.sort_order,
+        "translations": {
+            translation.locale: translation.explanation
+            for translation in relation.translations.order_by("locale")
+        },
+    }
+
+
+def _dump_node_type_entry(node_type: AtlasNodeType) -> dict:
+    """One ``nodeTypes`` entry — the taxonomy row the nodes reference by key."""
+    return {
+        "labelEn": node_type.label_en,
+        "labelFa": node_type.label_fa,
+        "semanticRole": node_type.semantic_role,
+        "visualRole": node_type.visual_role,
+        "defaultImportance": node_type.default_importance,
+        "allowAsRoot": node_type.allow_as_root,
+        "allowChildren": node_type.allow_children,
+        "canonicalSource": node_type.canonical_source,
+        "filterVisible": node_type.filter_visible,
+        "active": node_type.active,
+        "sortOrder": node_type.sort_order,
+    }
+
+
+def _dump_relation_type_entry(relation_type: AtlasRelationType) -> dict:
+    """One ``relationTypes`` entry — the taxonomy row the relations reference by key."""
+    return {
+        "labelEn": relation_type.label_en,
+        "labelFa": relation_type.label_fa,
+        "inverseLabelEn": relation_type.inverse_label_en,
+        "inverseLabelFa": relation_type.inverse_label_fa,
+        "directedDefault": relation_type.directed_default,
+        "overridableDirection": relation_type.overridable_direction,
+        "semanticRole": relation_type.semantic_role,
+        "hierarchyRole": relation_type.hierarchy_role,
+        "defaultWeight": relation_type.default_weight,
+        "visualPriority": relation_type.visual_priority,
+        "selfLoopPolicy": relation_type.self_loop_policy,
+        "active": relation_type.active,
+        "sortOrder": relation_type.sort_order,
+        "allowedSourceTypes": sorted(
+            relation_type.allowed_source_types.values_list("key", flat=True)
+        ),
+        "allowedTargetTypes": sorted(
+            relation_type.allowed_target_types.values_list("key", flat=True)
+        ),
+    }
+
+
+#: Group entry shape = the surface the corruption test shuffles:
+#: ``{"key", "label", "members"}`` with members as a plain list of node keys.
+def _dump_group_entry(group: AtlasGroup) -> dict:
+    """One ``groups`` entry: key, stored copy, stored membership, stored flags."""
+    return {
+        "key": group.public_key,
+        "label": next(
+            (row.label for row in group.translations.order_by("locale") if row.label.strip()),
+            group.public_key,
+        ),
+        "members": sorted(
+            AtlasGroupMembership.objects.filter(group=group).values_list(
+                "node__public_key", flat=True
+            )
+        ),
+        "sortOrder": group.sort_order,
+        "active": group.active,
+        "translations": {
+            row.locale: {"label": row.label, "description": row.description}
+            for row in group.translations.order_by("locale")
+        },
+    }
+
+
+def dump_atlas_version(version: AtlasVersion) -> str:
+    """The stored whole-graph state of ``version`` as deterministic JSON.
+
+    One function, the statement of the freeze: sorted-key canonical JSON over
+    rows read in ``public_key`` order, signed with the digest of the six
+    payload keys. Not a projection, not a served payload — the dump is the
+    *stored* graph: includes hidden rows, uses stored overrides, and preserves
+    the layout dict as committed. Might be stale the moment the stored rows
+    change; the loader validates against the live state for that reason.
+    """
+    version_row = AtlasVersion.objects.get(pk=version.pk)
+    nodes = list(
+        version_row.nodes.select_related("node_type")
+        .prefetch_related("translations")
+        .order_by("public_key")
+    )
+    relations = list(
+        version_row.relations.select_related("source", "target", "relation_type")
+        .prefetch_related("translations")
+        .order_by("pk")
+    )
+    dump_groups = list(version_row.groups.prefetch_related("translations").order_by("public_key"))
+    layout = dict(version_row.layout or {})
+    used_node_types = sorted({node.node_type for node in nodes}, key=lambda row: row.key)
+    used_relation_types = sorted(
+        {relation.relation_type for relation in relations}, key=lambda row: row.key
+    )
+    six = {
+        "nodeTypes": {
+            node_type.key: _dump_node_type_entry(node_type) for node_type in used_node_types
+        },
+        "relationTypes": {
+            relation_type.key: _dump_relation_type_entry(relation_type)
+            for relation_type in used_relation_types
+        },
+        "nodes": [_dump_node_entry(node) for node in nodes],
+        "relationItems": [_dump_relation_entry(relation) for relation in relations],
+        "groups": [_dump_group_entry(group) for group in dump_groups],
+        "layout": {key: list(coordinate) for key, coordinate in sorted(layout.items())},
+        "layoutRevision": version_row.layout_revision,
+    }
+    document = {"modelVersion": DUMP_MODEL_VERSION, **six}
+    document["canonicalSources"] = _dump_canonical_sources(version_row)
+    # The registry joins the digested payload: canonical semantics are part of
+    # the signed document — tampering with a slug must move the digest too.
+    document["digest"] = _dump_digest(
+        {key: value for key, value in document.items() if key not in ("modelVersion", "digest")}
+    )
+    return _dump_text(document)
+
+
+def _verify_layout_slots(layout: Mapping[str, Any], nodes: Iterable[Mapping[str, Any]]) -> None:
+    """Fail closed on any coordinate two nodes share (``LAYOUT_SLOT_COLLISION``).
+
+    §12.1's one-layout-authority rule stated in the negative: a stored
+    coordinate is one node's slot. A collision is corruption the digest cannot
+    distinguish from an authored graph (both could be re-signed), so the
+    loader checks the shape itself rather than trusting the signature.
+    """
+    seen: dict[tuple, str] = {}
+    node_keys = {entry["publicKey"] for entry in nodes}
+    for public_key in sorted(layout):
+        coordinate = tuple(layout[public_key])
+        if public_key not in node_keys:
+            raise ValueError(
+                f"LAYOUT_SLOT_COLLISION: layout slot {public_key!r} names no node "
+                "of the dumped graph (a coordinate belongs to a node)."
+            )
+        owner = seen.setdefault(coordinate, public_key)
+        if owner != public_key:
+            raise ValueError(
+                f"LAYOUT_SLOT_COLLISION: {public_key!r} sits at the exact stored "
+                f"coordinate of {owner!r}; every node's coordinate must sit in "
+                "its own slot."
+            )
+
+
+def load_atlas_dump(text: str, *, insert_reversed: bool = False) -> AtlasScaleFixture:
+    """Rebuild the dumped version — every reference exactly, or refuse.
+
+    The loader is the dump's mirror: digest re-verified (``DIGEST_MISMATCH``),
+    taxonomy keys resolved against the live vocabulary (``TAXONOMY_TYPE_MISSING``),
+    canonical triples seeded so a node resolves in both locales
+    (``CANONICAL_SOURCE_MISSING`` only when the document names a canonical
+    family the registry does not allow), layout slots uniqueness-checked
+    (``LAYOUT_SLOT_COLLISION``). Every gate is a hard ``ValueError`` — a
+    corrupted dump is a refused load, never a repaired graph.
+
+    ``insert_reversed=True`` arrives from ``fixture.parts_reversed()``: every
+    row list is inserted in the opposite order, proving the rebuilt projection
+    is a property of the stored rows, not of the arrival sequence.
+    """
+    # Fail closed before anything is written: the digest is the first gate a
+    # tampered-but-well-formed document fails.
+    document = _parsed_dump(text)
+
+    node_types, relation_types = _dump_taxonomy_rows(document)
+    _verify_layout_slots(document["layout"], document["nodes"])
+    _dump_canonical_rows(document, node_types)
+
+    version = _reload_version_row(document)
+    nodes, relations = _write_topology_rows(
+        version, document, node_types, relation_types, reversed_order=insert_reversed
+    )
+    return _assemble_reloaded(
+        version,
+        nodes,
+        relations,
+        groups=document,
+        pinned_keys=sorted(
+            entry["publicKey"] for entry in document["nodes"] if entry.get("pinX") is not None
+        ),
+    )
+
+
+def _parsed_dump(text: str) -> dict:
+    """A validated dump document — every structural gate fired, in order.
+    The gates, each a hard ``ValueError`` and never a repair:
+
+    1. readable JSON (anything else is a lossy carrier: ``DIGEST_MISMATCH``);
+    2. the frozen key set and the supported ``modelVersion``
+       (``SCHEMA_MISMATCH`` — the corruption class the digest cannot name);
+    3. the digest over the six payload keys, re-computed on this machine
+       (``DIGEST_MISMATCH``) — an edited document cannot pass this unless it
+       was re-signed, which is how each later rule's own corruption test
+       reaches its own gate.
+    """
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"DIGEST_MISMATCH: the dump is not readable JSON ({error}); a dump is "
+            "canonical bytes, so a parsing failure is a lossy carrier."
+        ) from error
+    if not isinstance(document, dict) or set(document) != set(DUMP_DOCUMENT_KEYS):
+        keys = sorted(document) if isinstance(document, dict) else document
+        raise ValueError(
+            f"SCHEMA_MISMATCH: dump keys {keys!r} do not match the frozen schema "
+            f"{sorted(DUMP_DOCUMENT_KEYS)} (docs/contracts/ATLAS-PAYLOAD-CONTRACT.md)."
+        )
+    if document["modelVersion"] != DUMP_MODEL_VERSION:
+        raise ValueError(
+            f"SCHEMA_MISMATCH: modelVersion {document['modelVersion']!r} is not "
+            f"the supported schema version {DUMP_MODEL_VERSION}."
+        )
+    payload = {
+        key: document[key] for key in DUMP_DOCUMENT_KEYS if key not in ("modelVersion", "digest")
+    }
+    if document["digest"] != _dump_digest(payload):
+        raise ValueError(
+            "DIGEST_MISMATCH: the dump fails its own digest — the document moved "
+            "after it was signed; a reload never repairs a tampered dump."
+        )
+    return document
+
+
+def _dump_taxonomy_rows(
+    document: Mapping[str, Any],
+) -> tuple[dict[str, AtlasNodeType], dict[str, AtlasRelationType]]:
+    """The live taxonomy rows the document references, exactly as named.
+
+    A type key the document names that the database does not carry is
+    ``TAXONOMY_TYPE_MISSING`` — a hard stop, never a silent re-mint into a
+    second source of truth (spec §5.3: the taxonomy is admin-managed). Below
+    every named row's columns the document carries is *exactly what the dump
+    read*; the loader trusts rows that exist and refuses those that do not,
+    which is the whole taxonomy gate.
+    """
+    node_types: dict[str, AtlasNodeType] = {}
+    relation_types: dict[str, AtlasRelationType] = {}
+    # `_base_manager` — the taxonomy gate judges the stored vocabulary, not a
+    # manager's projection of it. A type key the database does not carry at all
+    # is refused; one that *exists* but is inactive is not this gate's business
+    # (that judgement is the publish gate's ``*_TYPE_INACTIVE`` rows).
+    for entry in document["nodes"]:
+        key = entry["type"]
+        if key in node_types:
+            continue
+        row = AtlasNodeType._base_manager.filter(key=key).first()
+        if row is None:
+            raise ValueError(
+                f"TAXONOMY_TYPE_MISSING: the dump names node type {key!r} that the "
+                "live database does not carry (spec §5.3: the taxonomy is "
+                "admin-managed, never re-minted by a loader)."
+            )
+        node_types[key] = row
+    for item in document["relationItems"]:
+        key = item["relationType"]
+        if key in relation_types:
+            continue
+        row = AtlasRelationType._base_manager.filter(key=key).first()
+        if row is None:
+            raise ValueError(
+                f"TAXONOMY_TYPE_MISSING: the dump names relation type {key!r} that "
+                "the live database does not carry (spec §5.3: same refusal)."
+            )
+        relation_types[key] = row
+    return node_types, relation_types
+
+
+def _dump_canonical_sources(version_row: AtlasVersion) -> list[dict]:
+    """The semantic canonical rows the graph references, as the loader reads them.
+
+    One entry per referenced translation key per family: ``family``,
+    ``translationKey``, and per-locale ``locale``/``slug``/``title``/``status``
+    — everything :func:`resolve_canonical` reads to answer §5.4. The dump is
+    the *stored* graph side of the §5.3 "nodes are references, never copies"
+    rule: it still records the copy the reference resolves to, because the
+    loader must reconstruct resolution from the document, not mint records.
+    """
+    pairs: dict[tuple[str, UUID], dict] = {}
+    for entry in _dump_referencing_nodes(version_row):
+        source = entry.canonical_model
+        key = entry.canonical_translation_key
+        if source not in _CANONICAL_MODEL or key is None:
+            continue
+        record = pairs.setdefault(
+            (source, key),
+            {"family": source, "translationKey": str(key), "locales": {}},
+        )
+        for locale in DUMP_LOCALES:
+            row = _canonical_row(entry, key, locale)
+            if row is not None:
+                record["locales"][locale] = {
+                    "slug": str(row.slug or "").strip(),
+                    "title": str(row.title or "").strip(),
+                    "status": row.status,
+                    "publishedAt": (
+                        row.published_at.isoformat() if row.published_at else None
+                    ),
+                }
+    return [
+        {"family": family, "translationKey": str(key), "locales": record["locales"]}
+        for (family, key), record in sorted(pairs.items())
+    ]
+
+
+def _dump_referencing_nodes(version_row: AtlasVersion):
+    """Nodes of ``version_row`` carrying a canonical reference (dump side)."""
+    return [
+        node
+        for node in version_row.nodes.select_related("node_type").prefetch_related(
+            "translations"
+        )
+        if node.canonical_model in _CANONICAL_MODEL and node.canonical_translation_key
+    ]
+
+
+def _canonical_row(entry, key, locale):
+    model = _CANONICAL_MODEL[entry.canonical_model]
+    return (
+        model._base_manager.filter(translation_key=key, locale=locale).first()
+    )
+
+
+def _from_iso(text: str):
+    """A stored ISO stamp as an aware ``datetime`` (the loader never re-times)."""
+    return parse_datetime(text)
+
+
+def _dump_canonical_rows(document: dict, node_types: Mapping[str, AtlasNodeType]) -> None:
+    """Reconstruct the canonical registry the document carries — restore, not mint.
+
+    The dump's ``canonicalSources`` section carries per-locale ``slug``/``title``
+    /``status`` for every referenced pair; the loader recreates exactly those
+    semantic values (fresh DB pks are fine — that is the only allowed drift).
+    A node reference with no entry in the registry is the
+    ``CANONICAL_SOURCE_MISSING`` refusal: a corrupted reference must NOT heal
+    itself out of node labels, type fallbacks or fixture factories.
+    """
+    registry = {
+        (entry["family"], _uuid(entry["translationKey"])): entry["locales"]
+        for entry in document.get("canonicalSources", [])
+    }
+    for entry in document["nodes"]:
+        translation_key_text = entry.get("canonicalTranslationKey")
+        if not translation_key_text:
+            continue
+        translation_key = _uuid(translation_key_text)
+        if translation_key is None:
+            raise ValueError(
+                "CANONICAL_SOURCE_MISSING: node "
+                f"{entry['publicKey']!r} carries a malformed canonical reference "
+                f"({translation_key_text!r})."
+            )
+        node_type = node_types[entry["type"]]
+        family = node_type.canonical_source
+        if family not in _CANONICAL_MODEL:
+            raise ValueError(
+                f"CANONICAL_SOURCE_MISSING: node {entry['publicKey']!r} references "
+                f"canonical family {family!r}, which resolves no published record "
+                "in either locale."
+            )
+        if (family, translation_key) not in registry:
+            raise ValueError(
+                "CANONICAL_SOURCE_MISSING: node "
+                f"{entry['publicKey']!r} references ({family!r}, "
+                f"{translation_key_text!r}), which the dump's canonical registry "
+                "does not carry."
+            )
+        model = _CANONICAL_MODEL[family]
+        if model._base_manager.filter(translation_key=translation_key).exists():
+            continue
+        for locale in DUMP_LOCALES:
+            stored = registry[(family, translation_key)].get(locale)
+            if stored is None:
+                continue
+            model._base_manager.create(
+                locale=locale,
+                slug=stored["slug"],
+                title=stored["title"],
+                status=stored["status"],
+                published_at=_from_iso(stored["publishedAt"]) if stored["publishedAt"] else None,
+                translation_key=translation_key,
+            )
+
+
+def _reload_version_row(document: Mapping[str, Any]) -> AtlasVersion:
+    """The rebuilt version: a fresh row, never an update of a live one.
+
+    The reload lands wherever the caller's test state is (usually an empty
+    database), so the row is created with a minted label and the stored layout
+    dict copied verbatim; activation is the publish gate's business, not the
+    loader's.
+    """
+    return AtlasVersion.objects.create(
+        status="draft",
+        label=f"reload-{uuid4().hex[:8]}",
+        layout=dict(document["layout"]),
+        layout_revision=document["layoutRevision"],
+    )
+
+
+def _write_topology_rows(
+    version: AtlasVersion,
+    document: Mapping[str, Any],
+    node_types: Mapping[str, AtlasNodeType],
+    relation_types: Mapping[str, AtlasRelationType],
+    *,
+    reversed_order: bool,
+) -> tuple[list[AtlasNode], list[AtlasRelation]]:
+    """Insert every dumped row — in dump order, or with every list reversed.
+
+    Called with ``reversed_order=True`` the same loop rebuilds the graph from
+    the opposite arrival order: the property the round-trip test is here to
+    prove is that the projection is a function of the stored rows, so the
+    arrival order must not leak into the payload. The per-locale overrides
+    travel exactly as dumped, and a node the dump carries no override for gets
+    the dumped ``label`` in one locale — the stored state, never an invention.
+    """
+    node_entries = list(document["nodes"])
+    relation_entries = list(document["relationItems"])
+    group_entries = list(document["groups"])
+    for collection in (node_entries, relation_entries, group_entries):
+        if reversed_order:
+            collection.reverse()
+        elif collection is group_entries:
+            for entry in collection:
+                entry["members"] = sorted(entry["members"])
+
+    by_key: dict[str, AtlasNode] = {}
+    for entry in node_entries:
+        node = _node(
+            version=version,
+            node_type=node_types[entry["type"]],
+            public_key=entry["publicKey"],
+            canonical_model=node_types[entry["type"]].canonical_source,
+            canonical_translation_key=_uuid(entry.get("canonicalTranslationKey")),
+            importance=entry["importance"],
+            visible=entry["visible"],
+            mobile_overview_priority=entry["mobileOverviewPriority"],
+            pin_x=entry.get("pinX"),
+            pin_y=entry.get("pinY"),
+            pin_z=entry.get("pinZ"),
+            sort_order=entry.get("sortOrder", 0),
+        )
+        by_key[node.public_key] = node
+        for locale, stored in entry["overrides"].items():
+            AtlasNodeTranslation.objects.create(
+                node=node,
+                locale=locale,
+                label_override=stored.get("labelOverride", ""),
+                summary_override=stored.get("summaryOverride", ""),
+                accessible_label_override=stored.get("accessibleLabelOverride", ""),
+                aliases=stored.get("aliases", []),
+            )
+        # No synthesized translation: a node the dump carries no override for
+        # stored none — its served label came from the type catalogue's fallback
+        # (spec §10.2/§10.3), and re-minting an en override here would make the
+        # reloaded payload sprout an ``accessibleLabel`` the original never had.
+
+    relations: list[AtlasRelation] = []
+    for item in relation_entries:
+        relation = _relation(
+            source=by_key[item["sourceKey"]],
+            target=by_key[item["targetKey"]],
+            relation_type=relation_types[item["relationType"]],
+            version=version,
+            directed=item["directed"],
+            weight=item["weight"],
+            visible=item["visible"],
+            sort_order=item.get("sortOrder", 0),
+        )
+        for locale, explanation in item.get("translations", {}).items():
+            AtlasRelationTranslation.objects.create(
+                relation=relation, locale=locale, explanation=explanation
+            )
+        relations.append(relation)
+
+    for entry in group_entries:
+        group = AtlasGroup.objects.create(
+            version=version,
+            public_key=entry["key"],
+            sort_order=entry.get("sortOrder", 0),
+            active=entry.get("active", True),
+        )
+        for locale, stored in entry.get("translations", {}).items():
+            AtlasGroupTranslation.objects.create(
+                group=group,
+                locale=locale,
+                label=stored.get("label", ""),
+                description=stored.get("description", ""),
+            )
+        for member in entry["members"]:
+            AtlasGroupMembership.objects.create(group=group, node=by_key[member])
+
+    return list(by_key.values()), relations
+
+
+def _assemble_reloaded(
+    version: AtlasVersion,
+    nodes: list[AtlasNode],
+    relations: list[AtlasRelation],
+    *,
+    groups: Mapping[str, Any],
+    pinned_keys: Iterable[str],
+) -> AtlasScaleFixture:
+    """Wrap the rebuilt rows in the ``AtlasScaleFixture`` shape the tests read.
+
+    The rebuilt fixture carries the cached topology of the reload (its ``parts``
+    are the rows that arrived), so callers can assert against it exactly as
+    against a built one — without going through the builder path again.
+    """
+    return AtlasScaleFixture(
+        version=version,
+        nodes=nodes,
+        relations=relations,
+        groups={
+            entry["key"]: tuple(sorted(entry["members"])) for entry in groups["groups"]
+        },
+        hierarchy_type=_dag_hierarchy_type(),
+        related_type=_related_to_type(),
+        node_types={key: _scale_node_type(key) for key, _count in SCALE_COMPOSITION},
+        pinned_keys=list(pinned_keys),
     )
