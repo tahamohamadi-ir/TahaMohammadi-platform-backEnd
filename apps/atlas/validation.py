@@ -281,6 +281,24 @@ class Issue:
     message_token: str = ""
 
 
+class FailedServingGate(Exception):
+    """The public serving gate refused: the fresh payload failed its contract.
+
+    Raised by ``public_atlas_payload`` (``apps/api/api.py``) when the active
+    version's freshly built projection returns issues from
+    :func:`validate_payload_contract` — the endpoint answers the fail-closed 500
+    with **no** partial payload instead of serving what it got. ``issues`` is
+    the list of contract issues (``MISSING_LAYOUT``,
+    ``PAYLOAD_CONTRACT_INVALID``, …) that stopped the serving, and exists so the
+    serving path never has to trust a payload it could not vouch for.
+    """
+
+    def __init__(self, issues: Iterable[Issue]) -> None:
+        self.issues: list[Issue] = list(issues)
+        self.codes: tuple[str, ...] = tuple(sorted({issue.code for issue in self.issues}))
+        super().__init__(", ".join(self.codes) or "payload failed its contract check")
+
+
 @dataclass
 class ValidationReport:
     """``{"blocking": [...], "warnings": [...]}`` — the publish gate's answer (spec §20).
@@ -521,9 +539,7 @@ def validate_hierarchy(version: AtlasVersion) -> list[Issue]:
     """
     nodes = list(version.nodes.filter(visible=True))
     relations = list(
-        version.relations.filter(visible=True).select_related(
-            "source", "target", "relation_type"
-        )
+        version.relations.filter(visible=True).select_related("source", "target", "relation_type")
     )
     return hierarchy_rule_issues(nodes, relations)
 
@@ -947,9 +963,7 @@ def _canonical_row_exists(source: str, translation_key: UUID, locale: str) -> bo
 # ---------------------------------------------------------------------------
 
 
-def _stored_coordinate(
-    layout: Mapping[str, object], key: str
-) -> tuple[float, float, float] | None:
+def _stored_coordinate(layout: Mapping[str, object], key: str) -> tuple[float, float, float] | None:
     """The stored coordinate of ``key``, or ``None`` when the layout has none.
 
     A coordinate is usable when it is a three-item sequence of finite numbers.
@@ -1057,9 +1071,7 @@ def _drawn_radii(nodes: Sequence[AtlasNode]) -> dict[str, float]:
     return radii
 
 
-def _summary_missing(
-    node: AtlasNode, facts: Mapping[int, NodeCanonicalFacts] | None
-) -> bool:
+def _summary_missing(node: AtlasNode, facts: Mapping[int, NodeCanonicalFacts] | None) -> bool:
     """Whether no locale resolves a non-blank summary for this node (spec §20.2).
 
     A per-locale ``summary_override`` is the node's own copy; otherwise the
@@ -1114,9 +1126,7 @@ def warning_issues(
         .prefetch_related("translations")
     )
     visible_relations = list(
-        version.relations.filter(visible=True).select_related(
-            "source", "target", "relation_type"
-        )
+        version.relations.filter(visible=True).select_related("source", "target", "relation_type")
     )
     visible_pks = {node.pk for node in visible_nodes}
     served = [
