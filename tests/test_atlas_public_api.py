@@ -337,3 +337,29 @@ def test_an_atlas_family_token_with_a_wrong_purpose_is_403_while_garbage_is_401(
     assert _get(
         "/api/atlas/preview?locale=en", HTTP_AUTHORIZATION="Bearer nope"
     ).status_code == 401
+
+
+def test_a_hidden_node_of_the_active_version_stays_hidden(atlas_active_version):
+    """REVIEW-15 fix: `M2` coverage — remove a hidden node of the ACTIVE version
+    from BOTH the endpoint route and the preview route: the review's own
+    e2e harness caught the invisible filter surviving the committed suite,
+    while its own projection-level test never exercised the endpoint path.
+    §10.10/§10.10.1: the public Atlas serves the active version's *visible*
+    graph, and the preview serves nothing the active body would not."""
+    from apps.atlas.tests.factories import _node
+
+    hidden = _node(
+        version=atlas_active_version.version,
+        public_key="project-abc123ab-hidden-1a2b",
+        visible=False,
+    )
+    body = _get("/api/atlas/en")
+    assert body.status_code == 200
+    body = body.json()
+    assert hidden.public_key not in json.dumps(body)
+    preview = _get(
+        "/api/atlas/preview?locale=en",
+        HTTP_AUTHORIZATION=f"Bearer {build_atlas_preview_token(atlas_active_version.pk, 'en')}",
+    )
+    assert preview.status_code == 200
+    assert hidden.public_key not in json.dumps(preview.json())
