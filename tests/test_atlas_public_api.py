@@ -14,14 +14,19 @@ The route set this file pins (spec §10.10.1 and plan Task 15):
   version), **never** 404, and success carries the
   ``no-store``/``no-cache``/``noindex, nofollow``/``no-referrer`` header set.
 
-Not this task's behaviour and deliberately untested here: ETag headers,
-``If-None-Match`` and ``Cache-Control: public, max-age=60`` (plan Task 16) —
-the serve path stays clean of them here.
+Plan Task 16 extends the public active route with the HTTP validators: the
+quoted ``ETag`` (the projection's unquoted validator, quoted only at the
+boundary), ``Cache-Control: public, max-age=60``, and conditional GET — a
+matching ``If-None-Match`` answers 304 with no body, a non-matching one serves
+normally, garbage never matches, EN and FA carry distinct validators, and a
+matching validator on a payload that fails its own contract check still fails
+closed (500), never 304.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 from uuid import uuid4
 
@@ -31,6 +36,8 @@ from django.utils import timezone
 
 from apps.atlas.models import AtlasVersion
 from apps.atlas.preview_tokens import build_atlas_preview_token
+from apps.atlas.projection import projection_etag
+from apps.atlas.services import activate_version, version_revision
 from apps.atlas.tests.factories import (
     _apply_placeholder_layout,
     _default_node_type,
@@ -44,11 +51,15 @@ from apps.atlas.tests.factories import (
 from apps.atlas.tests.factories import (
     atlas_active_version as _fixture_atlas_active_version,
 )
+from apps.atlas.tests.factories import (
+    atlas_two_versions as _fixture_atlas_two_versions,
+)
 from apps.content.models import Article, Project
 
 #: Ruling R5's import-by-name convention: ``factories.py`` is deliberately not a
 #: conftest, so this module re-declares the fixture it consumes.
 atlas_active_version = _fixture_atlas_active_version
+atlas_two_versions = _fixture_atlas_two_versions
 
 
 pytestmark = pytest.mark.django_db
@@ -363,3 +374,170 @@ def test_a_hidden_node_of_the_active_version_stays_hidden(atlas_active_version):
     )
     assert preview.status_code == 200
     assert hidden.public_key not in json.dumps(preview.json())
+
+# ---------------------------------------------------------------------------
+# HTTP validators: ETag / If-None-Match / Cache-Control (plan Task 16)
+# ---------------------------------------------------------------------------
+
+
+def test_etag_and_cache_control_headers(atlas_active_version):
+    """The public active route answers 200 with a quoted ETag over the
+    projection validator (spec §10.5) and a public cache header."""
+    response = _get("/api/atlas/en")
+    assert response.status_code == 200
+    assert response["Cache-Control"] == "public, max-age=60"
+    quoted = response["ETag"]
+    match = re.fullmatch(r'"(\d+)-([0-9a-f]{16})"', quoted)
+    assert match is not None, quoted
+    assert int(match.group(1)) == atlas_active_version.pk
+
+
+def test_if_none_match_returns_304_with_an_empty_body(atlas_active_version):
+    """A matching If-None-Match answers 304 with no body, echoing the validator."""
+    etag = _get("/api/atlas/en")["ETag"]
+    response = _get("/api/atlas/en", HTTP_IF_NONE_MATCH=etag)
+    assert response.status_code == 304
+    assert response.content == b""
+    assert response["ETag"] == etag
+
+
+def test_weak_or_listed_candidate_validators_still_match(atlas_active_version):
+    """§10.5: the validator is the literal — a `W/`-prefixed candidate or a
+    comma list carrying the current validator matches; a 304 still applies."""
+    etag = _get("/api/atlas/en")["ETag"]
+    weak = f"W/{etag}"
+    assert _get("/api/atlas/en", HTTP_IF_NONE_MATCH=weak).status_code == 304
+    listed = f'"nope-0000000000000000", {etag}'
+    assert _get("/api/atlas/en", HTTP_IF_NONE_MATCH=listed).status_code == 304
+
+
+def test_a_non_matching_if_none_match_is_served_normally(atlas_active_version):
+    etag = _get("/api/atlas/en")["ETag"]
+    response = _get("/api/atlas/en", HTTP_IF_NONE_MATCH='"deadbeef-0000000000000000"')
+    assert response.status_code == 200
+    assert response["ETag"] == etag
+    assert response.json()["locale"] == "en"
+
+
+def test_a_malformed_if_none_match_never_answers_304(atlas_active_version):
+    """Garbage in the conditional header matches nothing: the unquoted literal
+    (the wire form is quoted), an unparsable split quote, or a bare `W/`."""
+    for bad in ("unquoted-garbage", "W/", '"one', 'two"', "", "W/\"one,really\""):
+        response = _get("/api/atlas/en", HTTP_IF_NONE_MATCH=bad)
+        assert response.status_code == 200, (bad, response.status_code)
+
+
+def test_en_and_fa_carry_distinct_validators(atlas_active_version):
+    etag_en = _get("/api/atlas/en")["ETag"]
+    etag_fa = _get("/api/atlas/fa")["ETag"]
+    assert etag_en != etag_fa
+
+
+def test_an_unchanged_active_version_repeats_the_same_etag(atlas_active_version):
+    first = _get("/api/atlas/en")["ETag"]
+    second = _get("/api/atlas/en")["ETag"]
+    assert first == second
+
+
+def test_projection_etag_stays_unquoted_and_quotes_arrive_on_the_wire(
+    atlas_active_version,
+):
+    """Task 14-fix contract: the projection-level validator keeps its bare
+    `<version-id>-<16hex>` form — quoting happens only at the HTTP header
+    boundary, so the header's inside equals the projection function's output."""
+    from apps.api.api import public_atlas_payload
+
+    payload = public_atlas_payload("en")
+    unquoted = projection_etag(payload)
+    assert re.fullmatch(r"\d+-[0-9a-f]{16}", unquoted), unquoted
+    on_wire = _get("/api/atlas/en")["ETag"]
+    assert on_wire == f'"{unquoted}"'
+
+
+def test_projection_etag_over_a_differently_ordered_payload_is_unchanged_on_the_wire(
+    atlas_active_version,
+):
+    """The projection's own 14-fix contract test pins `sort_keys=True`; the
+    HTTP layer must not break it. Rebuild the same payload from a differently
+    ordered mapping and confirm the served ETag still equals the validator."""
+    from apps.api.api import public_atlas_payload
+
+    payload = public_atlas_payload("en")
+    reordered = {k: payload[k] for k in reversed(list(payload.keys()))}
+    assert projection_etag(reordered) == projection_etag(payload)
+    assert _get("/api/atlas/en")["ETag"] == f'"{projection_etag(payload)}"'
+
+
+def test_a_changed_payload_changes_the_wire_validator(atlas_active_version):
+    """Any payload change (here: a node's own override) must move the ETag."""
+    before = _get("/api/atlas/en")["ETag"]
+    node = atlas_active_version.areas[0]
+    atlas_active_version.override(node, locale="en", label="Renamed on the wire")
+    after = _get("/api/atlas/en")["ETag"]
+    assert before != after
+
+
+def test_a_changed_row_stamp_changes_the_wire_validator(atlas_active_version):
+    """Even a payload untouched but stamped again (publishedAt moves) must
+    move the validator — the projection carries the version's stamps."""
+    before = _get("/api/atlas/fa")["ETag"]
+    version = AtlasVersion.objects.get(pk=atlas_active_version.pk)
+    assert version.updated_at is not None
+    version.updated_at = version.updated_at + timedelta(seconds=1)
+    version.save(update_fields=["updated_at"])
+    after = _get("/api/atlas/fa")["ETag"]
+    assert before != after
+
+
+def test_activation_of_a_new_version_changes_the_etag(atlas_two_versions):
+    """A freshly activated version (new row, new publishedAt) moves the tag."""
+    draft = atlas_two_versions.draft
+    before = _get("/api/atlas/en")["ETag"]
+    activate_version(draft.pk, expected_revision=version_revision(draft))
+    after = _get("/api/atlas/en")["ETag"]
+    assert before != after
+
+
+def test_a_corrupt_active_version_fails_closed_even_with_a_matching_validator(
+    atlas_active_version,
+):
+    """A client's matching If-None-Match must never buy a 304 for a payload
+    that no longer passes its own contract check: the gate is re-evaluated and
+    the answer fails closed (500) — no conditional short-circuit is trusted."""
+    etag = _get("/api/atlas/en").headers.get("ETag")
+    atlas_active_version.corrupt_layout(lambda layout: layout.popitem())
+    response = _get("/api/atlas/en", HTTP_IF_NONE_MATCH=etag)
+    assert response.status_code == 500
+    assert response.json()["code"] == "atlas_inval"
+
+
+def test_the_304_path_avoids_rebuilding_the_projection(
+    atlas_active_version, monkeypatch
+):
+    """A matching If-None-Match short-circuits at the validator: the projection
+    answers an EMPTY body — it never serialises the projection to wire bytes
+    again (the plan's no-heavy-work requirement), while the serving gate itself
+    is deliberately re-evaluated on every conditional request: the fail-closed
+    rule (a corrupt payload never earns a 304) outranks the optimisation, and
+    skipping the projection rebuild would hand a corrupted active version a
+    free 304 off a stale client validator."""
+    from importlib import import_module
+
+    from django.urls import get_resolver
+
+    _ = list(get_resolver().url_patterns)  # warm the URL conf first (admin circular import)
+    api_module = import_module("apps.api.api")
+
+    etag = _get("/api/atlas/en").headers.get("ETag")
+    serialisations = []
+    real_canonical_json = api_module.canonical_json
+
+    def _spy(payload, **kwargs):
+        serialisations.append(1)
+        return real_canonical_json(payload)
+
+    monkeypatch.setattr(api_module, "canonical_json", _spy)
+    response = _get("/api/atlas/en", HTTP_IF_NONE_MATCH=etag)
+    assert response.status_code == 304
+    assert response.content == b""
+    assert serialisations == []

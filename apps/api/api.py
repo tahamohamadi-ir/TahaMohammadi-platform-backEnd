@@ -13,7 +13,7 @@ import time
 from datetime import date, datetime
 from pathlib import PurePosixPath
 
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, HttpResponseNotModified
 from ninja import Field, NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.errors import ValidationError as NinjaValidationError
@@ -40,7 +40,7 @@ from apps.atlas.preview_tokens import (
     AtlasPreviewCapability,
     parse_atlas_preview_token,
 )
-from apps.atlas.projection import build_locale_projection
+from apps.atlas.projection import build_locale_projection, canonical_json, projection_etag
 from apps.atlas.validation import FailedServingGate, validate_payload_contract
 from apps.composition.projection import public_story_document
 from apps.content.models import (
@@ -2634,6 +2634,43 @@ def get_graph(request, locale: str) -> GraphPayloadOut:
 # ---------------------------------------------------------------------------
 
 
+#: The public Atlas cache policy (plan Task 16): short-lived CDN/browser reuse.
+ATLAS_CACHE_CONTROL = "public, max-age=60"
+
+
+def _atlas_header_candidates(header: str) -> list[str]:
+    """The ``If-None-Match`` candidate validators, deliberately minimal.
+
+    The header is a comma list of quoted entity-tags; a client may weaken one
+    with a ``W/`` prefix. Comparison treats the validator as the literal
+    (spec §10.5), so each candidate is stripped of its optional ``W/`` and its
+    surrounding quotes and compared to the bare unquoted internal validator.
+    Malformed input can only produce candidates that cannot equal that literal,
+    so garbage never earns a 304; no fuller RFC-7232 parser is added.
+    """
+    candidates: list[str] = []
+    if not header or not header.strip():
+        return candidates
+    if "*" in header:
+        candidates.append(header.strip())
+    for chunk in header.split(","):
+        candidate = chunk.strip()
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        if len(candidate) >= 2 and candidate.startswith('"') and candidate.endswith('"'):
+            candidate = candidate[1:-1]
+        candidates.append(candidate)
+    return candidates
+
+
+def _if_none_match_matches(header: str, validator: str) -> bool:
+    """True only when one candidate equals the current, freshly computed validator."""
+    if not header or not header.strip():
+        return False
+    candidates = _atlas_header_candidates(header)
+    return any(candidate == validator for candidate in candidates)
+
+
 def _atlas_error_response(request, status: int, code: str, message: str):
     """The I08 error envelope for the Atlas routes (``atlas_not_found``/``atlas_inval``)."""
     return _error_response(request, status, code, message)
@@ -2761,7 +2798,11 @@ def get_atlas(request, locale: str):
     404 ``atlas_not_found`` for an unsupported locale or no active version; 500
     ``atlas_inval`` with no partial body when the active version fails its own
     contract check. Draft rows are unreachable by construction — the serving
-    path reads nothing but the ``status="active"`` row.
+    path reads nothing but the ``status="active"`` row. Conditional GET
+    (plan Task 16): a matching ``If-None-Match`` answers 304 with no body and a
+    public ``max-age=60`` cache header, while an active version that fails its
+    contract check never earns a 304 — the short-circuit fires only after the
+    freshly computed validator proves the current payload is still servable.
     """
     if locale not in ("en", "fa"):
         return _atlas_error_response(request, 404, "atlas_not_found", "Unknown Atlas locale.")
@@ -2771,7 +2812,21 @@ def get_atlas(request, locale: str):
         return _atlas_gate_failure(request, exc.issues)
     if payload is None:
         return _atlas_error_response(request, 404, "atlas_not_found", "No active Atlas version.")
-    return api.create_response(request, payload, status=200)
+
+    validator = projection_etag(payload)
+    if _if_none_match_matches(request.headers.get("If-None-Match", ""), validator):
+        response = HttpResponseNotModified()
+        response.headers["ETag"] = f'"{validator}"'
+        response.headers["Cache-Control"] = ATLAS_CACHE_CONTROL
+        return response
+
+    body = canonical_json(payload)
+    response = HttpResponse(
+        body, content_type="application/json", charset="utf-8", status=200
+    )
+    response.headers["ETag"] = f'"{validator}"'
+    response.headers["Cache-Control"] = ATLAS_CACHE_CONTROL
+    return response
 
 
 from apps.analytics.api import (  # noqa: E402
