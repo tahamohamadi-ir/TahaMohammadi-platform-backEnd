@@ -1,0 +1,83 @@
+{
+  "contractVersion": "atlas01-1.0.0",
+  "locale": "en",
+  "version": {
+    "id": 12,
+    "revision": "12-2026-09-20T10:31:04.221000+00:00",
+    "publishedAt": "2026-09-20T10:31:04.221000+00:00",
+    "nodeCount": 62,
+    "relationCount": 118,
+    "layoutRevision": 7
+  },
+  "nodeTypes": [
+    {
+      "key": "research-area",
+      "label": "Research area",
+      "semanticRole": "area",
+      "visualRole": "domain",
+      "allowAsRoot": true,
+      "allowChildren": true,
+      "filterVisible": true
+    }
+  ],
+  "relationTypes": [
+    {
+      "key": "uses",
+      "label": "uses",
+      "inverseLabel": "used by",
+      "directed": true,
+      "hierarchyRole": false,
+      "visualPriority": 70
+    }
+  ],
+  "groups": [
+    {
+      "key": "group-4f1a2b3c",
+      "label": "Vision & language",
+      "description": "",
+      "nodeKeys": [
+        "research-area-1a2b3c4d"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "key": "research-area-1a2b3c4d",
+      "type": "research-area",
+      "label": "PARS-SQL / VTD-Edge",
+      "summary": "…",
+      "accessibleLabel": "…",
+      "importance": 80,
+      "mobileOverviewPriority": "featured",
+      "aliases": [
+        "Persian text-to-SQL"
+      ],
+      "canonical": {
+        "family": "researchtopic",
+        "id": "1",
+        "slug": "pars-sql-vtd-edge",
+        "title": "PARS-SQL / VTD-Edge",
+        "routeFamily": "research",
+        "href": "/en/research/pars-sql-vtd-edge/"
+      },
+      "position": {
+        "x": 41.882,
+        "y": 12.021,
+        "z": 6.5
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "identity-2b3c4d5e~research-focus~research-area-1a2b3c4d",
+      "type": "research-focus",
+      "source": "identity-2b3c4d5e",
+      "target": "research-area-1a2b3c4d",
+      "directed": true,
+      "weight": 1,
+      "hierarchy": false,
+      "inverseLabel": "research focus of",
+      "explanation": null
+    }
+  ]
+}

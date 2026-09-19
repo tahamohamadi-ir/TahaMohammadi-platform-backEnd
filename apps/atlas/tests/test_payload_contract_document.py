@@ -12,6 +12,7 @@ decorative.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -19,34 +20,48 @@ from apps.atlas.validation import BLOCKING_CODES, WARNING_CODES
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 DOC_PATH = BACKEND_ROOT / "docs" / "contracts" / "ATLAS-PAYLOAD-CONTRACT.md"
-# The spec lives in the coordination root above the main platform checkout:
-# try sibling worktree layouts, then fall back to repo-rooted candidates.
-_SPEC_CANDIDATES = (
-    Path(__file__).resolve().parents[4]  # worktrees live under .atlas-worktrees/
-    / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md",
-    Path("D:/Project/tahamohammadi-platform")
-    / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md",
-)
-SPEC_PATH = next(
-    (candidate for candidate in _SPEC_CANDIDATES if candidate.exists()),
-    _SPEC_CANDIDATES[0],
+# The design spec is tracked in the coordination root, not in this repo — CI
+# checks out only the backend, so the wire fields come from a repository-local
+# extraction of the §10.2 example. When the real spec is genuinely available
+# (env override or a sibling coordination checkout) we USE it and additionally
+# cross-check the fixture against it; isolated CI falls back to the fixture.
+FIXTURE_PATH = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "knowledge_atlas_v1_payload_contract.json"
 )
 
 
-def _spec() -> str:
-    assert SPEC_PATH.exists(), f"design spec missing: {SPEC_PATH}"
-    return SPEC_PATH.read_text(encoding="utf-8")
+def _spec_candidates() -> tuple[Path, ...]:
+    out: list[Path] = []
+    env = os.environ.get("ATLAS_SPEC_PATH")
+    if env:
+        out.append(Path(env))
+    # No OS-specific guesses: only a sibling checkout that actually exists
+    # matters, discovered relative to this repo checkout, one level per try.
+    for level in range(1, 5):
+        out.append(
+            BACKEND_ROOT.joinpath(*("../" * level))
+            / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md"
+        )
+    return tuple(dict.fromkeys(out))
 
 
-def _doc() -> str:
-    assert DOC_PATH.exists(), f"contract document missing: {DOC_PATH}"
-    return DOC_PATH.read_text(encoding="utf-8")
+def _spec() -> str | None:
+    """Return the real coordination spec text if genuinely available."""
+    for candidate in _spec_candidates():
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    return None
 
 
-def _wire_field_names() -> list[str]:
-    """Every field name in the §10.2 response example, parsed from the SPEC."""
-    spec = _spec()
-    payload = json.loads(re.search(r"```json\n(.+?)\n```", spec, re.S).group(1))
+def _fixture_payload() -> dict:
+    assert FIXTURE_PATH.is_file(), f"contract fixture missing: {FIXTURE_PATH}"
+    return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+def _payload_wire_names(payload: object) -> list[str]:
+    """Every field name in the wire payload, walked depth-first."""
     names: list[str] = []
 
     def walk(obj: object) -> None:
@@ -61,10 +76,39 @@ def _wire_field_names() -> list[str]:
     return names
 
 
-def test_document_lists_every_wire_field_name_from_the_spec() -> None:
+def _fixture_wire_names() -> list[str]:
+    return _payload_wire_names(_fixture_payload())
+
+
+def _doc() -> str:
+    assert DOC_PATH.exists(), f"contract document missing: {DOC_PATH}"
+    return DOC_PATH.read_text(encoding="utf-8")
+
+
+def test_document_lists_every_wire_field_name_from_the_fixture() -> None:
     doc = _doc()
-    missing = [name for name in _wire_field_names() if name not in doc]
+    missing = [name for name in _fixture_wire_names() if name not in doc]
     assert missing == [], f"wire field names missing from the document: {missing}"
+
+
+def test_local_spec_when_available_matches_the_fixture() -> None:
+    """Cross-repo guard: real coordination §10.2 must equal the fixture."""
+    spec = _spec()
+    if spec is None:
+        return  # isolated CI checkout — fixture path is the contract source
+    normalized = spec.replace("\r\n", "\n")
+    anchor = re.search(r"^#{1,4}\s*10\.2\s", normalized, re.M)
+    stop = re.search(r"^#{1,4}\s*10\.3\s", normalized[anchor.end():], re.M)
+    section = normalized[anchor.start(): anchor.end() + stop.start()]
+    live_payload = json.loads(
+        re.search(r"```json\n(.+?)\n```", section, re.S).group(1)
+    )
+    assert live_payload == _fixture_payload(), (
+        "the real design-spec §10.2 has drifted from the repository-local "
+        "fixture — regenerate the fixture from the accepted spec"
+    )
+
+    assert [_payload_wire_names(live_payload)] == [_fixture_wire_names()]
 
 
 def test_document_lists_the_full_issue_code_vocabulary_in_order() -> None:
