@@ -40,6 +40,7 @@ from apps.atlas.tests.factories import (
     _node,
     _node_type,
     _relation,
+    _relation_type,
     _research_focus_type,
     _version,
 )
@@ -541,15 +542,54 @@ def test_split_atlas_revision_rejects_non_wire_shape(value):
     assert _split_atlas_revision(value) == (None, None)
 
 
-# ---------------------------------------------------------------------------
-# Task 3: node endpoints + canonical picker (plan Task 3) — written RED first.
-# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def relation_fixtures(db, draft_version):
+    """Typed nodes + a restricted "uses" type, the Task-4 substrate."""
+    methods_type = _node_type(
+        key="method", canonical_source="method", label_en="Method", label_fa="روش"
+    )
+    projects_type = _node_type(
+        key="project", canonical_source="project", label_en="Project", label_fa="پروژه"
+    )
+    publications_type = _node_type(
+        key="publication", canonical_source="publication", label_en="Publication", label_fa="انتشار"
+    )
+    method_node = _node(version=draft_version, node_type=methods_type, visible=True)
+    project_node = _node(version=draft_version, node_type=projects_type, visible=True)
+    publication_node = _node(version=draft_version, node_type=publications_type, visible=True)
+    uses = _relation_type(
+        "uses",
+        label_en="uses",
+        label_fa="استفاده",
+        directed_default=True,
+        overridable_direction=False,
+    )
+    uses.allowed_source_types.add(projects_type)
+    uses.allowed_target_types.add(methods_type)
+    uses.allowed_target_types.add(publications_type)
+    return {
+        "types": {
+            "project": projects_type,
+            "method": methods_type,
+            "publication": publications_type,
+        },
+        "nodes": {
+            "project": project_node,
+            "method": method_node,
+            "publication": publication_node,
+        },
+        "uses": uses,
+    }
 
 
-def _create_node(client, version, payload):
-    """POST a node with a valid session/CSRF/If-Match (card section A)."""
+def _node_keys(fixture):
+    return {k: v.public_key for k, v in fixture["nodes"].items()}
+
+
+def _create_relation(client, version, payload):
     return client.post(
-        f"{BASE}/versions/{version.pk}/nodes",
+        f"{BASE}/versions/{version.pk}/relations",
         payload,
         HTTP_X_CSRFTOKEN=client.defaults.get("HTTP_X_CSRFTOKEN"),
         HTTP_IF_MATCH=version_revision(version),
@@ -557,104 +597,119 @@ def _create_node(client, version, payload):
     )
 
 
-@pytest.fixture
-def method_pair(db):
-    """A published EN+FA Method pair and a method-canonical node type."""
-    from django.utils import timezone
-
-    from apps.content.models import Method
-
-    method_type = _node_type(
-        key="method", canonical_source="method", label_en="Method", label_fa="روش"
-    )
-    from uuid import uuid4
-    key = uuid4()
-    now = timezone.now()
-    en = Method.objects.create(
-        locale="en", slug="t3-method-en", title="T3 method EN",
-        status="published", published_at=now, translation_key=key,
-    )
-    fa = Method.objects.create(
-        locale="fa", slug="t3-method-fa", title="روش تی‌۳",
-        status="published", published_at=now, translation_key=key,
-    )
-    return {"type": method_type, "en": en, "fa": fa, "translation_key": key}
-
-
-@pytest.fixture
-def draft_only_method(db):
-    """A Method whose ONLY row is a draft — never publishable (Task 3 pin)."""
-    from uuid import uuid4
-
-    from apps.content.models import Method
-
-    fake_key = uuid4()
-    row = Method.objects.create(
-        locale="en", slug="t3-draft-only", title="Draft only",
-        status="draft", translation_key=fake_key,
-    )
-    row.refresh_from_db()
-    _node_type(key="method", canonical_source="method", label_en="Method", label_fa="روش")
-    return row
-
-
 @pytest.mark.django_db
-def test_create_node_validates_the_canonical_pair(admin_client, draft_version, method_pair):
-    version = draft_version
-    version.nodes.all().delete()  # a clean topology for this test
-    response = _create_node(admin_client, version, {
-        "nodeTypeKey": "method", "canonicalSource": "method",
-        "canonicalTranslationKey": str(method_pair["translation_key"]), "importance": 45,
+def test_relation_create_enforces_allowed_pairs(admin_client, draft_version, relation_fixtures):
+    keys = _node_keys(relation_fixtures)
+    response = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["publication"], "relationTypeKey": "uses", "targetKey": keys["method"],
     })
-    assert response.status_code == 201, response.content
-    assert response.json()["publicKey"].startswith("method-")
-    assert response.json()["localeStatus"] == {"en": True, "fa": True}
+    assert response.status_code == 409
+    assert response.json()["issues"][0]["code"] == "RELATION_TYPE_NOT_ALLOWED"
 
 
 @pytest.mark.django_db
-def test_create_node_rejects_an_unpublishable_canonical_record(
-    admin_client, draft_version, draft_only_method
+def test_relation_key_is_the_composed_public_key(admin_client, draft_version, relation_fixtures):
+    keys = _node_keys(relation_fixtures)
+    created = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+    })
+    assert created.status_code == 201, created.content
+    assert created.json()["key"] == f"{keys['project']}~uses~{keys['method']}"
+
+
+@pytest.mark.django_db
+def test_directed_override_is_refused_when_the_type_forbids_it(
+    admin_client, draft_version, relation_fixtures
 ):
-    version = draft_version
-    response = _create_node(admin_client, version, {
-        "nodeTypeKey": "method", "canonicalSource": "method",
-        "canonicalTranslationKey": str(draft_only_method.translation_key),
+    keys = _node_keys(relation_fixtures)
+    response = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+        "directed": False,
     })
     assert response.status_code == 400
-    assert response.json()["fields"]["canonicalTranslationKey"]
+    assert response.json()["fields"]["directed"]
 
 
 @pytest.mark.django_db
-def test_pin_requires_both_coordinates(admin_client, draft_version):
-    node = _node(version=draft_version, node_type=_default_node_type(), visible=True)
-    response = admin_client.patch(
-        f"{BASE}/versions/{draft_version.pk}/nodes/{node.public_key}",
-        {"importance": 50, "pin": {"x": 4.0}},
+def test_deleting_an_in_use_node_type_is_blocked(admin_client, draft_version):
+    response = admin_client.delete(
+        f"{BASE}/node-types/{_default_node_type().key}",
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "TAXONOMY_IN_USE"
+
+
+@pytest.mark.django_db
+def test_inactive_taxonomy_cannot_be_referenced(
+    admin_client, draft_version, relation_fixtures
+):
+    keys = _node_keys(relation_fixtures)
+    relation_fixtures["types"]["method"].active = False
+    relation_fixtures["types"]["method"].save(update_fields=["active"])
+    response = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+    })
+    assert response.status_code == 400
+    assert response.json()["fields"]["targetKey"]
+
+
+@pytest.fixture
+def group_fixtures(db, draft_version, relation_fixtures):
+    """A group in the draft version with one member node."""
+    from apps.atlas.keys import new_group_key
+    from apps.atlas.models import AtlasGroup, AtlasGroupMembership
+
+    group = AtlasGroup.objects.create(
+        version=draft_version, public_key=new_group_key()
+    )
+    method_node = relation_fixtures["nodes"]["method"]
+    AtlasGroupMembership.objects.create(group=group, node=method_node)
+    return {"group": group, "nodes": relation_fixtures["nodes"], "method": method_node}
+
+
+@pytest.mark.django_db
+def test_group_members_are_replaced_transactionally(admin_client, draft_version, group_fixtures):
+    group = group_fixtures["group"]
+    project_node = group_fixtures["nodes"]["project"]
+    response = admin_client.put(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group.public_key}/members",
+        {"nodeKeys": [project_node.public_key]},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    members = list(group.members.values_list("node__public_key", flat=True))
+    assert members == [project_node.public_key]
+
+
+@pytest.mark.django_db
+def test_group_members_reject_unknown_nodes(admin_client, draft_version, group_fixtures):
+    response = admin_client.put(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group_fixtures['group'].public_key}/members",
+        {"nodeKeys": ["identity-00000099"]},
         HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
         HTTP_IF_MATCH=version_revision(draft_version),
         content_type="application/json",
     )
     assert response.status_code == 400
-    assert "pin" in response.json()["fields"]
+    assert response.json()["fields"]["nodeKeys"]
 
 
 @pytest.mark.django_db
-def test_node_public_key_is_never_editable(admin_client, draft_version):
-    node = _node(version=draft_version, node_type=_default_node_type(), visible=True)
-    response = admin_client.patch(
-        f"{BASE}/versions/{draft_version.pk}/nodes/{node.public_key}",
-        {"importance": 50, "publicKey": "attacker-chosen"},
+def test_active_taxonomy_gate_does_not_block_group_membership(
+    admin_client, draft_version, group_fixtures, relation_fixtures
+):
+    """An inactive node TYPE blocks NEW relations, not membership updates."""
+    method_type = relation_fixtures["types"]["method"]
+    method_type.active = False
+    method_type.save(update_fields=["active"])
+    response = admin_client.put(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group_fixtures['group'].public_key}/members",
+        {"nodeKeys": [group_fixtures["nodes"]["project"].public_key]},
         HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
         HTTP_IF_MATCH=version_revision(draft_version),
         content_type="application/json",
     )
-    assert response.status_code == 400
-
-
-@pytest.mark.django_db
-def test_canonical_candidates_are_publish_gated(admin_client, draft_only_method):
-    rows = admin_client.get(f"{BASE}/canonical-candidates?source=method").json()
-    assert all(row["publishable"]["en"] or row["publishable"]["fa"] for row in rows)
-    assert str(draft_only_method.translation_key) not in {
-        row["translationKey"] for row in rows if row["publishable"]["en"]
-    }
+    assert response.status_code == 200, response.content

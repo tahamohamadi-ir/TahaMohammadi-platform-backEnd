@@ -53,6 +53,7 @@ from apps.api.admin_common import (
     PRECONDITION_REQUIRED,
     STALE_REVISION,
     VALIDATION,
+    VALIDATION_BLOCKED,
     AdminError,
     _audit_log,
     _check_csrf,
@@ -60,7 +61,15 @@ from apps.api.admin_common import (
     _require_admin_otp,
 )
 from apps.atlas import keys
-from apps.atlas.models import AtlasGroupMembership, AtlasNode, AtlasNodeType, AtlasVersion
+from apps.atlas.models import (
+    AtlasGroup,
+    AtlasGroupMembership,
+    AtlasNode,
+    AtlasNodeType,
+    AtlasRelation,
+    AtlasRelationType,
+    AtlasVersion,
+)
 from apps.atlas.services import VERSION_STATUSES, clone_version, version_revision
 
 atlas_router = Router()
@@ -525,7 +534,6 @@ def _apply_node_write(node: AtlasNode, payload: AtlasNodePatchIn) -> AtlasNode:
     """
     from apps.atlas.models import (
         MOBILE_OVERVIEW_PRIORITIES,
-        AtlasGroup,
         AtlasGroupMembership,
         AtlasNodeTranslation,
     )
@@ -816,3 +824,457 @@ def canonical_candidates(request, source: str = "", q: str = ""):
         bucket["localeStatus"][locale] = True
         bucket["publishable"][locale] = is_public
     return [rows[k] for k in sorted(rows)]
+
+
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Task-4 routes: relations, group membership, taxonomy CRUD (plan Task 4).
+# A write that would leave the graph invalid answers 409 VALIDATION_BLOCKED
+# with Plan A's issue array (validate_version); ProtectedError and in-use
+# taxonomy rows answer 409 TAXONOMY_IN_USE (Task 4 step 3).
+# ---------------------------------------------------------------------------
+
+TAXONOMY_IN_USE = "TAXONOMY_IN_USE"
+
+
+class AtlasRelationWriteIn(Schema):
+    """POST /versions/<id>/relations body (spec §5.3, camelCase on the wire)."""
+
+    sourceKey: str
+    relationTypeKey: str
+    targetKey: str
+    directed: bool | None = None
+    weight: int | None = Field(default=None, ge=1, le=100)
+    visible: bool | None = None
+    explanation: dict[str, str] | None = Field(default=None)
+
+
+class AtlasRelationPatchIn(Schema):
+    """PATCH body — structural keys change nothing; only mutable fields land."""
+
+    directed: bool | None = None
+    weight: int | None = Field(default=None, ge=1, le=100)
+    visible: bool | None = None
+    explanation: dict[str, str | None] | None = Field(default=None)
+
+
+class AtlasRelationRowOut(Schema):
+    """One relation row — the key is the composed public key (spec §5.3)."""
+
+    key: str
+    sourceKey: str
+    relationTypeKey: str
+    targetKey: str
+    directed: bool
+    weight: int
+    visible: bool
+
+
+class AtlasGroupWriteIn(Schema):
+    label: str = Field(min_length=1, max_length=200)
+
+
+class AtlasGroupRowOut(Schema):
+    key: str
+    label: str
+    memberKeys: list[str]
+
+
+
+class AtlasMembersIn(Schema):
+    nodeKeys: list[str]
+
+def _atlas_model_validation(exc: DjangoValidationError, *, remap: dict | None = None) -> AdminError:
+    """Alias kept for symmetry with nodes (the same 400 envelope)."""
+    return _validation_from_django(exc, remap=remap)
+
+
+def _resolve_relation_endpoints(version: AtlasVersion, payload: AtlasRelationWriteIn) -> dict:
+    """404-check both endpoint keys and reload the relation type."""
+    source = version.nodes.filter(public_key=payload.sourceKey).first()
+    if source is None:
+        raise AdminError(400, VALIDATION, "Unknown sourceKey.",
+                         fields={"sourceKey": [f"no node {payload.sourceKey!r} in this version."]})
+    target = version.nodes.filter(public_key=payload.targetKey).first()
+    if target is None:
+        raise AdminError(400, VALIDATION, "Unknown targetKey.",
+                         fields={"targetKey": [f"no node {payload.targetKey!r} in this version."]})
+    relation_type = AtlasRelationType.objects.filter(key=payload.relationTypeKey).first()
+    if relation_type is None:
+        raise AdminError(400, VALIDATION, "Unknown relationTypeKey.",
+        fields={"relationTypeKey": [f"no relation type {payload.relationTypeKey!r}."]},
+    )
+    if not relation_type.active:
+        raise AdminError(400, VALIDATION, "Inactive relation type.",
+                         fields={"relationTypeKey": [f"{payload.relationTypeKey!r} is retired."]})
+    # The taxonomy active gate spans the TYPES of the endpoint nodes (plan Task 4:
+    # "inactive taxonomy cannot be referenced" — a retired node TYPE cannot
+    # participate in a NEW relation).
+    for endpoint, node in (("sourceKey", source), ("targetKey", target)):
+        if not node.node_type.active:
+            raise AdminError(400, VALIDATION, "Inactive node type.",
+                             fields={endpoint: [f"{node.node_type.key!r} is retired."]})
+    return {"source": source, "target": target, "relation_type": relation_type}
+
+
+
+def _issue_template(relation_key: str) -> dict:
+    """One RELATION_TYPE_NOT_ALLOWED issue in the wire spelling (spec §20)."""
+    return {
+        "code": "RELATION_TYPE_NOT_ALLOWED",
+        "relationKey": relation_key,
+        "messageToken": "atlas.relationTypeNotAllowed",
+    }
+
+
+def _build_relation(
+    version: AtlasVersion, payload: AtlasRelationWriteIn, checks: dict
+) -> AtlasRelation:
+    """Author a relation under the model's own rules + Plan A's pair battery.
+
+    Pair rule / self-loop / stale-taxonomy answers live here because they are
+    the write-time guards Plan A's validation mirrors; the full-graph verdict
+    is the aggregate report (blocked write → 409 with the issue list).
+    """
+    from apps.atlas.models import AtlasRelation, AtlasRelationTranslation
+    from apps.atlas.validation import allowed_types_by_relation_type, validate_version
+
+    relation_type = checks["relation_type"]
+    allowed = allowed_types_by_relation_type([relation_type.pk])[relation_type.pk]
+    source, target = checks["source"], checks["target"]
+    composed = keys.relation_public_key(
+        payload.sourceKey, payload.relationTypeKey, payload.targetKey,
+        directed=(payload.directed if payload.directed is not None
+                  else relation_type.directed_default),
+    )
+    blocked_issues = []
+    if allowed.sources and source.node_type_id not in allowed.sources:
+        blocked_issues.append(composed)
+    if allowed.targets and target.node_type_id not in allowed.targets:
+        blocked_issues.append(composed)
+    if blocked_issues:
+        raise AdminError(
+            409,
+            VALIDATION_BLOCKED,
+            "Relation type is not allowed for this endpoint pair.",
+            issues=[_issue_template(i) for i in blocked_issues],
+        )
+    directed = payload.directed
+    if directed is None:
+        directed = relation_type.directed_default
+    if directed != relation_type.directed_default and not relation_type.overridable_direction:
+        raise AdminError(
+            400,
+            VALIDATION,
+            "This relation type does not allow overriding direction.",
+            fields={"directed": [f"{relation_type.key!r} fixes direction."]},
+        )
+    relation = AtlasRelation(
+        version=version,
+        source=source,
+        target=target,
+        relation_type=relation_type,
+        directed=directed,
+        weight=payload.weight if payload.weight is not None else relation_type.default_weight,
+        visible=True if payload.visible is None else payload.visible,
+    )
+    try:
+        relation.full_clean()
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    relation.save()
+    for locale, explanation in (payload.explanation or {}).items():
+        if locale not in ("en", "fa"):
+            raise AdminError(400, VALIDATION, "Unknown explanation locale.",
+                             fields={"explanation": [f"unsupported locale {locale!r}."]})
+        AtlasRelationTranslation.objects.create(
+            relation=relation, locale=locale, explanation=str(explanation or ""),
+        )
+    validate_version(version)  # the graph-level battery — surfaced by validate endpoint (Task 5)
+    return relation
+
+
+@atlas_router.get("/versions/{version_id}/relations", response=list[AtlasRelationRowOut])
+def list_relations(request, version_id: int):
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    rows = []
+    for relation in version.relations.select_related(
+        "relation_type"
+    ).order_by("sort_order", "id"):
+        source = version.nodes.get(pk=relation.source_id)
+        target = version.nodes.get(pk=relation.target_id)
+        rows.append(AtlasRelationRowOut(
+            key=relation.public_key,
+            sourceKey=source.public_key,
+            relationTypeKey=relation.relation_type.key,
+            targetKey=target.public_key,
+            directed=relation.directed,
+            weight=relation.weight,
+            visible=relation.visible,
+        ))
+    return rows
+
+
+@atlas_router.post("/versions/{version_id}/relations", response={201: AtlasRelationRowOut})
+def create_relation(request, version_id: int, payload: AtlasRelationWriteIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    checks = _resolve_relation_endpoints(version, payload)
+    relation = _build_relation(version, payload, checks)
+    _atlas_audit(
+        request,
+        action="atlas.relation.create",
+        version=version,
+        status=201,
+        detail=f"POST /versions/{version.pk}/relations {relation.public_key} -> 201",
+    )
+    return _relation_row(relation)
+
+
+def _relation_row(relation) -> AtlasRelationRowOut:
+    return AtlasRelationRowOut(
+        key=relation.public_key,
+        sourceKey=relation.source.public_key,
+        relationTypeKey=relation.relation_type.key,
+        targetKey=relation.target.public_key,
+        directed=relation.directed,
+        weight=relation.weight,
+        visible=relation.visible,
+    )
+
+
+def _atlas_taxonomy_in_use(exc: Exception) -> AdminError:
+    """Stack the taxonomy in-use boundary under one canonical envelope."""
+    return AdminError(
+        409,
+        TAXONOMY_IN_USE,
+        "This taxonomy row is in use and cannot be deleted.",
+        fields={"key": ["referenced by existing atlas rows."]},
+    )
+
+
+@atlas_router.put("/versions/{version_id}/groups/{group_key}/members", response=AtlasGroupRowOut)
+def replace_group_members(request, version_id: int, group_key: str, payload: AtlasMembersIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    group = version.groups.filter(public_key=group_key).first()
+    if group is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas group not found.")
+    node_keys = list(dict.fromkeys(payload.nodeKeys))
+    nodes = list(version.nodes.filter(public_key__in=node_keys))
+    found = {node.public_key for node in nodes}
+    if set(node_keys) != found:
+        unknown = [node_key for node_key in node_keys if node_key not in found]
+        raise AdminError(
+            400,
+            VALIDATION,
+            "Unknown nodeKeys.",
+            fields={
+                "nodeKeys": [f"no node {key!r} in this version." for key in unknown]
+            },
+        )
+    with transaction.atomic():
+        AtlasGroupMembership.objects.filter(group=group, node__version=version).exclude(
+            node__public_key__in=node_keys
+        ).delete()
+        existing = set(
+            AtlasGroupMembership.objects.filter(group=group).values_list(
+                "node__public_key", flat=True
+            )
+        )
+        for sort_order, node_key in enumerate(node_keys):
+            node = next(n for n in nodes if n.public_key == node_key)
+            if node_key not in existing:
+                AtlasGroupMembership.objects.create(group=group, node=node, sort_order=sort_order)
+    _atlas_audit(
+        request,
+        action="atlas.group.members.replace",
+        version=version,
+        status=200,
+        detail=f"PUT /versions/{version.pk}/groups/{group_key}/members -> 200",
+    )
+    return _group_row(group)
+
+
+def _group_row(group) -> AtlasGroupRowOut:
+    from apps.atlas.models import AtlasGroupTranslation
+
+    label_row = AtlasGroupTranslation.objects.filter(group=group, locale="en").first()
+    return AtlasGroupRowOut(
+        key=group.public_key,
+        label=label_row.label if label_row else "",
+        memberKeys=list(
+            AtlasGroupMembership.objects.filter(group=group)
+            .order_by("sort_order")
+            .values_list("node__public_key", flat=True)
+        ),
+    )
+
+
+@atlas_router.delete("/node-types/{type_key}", response={204: None})
+def delete_node_type(request, type_key: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    node_type = AtlasNodeType.objects.filter(key=type_key).first()
+    if node_type is None:
+        raise AdminError(404, "NOT_FOUND", "Node type not found.")
+    in_use = node_type._referencing_rows_exist()
+    if in_use:
+        raise AdminError(409, TAXONOMY_IN_USE, "A node type in use cannot be deleted.",
+                         fields={"key": [f"{type_key!r} has nodes referencing it."]})
+    node_type.delete()
+    _atlas_audit_generic(
+        request,
+        action="atlas.nodeType.delete",
+        object_id=type_key,
+        detail=f"DELETE /node-types/{type_key} -> 204",
+    )
+    return 204, None
+
+
+def _atlas_audit_generic(request, *, action: str, object_id: str, detail: str) -> None:
+    _audit_log(
+        request,
+        action=action,
+        model_name="atlas",
+        object_id=str(object_id),
+        detail=detail,
+    )
+
+
+@atlas_router.patch(
+    "/versions/{version_id}/relations/{relation_key}", response={200: AtlasRelationRowOut}
+)
+def patch_relation(request, version_id: int, relation_key: str, payload: AtlasRelationPatchIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    relation = _resolve_relation_by_key(version, relation_key)
+    if payload.directed is not None and payload.directed != relation.directed:
+        if not relation.relation_type.overridable_direction:
+            raise AdminError(400, VALIDATION, "This relation type fixes direction.",
+                             fields={"directed": ["not overridable."]})
+        relation.directed = payload.directed
+    if payload.weight is not None:
+        relation.weight = payload.weight
+    if payload.visible is not None:
+        relation.visible = payload.visible
+    try:
+        relation.full_clean()
+        relation.save(update_fields=["directed", "weight", "visible"])
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    _atlas_audit(
+        request, action="atlas.relation.update", version=version, status=200,
+        detail=f"PATCH relations/{relation_key} -> 200",
+    )
+    return _relation_row(relation)
+
+
+def _resolve_relation_by_key(version: AtlasVersion, relation_key: str):
+    """Find one relation by its composed public key (nothing is stored)."""
+    parts = relation_key.split("~")
+    if len(parts) != 3:
+        raise AdminError(404, "NOT_FOUND", "Atlas relation not found.")
+    first, relation_type_key, second = parts
+    for ordered in ((first, second), (second, first)):
+        candidates = version.relations.filter(
+            relation_type__key=relation_type_key,
+            source__public_key=ordered[0],
+            target__public_key=ordered[1],
+        )
+        match = candidates.select_related("relation_type").first()
+        if match is not None:
+            return match
+    raise AdminError(404, "NOT_FOUND", "Atlas relation not found.")
+
+
+@atlas_router.delete("/versions/{version_id}/relations/{relation_key}", response={204: None})
+def delete_relation(request, version_id: int, relation_key: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    relation = _resolve_relation_by_key(version, relation_key)
+    relation.delete()
+    _atlas_audit(
+        request, action="atlas.relation.delete", version=version, status=204,
+        detail=f"DELETE relations/{relation_key} -> 204",
+    )
+    return 204, None
+
+
+@atlas_router.get("/versions/{version_id}/groups", response=list[AtlasGroupRowOut])
+def list_groups(request, version_id: int):
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    return [_group_row(group) for group in version.groups.order_by("sort_order", "id")]
+
+
+@atlas_router.post("/versions/{version_id}/groups", response={201: AtlasGroupRowOut})
+def create_group(request, version_id: int, payload: AtlasGroupWriteIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    from apps.atlas.models import AtlasGroupTranslation
+
+    group = AtlasGroup(version=version, public_key=keys.new_group_key())
+    try:
+        group.full_clean()
+        group.save()
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    AtlasGroupTranslation.objects.create(group=group, locale="en", label=payload.label)
+    _atlas_audit(
+        request, action="atlas.group.create", version=version, status=201,
+        detail=f"POST /versions/{version.pk}/groups {group.public_key} -> 201",
+    )
+    return _group_row(group)
+
+
+@atlas_router.delete("/versions/{version_id}/groups/{group_key}", response={204: None})
+def delete_group(request, version_id: int, group_key: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    group = version.groups.filter(public_key=group_key).first()
+    if group is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas group not found.")
+    group.delete()
+    _atlas_audit(
+        request, action="atlas.group.delete", version=version, status=204,
+        detail=f"DELETE groups/{group_key} -> 204",
+    )
+    return 204, None

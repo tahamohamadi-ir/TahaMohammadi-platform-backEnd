@@ -86,13 +86,27 @@ MEDIA_IN_USE = "MEDIA_IN_USE"
 
 
 class AdminError(Exception):
-    """Structured API error carrying status + Problem-Details-style body."""
+    """Structured API error carrying status + Problem-Details-style body.
 
-    def __init__(self, status: int, code: str, message: str, fields: dict | None = None):
+    ``issues`` is the Plan-B extension (Atlas write-blocked envelope): an
+    optional list of camelCase issue dicts the graph/validation layers
+    produce; ``None`` keeps the envelope byte-identical for every existing
+    router (additive wire change, plan Task 4 step 3).
+    """
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        fields: dict | None = None,
+        issues: list | None = None,
+    ):
         self.status = status
         self.code = code
         self.message = message
         self.fields = fields or {}
+        self.issues = issues
 
 
 def _api_error_handler(request, exc):
@@ -108,6 +122,8 @@ def _api_error_handler(request, exc):
         }
         if exc.fields:
             payload["fields"] = exc.fields
+        if getattr(exc, "issues", None):
+            payload["issues"] = exc.issues
         return JsonResponse(payload, status=exc.status)
     return None
 
