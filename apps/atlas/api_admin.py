@@ -67,6 +67,7 @@ from apps.atlas.models import (
     AtlasGroup,
     AtlasGroupMembership,
     AtlasNode,
+    AtlasNodeTranslation,
     AtlasNodeType,
     AtlasRelation,
     AtlasRelationType,
@@ -82,6 +83,7 @@ from apps.atlas.services import (
     recompute_layout,
     version_revision,
 )
+from apps.atlas.validation import _issue_dict as _atlas_issue_dict
 
 atlas_router = Router()
 
@@ -198,12 +200,6 @@ class AtlasVersionCreateIn(Schema):
     """POST /versions body — a draft starts with only a label."""
 
     label: str = Field(min_length=1, max_length=120)
-
-
-class AtlasLayoutIn(Schema):
-    """The stored layout dict shape: node public key -> [x, y, z]."""
-
-    layout: dict[str, list[float]]
 
 
 class AtlasNodePinIn(Schema):
@@ -931,7 +927,10 @@ def _build_relation(
     the write-time guards Plan A's validation mirrors; the full-graph verdict
     is the aggregate report (blocked write → 409 with the issue list).
     """
-    from apps.atlas.models import AtlasRelation, AtlasRelationTranslation
+    from apps.atlas.models import (
+        AtlasRelation,
+        AtlasRelationTranslation,
+    )
     from apps.atlas.validation import allowed_types_by_relation_type, validate_version
 
     relation_type = checks["relation_type"]
@@ -1562,12 +1561,6 @@ def patch_group(request, version_id: int, group_key: str, payload: AtlasGroupPat
 # ---------------------------------------------------------------------------
 
 
-def _service_error(exc: Exception, code: str, message: str) -> AdminError:
-    issues = getattr(exc, "issues", None)
-    field_issues = [issue.to_dict() for issue in (issues or [])] if hasattr(
-        (issues[0] if issues else None), "to_dict"
-    ) else list(issues or [])
-    return AdminError(409, code, message, issues=field_issues)
 
 
 @atlas_router.post("/versions/{version_id}/layout", response={200: dict})
@@ -1666,8 +1659,15 @@ def activate_version_endpoint(request, version_id: int):
 
 
 def _serviceBlocked(exc: ValidationFailed) -> AdminError:
-    return AdminError(409, "VALIDATION_BLOCKED", "The publish battery refused.",
-                      issues=[{"code": i.code} for i in exc.issues])
+    """The publish battery refused — the full Plan A issue array, not codes."""
+    from apps.atlas.validation import _issue_dict
+
+    return AdminError(
+        409,
+        VALIDATION_BLOCKED,
+        "The publish battery refused.",
+        issues=[_issue_dict(issue) for issue in exc.issues],
+    )
 
 
 class AtlasBulkNodeIn(Schema):
@@ -1679,6 +1679,7 @@ class AtlasBulkNodeIn(Schema):
     importance: int | None = Field(default=None, ge=0, le=100)
     visible: bool | None = None
     mobileOverviewPriority: str | None = Field(default=None, max_length=16)
+    overrides: dict[str, AtlasNodeOverridesIn] | None = Field(default=None)
 
 
 class AtlasBulkRelationIn(Schema):
@@ -1749,16 +1750,51 @@ def bulk_replace_graph(request, version_id: int, payload: AtlasBulkGraphIn):
                 except DjangoValidationError as exc:
                     raise _validation_from_django(exc) from exc
                 nodes_by_key[node.public_key] = node
+                overrides = item.overrides or {}
+                for locale, override in overrides.items():
+                    if locale not in ("en", "fa"):
+                        raise AdminError(400, VALIDATION, "Unknown override locale.",
+                                         fields={"overrides": [f"unsupported locale {locale!r}."]})
+                    row, _created = AtlasNodeTranslation.objects.get_or_create(
+                        node=node, locale=locale
+                    )
+                    for attr, wire in (
+                        ("label_override", "label"),
+                        ("summary_override", "summary"),
+                        ("accessible_label_override", "accessibleLabel"),
+                        ("aliases", "aliases"),
+                    ):
+                        value = getattr(override, wire, None)
+                        if value is not None:
+                            setattr(row, attr, value)
+                    try:
+                        row.full_clean()
+                        row.save()
+                    except DjangoValidationError as exc:
+                        raise _validation_from_django(exc) from exc
             version.relations.all().delete()
             for item in payload.relations:
                 source = nodes_by_key.get(item.sourceKey)
                 target = nodes_by_key.get(item.targetKey)
                 if source is None or target is None:
+                    offending = item.sourceKey if source is None else item.targetKey
                     raise AdminError(
                         400,
                         VALIDATION,
                         "Dangling bulk relation.",
-                        fields={"relations": [f"{item.sourceKey!r}/{item.targetKey!r}."]},
+                        issues=[
+                            {
+                                "code": "DANGLING_RELATION_ENDPOINT",
+                                "relationKey": keys.relation_public_key(
+                                    item.sourceKey,
+                                    item.relationTypeKey,
+                                    item.targetKey,
+                                    directed=True,
+                                ),
+                                "nodeKey": offending,
+                                "messageToken": "atlas.danglingRelationEndpoint",
+                            }
+                        ],
                     )
                 relation_type = AtlasRelationType.objects.filter(key=item.relationTypeKey).first()
                 if relation_type is None:
@@ -1799,15 +1835,24 @@ def bulk_replace_graph(request, version_id: int, payload: AtlasBulkGraphIn):
                         group=group, node=node, sort_order=sort_order
                     )
             report = validate_version(version)
-            report_block = report.to_dict()
+            # MISSING_LAYOUT is not a bulk-write blocker: the layout is
+            # (re)computed AFTER the graph lands (POST …/layout, Task 5's own
+            # route) — a freshly replaced graph is layoutless by construction.
+            graph_blockers = [
+                issue for issue in report.blocking if issue.code != "MISSING_LAYOUT"
+            ]
+            if graph_blockers:
+                # Refuse INSIDE the atomic block: the old graph rolls back and
+                # nothing from the invalid body survives (the plan's pin).
+                raise AdminError(
+                    409,
+                    VALIDATION_BLOCKED,
+                    "The bulk body would leave the graph invalid.",
+                    issues=[
+                        _atlas_issue_dict(issue) for issue in graph_blockers
+                    ],
+                )
     except AdminError:
         raise
-    if report_block["blocking"]:
-        raise AdminError(
-            409,
-            VALIDATION_BLOCKED,
-            "The bulk body would leave the graph invalid.",
-            issues=report_block["blocking"],
-        )
     version.refresh_from_db()
     return {"nodeCount": version.nodes.count(), "relationCount": version.relations.count()}

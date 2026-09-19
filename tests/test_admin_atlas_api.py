@@ -1083,3 +1083,85 @@ def test_bulk_graph_put_is_transactional(admin_client, clean_draft, t5_uses_type
     # either way the graph was NOT replaced (the old two-node set persists).
     assert response.status_code in (400, 409), response.content
     assert version.nodes.count() == node_count
+
+
+
+@pytest.mark.django_db
+def test_activate_success_activates_and_enqueues_a_job(
+    admin_client, clean_draft, t5_uses_type
+):
+    """The plan's success half: a clean draft activates and enqueues a job."""
+    version = clean_draft["version"]
+    from apps.atlas.models import AtlasVersion
+    from apps.atlas.services import version_revision as vr
+    from apps.rebuild.models import PublicationJob
+
+    # The draft fixture's identity→area relation breaks its type's pair rule
+    # once the nodes are typed; the publish-safe body must replace it. Wipe
+    # the graph to the projection-clean two-node shape and recompute.
+    canonical_key = str(clean_draft["key"])
+    body = {
+        "nodes": [
+            {"nodeTypeKey": "t5method", "canonicalTranslationKey": canonical_key},
+            {"nodeTypeKey": "t5structural", "canonicalTranslationKey": None,
+             "overrides": {"en": {"label": " áreas EN"}, "fa": {"label": "ناحیه FA"}}},
+        ],
+        "relations": [], "groups": [],
+    }
+    replaced = admin_client.put(
+        f"{BASE}/versions/{version.pk}/graph",
+        body,
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=vr(version),
+        content_type="application/json",
+    )
+    assert replaced.status_code == 200, replaced.content
+
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(version)
+    layout = _post_action(admin_client, version, "layout")
+    assert layout.status_code == 200, layout.content
+    version.refresh_from_db()
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(version)
+    activated = _post_action(admin_client, version, "activate")
+    assert activated.status_code == 200, activated.content
+    body = activated.json()
+    assert body["status"] == "active"
+    assert body["enqueuedPublicationJob"] is not None
+    assert PublicationJob.objects.filter(pk=body["enqueuedPublicationJob"]).exists()
+    version_row = AtlasVersion.objects.get(pk=version.pk)
+    assert version_row.status == "active"
+    assert AuditLog.objects.filter(action="atlas.version.activate").exists()
+
+
+@pytest.mark.django_db
+def test_status_endpoint_reports_the_current_job(admin_client, clean_draft, t5_uses_type):
+    """The status route reports the activated version's own job id."""
+    from apps.atlas.services import version_revision as vr
+
+    version = clean_draft["version"]
+    canonical_key = str(clean_draft["key"])
+    body = {
+        "nodes": [
+            {"nodeTypeKey": "t5method", "canonicalTranslationKey": canonical_key},
+            {"nodeTypeKey": "t5structural", "canonicalTranslationKey": None,
+             "overrides": {"en": {"label": " áreas EN"}, "fa": {"label": "ناحیه FA"}}},
+        ],
+        "relations": [], "groups": [],
+    }
+    replaced = admin_client.put(
+        f"{BASE}/versions/{version.pk}/graph",
+        body,
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=vr(version),
+        content_type="application/json",
+    )
+    assert replaced.status_code == 200, replaced.content
+    version.refresh_from_db()
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(version)
+    assert _post_action(admin_client, version, "layout").status_code == 200
+    version.refresh_from_db()
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(version)
+    activated = _post_action(admin_client, version, "activate").json()
+    status = admin_client.get(f"{BASE}/versions/{version.pk}/status").json()
+    assert status["status"] == "active"
+    assert status["jobId"] == activated["enqueuedPublicationJob"]
