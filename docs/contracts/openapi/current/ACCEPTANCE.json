@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-18 — Atlas public locale/preview additive schema (Plan A, Task 19)",
+  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -8,13 +8,13 @@
   },
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 57,
-      "sha256": "274407a8fa3ad3b4b78c677bed76cc14871276468a70fb0d8542d0a637b1876b",
+      "paths": 79,
+      "sha256": "da597b5f139c7e9c0acad98ebd8b137f3d080469aa74d3688c1bdffcbb2c9342",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 127,
-      "sha256": "3dad8b12f7dbbbd377a6eea3a02730bfade4a07b4420b38d45e6b661b64af926"
+      "operations": 161,
+      "sha256": "f215d56bc377d089b5515f528a69095d89bebf5f6f04ac59c6bd16aa509de62f"
     },
     "public-openapi.json": {
       "paths": 51,
@@ -24,7 +24,7 @@
   },
   "djangoSettingsModule": "config.settings.development",
   "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md. 2026-09-08 re-pin (additive localized-settings featured/brand delta only, zero removed schema lines) verified by Backend CI provenance gate plus drift/access tests; evidence recorded in Back-End/docs/quality/product-v2/PU-03-settings-HANDOFF.md.",
-  "sourceCommit": "7afd9ed4b0be19acea57bbdaa03cb0753847aeb2",
+  "sourceCommit": "5ce30a10484188a8f478e9a53300d49b13f258e0",
   "status": "scaffold-accepted",
   "supersedes": "The former PROVENANCE.json-embedded acceptance pointer (status scaffold-accepted plus acceptanceRecord), retired because every export regenerates PROVENANCE.json with a fresh timestamp, which made identical-snapshot acceptance ambiguous and broke the drift gate."
 }

@@ -225,6 +225,1303 @@
         "title": "ApprovalQueueOut",
         "type": "object"
       },
+      "AtlasBulkGraphIn": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/AtlasBulkGroupIn"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/AtlasBulkNodeIn"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/AtlasBulkRelationIn"
+            },
+            "title": "Relations",
+            "type": "array"
+          }
+        },
+        "title": "AtlasBulkGraphIn",
+        "type": "object"
+      },
+      "AtlasBulkGroupIn": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "nodeKeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nodekeys",
+            "type": "array"
+          }
+        },
+        "title": "AtlasBulkGroupIn",
+        "type": "object"
+      },
+      "AtlasBulkNodeIn": {
+        "description": "One node of a bulk-graph PUT body (identity + mutable fields).",
+        "properties": {
+          "canonicalTranslationKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonicaltranslationkey"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "mobileOverviewPriority": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobileoverviewpriority"
+          },
+          "nodeTypeKey": {
+            "title": "Nodetypekey",
+            "type": "string"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AtlasNodeOverridesIn"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
+          "publicKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publickey"
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          }
+        },
+        "required": [
+          "nodeTypeKey"
+        ],
+        "title": "AtlasBulkNodeIn",
+        "type": "object"
+      },
+      "AtlasBulkRelationIn": {
+        "properties": {
+          "directed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directed"
+          },
+          "relationTypeKey": {
+            "title": "Relationtypekey",
+            "type": "string"
+          },
+          "sourceKey": {
+            "title": "Sourcekey",
+            "type": "string"
+          },
+          "targetKey": {
+            "title": "Targetkey",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceKey",
+          "relationTypeKey",
+          "targetKey"
+        ],
+        "title": "AtlasBulkRelationIn",
+        "type": "object"
+      },
+      "AtlasCanonicalCandidateOut": {
+        "description": "One picker row (plan Task 3): identity + per-locale publish gates.",
+        "properties": {
+          "localeStatus": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Localestatus",
+            "type": "object"
+          },
+          "publishable": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Publishable",
+            "type": "object"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "translationKey": {
+            "title": "Translationkey",
+            "type": "string"
+          }
+        },
+        "required": [
+          "translationKey",
+          "title",
+          "localeStatus",
+          "publishable"
+        ],
+        "title": "AtlasCanonicalCandidateOut",
+        "type": "object"
+      },
+      "AtlasGroupPatchIn": {
+        "description": "PATCH groups/{key}: rename per-locale copy (identity key immutable).",
+        "properties": {
+          "labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          }
+        },
+        "title": "AtlasGroupPatchIn",
+        "type": "object"
+      },
+      "AtlasGroupRowOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "memberKeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memberkeys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "memberKeys"
+        ],
+        "title": "AtlasGroupRowOut",
+        "type": "object"
+      },
+      "AtlasGroupWriteIn": {
+        "properties": {
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "AtlasGroupWriteIn",
+        "type": "object"
+      },
+      "AtlasMembersIn": {
+        "properties": {
+          "nodeKeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nodekeys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodeKeys"
+        ],
+        "title": "AtlasMembersIn",
+        "type": "object"
+      },
+      "AtlasNodeOverridesIn": {
+        "description": "Per-locale overrides of one locale (spec §5): upserted translations.",
+        "properties": {
+          "accessibleLabel": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessiblelabel"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "title": "AtlasNodeOverridesIn",
+        "type": "object"
+      },
+      "AtlasNodePatchIn": {
+        "description": "PATCH body — every field optional; ``publicKey`` is deliberately absent\n(a node key is minted once and immutable: a PATCH carrying it answers 400).",
+        "properties": {
+          "canonicalTranslationKey": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonicaltranslationkey"
+          },
+          "groupKeys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupkeys"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "mobileOverviewPriority": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobileoverviewpriority"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AtlasNodeOverridesIn"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
+          "pin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AtlasNodePinIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          }
+        },
+        "title": "AtlasNodePatchIn",
+        "type": "object"
+      },
+      "AtlasNodePinIn": {
+        "description": "An optional layout pin.\n\nFields are optional at the SCHEMA level on purpose: the paired rule\n(\"x and y together; z only with both\") is the MODEL's ``clean()`` rule,\nwhich surfaces as 400 ``VALIDATION`` with ``fields`` (plan Task 3); a\npin carrying only ``x`` must reach the model, not die at a schema 422.",
+        "properties": {
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z"
+          }
+        },
+        "title": "AtlasNodePinIn",
+        "type": "object"
+      },
+      "AtlasNodeRowOut": {
+        "description": "One node row of the admin surface (Task 3 row shape).",
+        "properties": {
+          "canonicalSource": {
+            "title": "Canonicalsource",
+            "type": "string"
+          },
+          "canonicalTranslationKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonicaltranslationkey"
+          },
+          "groupKeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Groupkeys",
+            "type": "array"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "integer"
+          },
+          "localeStatus": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Localestatus"
+          },
+          "mobileOverviewPriority": {
+            "title": "Mobileoverviewpriority",
+            "type": "string"
+          },
+          "nodeTypeKey": {
+            "title": "Nodetypekey",
+            "type": "string"
+          },
+          "pin": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pin"
+          },
+          "publicKey": {
+            "title": "Publickey",
+            "type": "string"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "publicKey",
+          "nodeTypeKey",
+          "canonicalSource",
+          "importance",
+          "visible",
+          "mobileOverviewPriority",
+          "groupKeys"
+        ],
+        "title": "AtlasNodeRowOut",
+        "type": "object"
+      },
+      "AtlasNodeTypePatchIn": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "label_en": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label En"
+          },
+          "label_fa": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Fa"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "title": "AtlasNodeTypePatchIn",
+        "type": "object"
+      },
+      "AtlasNodeTypeRowOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "canonicalSource": {
+            "default": "none",
+            "title": "Canonicalsource",
+            "type": "string"
+          },
+          "defaultImportance": {
+            "default": 50,
+            "title": "Defaultimportance",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_en": {
+            "title": "Label En",
+            "type": "string"
+          },
+          "label_fa": {
+            "title": "Label Fa",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label_en",
+          "label_fa",
+          "active",
+          "sort_order"
+        ],
+        "title": "AtlasNodeTypeRowOut",
+        "type": "object"
+      },
+      "AtlasNodeTypeWriteIn": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "key": {
+            "maxLength": 64,
+            "minLength": 2,
+            "title": "Key",
+            "type": "string"
+          },
+          "label_en": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label En",
+            "type": "string"
+          },
+          "label_fa": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label Fa",
+            "type": "string"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "required": [
+          "key",
+          "label_en",
+          "label_fa"
+        ],
+        "title": "AtlasNodeTypeWriteIn",
+        "type": "object"
+      },
+      "AtlasNodeWriteIn": {
+        "description": "POST /versions/<id>/nodes body (spec §5 fields, camelCase on the wire).",
+        "properties": {
+          "canonicalSource": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonicalsource"
+          },
+          "canonicalTranslationKey": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonicaltranslationkey"
+          },
+          "groupKeys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupkeys"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "mobileOverviewPriority": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobileoverviewpriority"
+          },
+          "nodeTypeKey": {
+            "title": "Nodetypekey",
+            "type": "string"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AtlasNodeOverridesIn"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
+          "pin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AtlasNodePinIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          }
+        },
+        "required": [
+          "nodeTypeKey"
+        ],
+        "title": "AtlasNodeWriteIn",
+        "type": "object"
+      },
+      "AtlasPreviewMintIn": {
+        "properties": {
+          "locale": {
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Locale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "locale"
+        ],
+        "title": "AtlasPreviewMintIn",
+        "type": "object"
+      },
+      "AtlasRelationPatchIn": {
+        "description": "PATCH body — structural keys change nothing; only mutable fields land.",
+        "properties": {
+          "directed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directed"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "title": "AtlasRelationPatchIn",
+        "type": "object"
+      },
+      "AtlasRelationRowOut": {
+        "description": "One relation row — the key is the composed public key (spec §5.3).",
+        "properties": {
+          "directed": {
+            "title": "Directed",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "relationTypeKey": {
+            "title": "Relationtypekey",
+            "type": "string"
+          },
+          "sourceKey": {
+            "title": "Sourcekey",
+            "type": "string"
+          },
+          "targetKey": {
+            "title": "Targetkey",
+            "type": "string"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "sourceKey",
+          "relationTypeKey",
+          "targetKey",
+          "directed",
+          "weight",
+          "visible"
+        ],
+        "title": "AtlasRelationRowOut",
+        "type": "object"
+      },
+      "AtlasRelationTypeRowOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "canonicalSource": {
+            "default": "none",
+            "title": "Canonicalsource",
+            "type": "string"
+          },
+          "defaultImportance": {
+            "default": 50,
+            "title": "Defaultimportance",
+            "type": "integer"
+          },
+          "directedDefault": {
+            "default": true,
+            "title": "Directeddefault",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_en": {
+            "title": "Label En",
+            "type": "string"
+          },
+          "label_fa": {
+            "title": "Label Fa",
+            "type": "string"
+          },
+          "overridableDirection": {
+            "default": false,
+            "title": "Overridabledirection",
+            "type": "boolean"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label_en",
+          "label_fa",
+          "active",
+          "sort_order"
+        ],
+        "title": "AtlasRelationTypeRowOut",
+        "type": "object"
+      },
+      "AtlasRelationTypeWriteIn": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "allowedSourceTypes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowedsourcetypes"
+          },
+          "allowedTargetTypes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowedtargettypes"
+          },
+          "directedDefault": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directeddefault"
+          },
+          "key": {
+            "maxLength": 64,
+            "minLength": 2,
+            "title": "Key",
+            "type": "string"
+          },
+          "label_en": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label En",
+            "type": "string"
+          },
+          "label_fa": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label Fa",
+            "type": "string"
+          },
+          "overridableDirection": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overridabledirection"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "required": [
+          "key",
+          "label_en",
+          "label_fa"
+        ],
+        "title": "AtlasRelationTypeWriteIn",
+        "type": "object"
+      },
+      "AtlasRelationWriteIn": {
+        "description": "POST /versions/<id>/relations body (spec §5.3, camelCase on the wire).",
+        "properties": {
+          "directed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directed"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "relationTypeKey": {
+            "title": "Relationtypekey",
+            "type": "string"
+          },
+          "sourceKey": {
+            "title": "Sourcekey",
+            "type": "string"
+          },
+          "targetKey": {
+            "title": "Targetkey",
+            "type": "string"
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "required": [
+          "sourceKey",
+          "relationTypeKey",
+          "targetKey"
+        ],
+        "title": "AtlasRelationWriteIn",
+        "type": "object"
+      },
+      "AtlasVersionCreateIn": {
+        "description": "POST /versions body — a draft starts with only a label.",
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "AtlasVersionCreateIn",
+        "type": "object"
+      },
+      "AtlasVersionDetailOut": {
+        "description": "Detail row: publishedAt instead of createdAt duplication (plan Task 2).",
+        "properties": {
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nodeCount": {
+            "title": "Nodecount",
+            "type": "integer"
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishedat"
+          },
+          "relationCount": {
+            "title": "Relationcount",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "label",
+          "revision",
+          "createdAt",
+          "updatedAt",
+          "nodeCount",
+          "relationCount"
+        ],
+        "title": "AtlasVersionDetailOut",
+        "type": "object"
+      },
+      "AtlasVersionRowOut": {
+        "description": "One row of ``GET /versions`` — camelCase on the wire (§20.3).",
+        "properties": {
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nodeCount": {
+            "title": "Nodecount",
+            "type": "integer"
+          },
+          "relationCount": {
+            "title": "Relationcount",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "label",
+          "revision",
+          "createdAt",
+          "updatedAt",
+          "nodeCount",
+          "relationCount"
+        ],
+        "title": "AtlasVersionRowOut",
+        "type": "object"
+      },
       "BlockFieldSpecOut": {
         "properties": {
           "itemFields": {
@@ -4521,6 +5818,1149 @@
           }
         },
         "summary": "Owner approval queue from the imported seed records."
+      }
+    },
+    "/api/v1/admin/atlas/canonical-candidates": {
+      "get": {
+        "description": "The admin picker rows for one canonical family (plan Task 3).\n\nReads the canonical allow-list registry; a family outside it is a 404, a\nnever-resolving query would invent a record — the picker only ever offers\nrows that exist in the CMS, gated per locale by ``objects.public()``.",
+        "operationId": "apps_atlas_api_admin_canonical_candidates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasCanonicalCandidateOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Canonical Candidates"
+      }
+    },
+    "/api/v1/admin/atlas/node-types": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_node_types",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasNodeTypeRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Node Types"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_node_type",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasNodeTypeWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasNodeTypeRowOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Node Type"
+      }
+    },
+    "/api/v1/admin/atlas/node-types/{type_key}": {
+      "delete": {
+        "operationId": "apps_atlas_api_admin_delete_node_type",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_key",
+            "required": true,
+            "schema": {
+              "title": "Type Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete Node Type"
+      },
+      "patch": {
+        "operationId": "apps_atlas_api_admin_patch_node_type",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_key",
+            "required": true,
+            "schema": {
+              "title": "Type Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasNodeTypePatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasNodeTypeRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Patch Node Type"
+      }
+    },
+    "/api/v1/admin/atlas/relation-types": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_relation_types",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasRelationTypeRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Relation Types"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_relation_type",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasRelationTypeWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasRelationTypeRowOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Relation Type"
+      }
+    },
+    "/api/v1/admin/atlas/relation-types/{type_key}": {
+      "delete": {
+        "operationId": "apps_atlas_api_admin_delete_relation_type",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_key",
+            "required": true,
+            "schema": {
+              "title": "Type Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete Relation Type"
+      },
+      "patch": {
+        "operationId": "apps_atlas_api_admin_patch_relation_type",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_key",
+            "required": true,
+            "schema": {
+              "title": "Type Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasNodeTypePatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasRelationTypeRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Patch Relation Type"
+      }
+    },
+    "/api/v1/admin/atlas/versions": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_versions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasVersionRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Versions"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_version",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasVersionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasVersionDetailOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Version"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_version_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasVersionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Version Detail"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/activate": {
+      "post": {
+        "operationId": "apps_atlas_api_admin_activate_version_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Activate Version Endpoint"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/archive": {
+      "post": {
+        "operationId": "apps_atlas_api_admin_archive_version",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasVersionDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Archive Version"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/clone": {
+      "post": {
+        "operationId": "apps_atlas_api_admin_clone_version_route",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasVersionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasVersionDetailOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Clone Version Route"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/graph": {
+      "put": {
+        "description": "Transactional bulk replace (plan Task 5): delete-then-create only for\nthe rows the body owns; rows matching by public key keep their identity.\nOn any refusal nothing is written (one atomic block + the validator).",
+        "operationId": "apps_atlas_api_admin_bulk_replace_graph",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasBulkGraphIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Bulk Replace Graph"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/groups": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_groups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasGroupRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Groups"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasGroupWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasGroupRowOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Group"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/groups/{group_key}": {
+      "delete": {
+        "operationId": "apps_atlas_api_admin_delete_group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "group_key",
+            "required": true,
+            "schema": {
+              "title": "Group Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete Group"
+      },
+      "patch": {
+        "operationId": "apps_atlas_api_admin_patch_group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "group_key",
+            "required": true,
+            "schema": {
+              "title": "Group Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasGroupPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasGroupRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Patch Group"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/groups/{group_key}/members": {
+      "put": {
+        "operationId": "apps_atlas_api_admin_replace_group_members",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "group_key",
+            "required": true,
+            "schema": {
+              "title": "Group Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasMembersIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasGroupRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Replace Group Members"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/layout": {
+      "post": {
+        "description": "Deterministic layout recompute (plan Task 5): no client-supplied body.",
+        "operationId": "apps_atlas_api_admin_recompute_version_layout",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Recompute Version Layout"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/nodes": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_nodes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasNodeRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Nodes"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_node",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasNodeWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasNodeRowOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Node"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/nodes/{node_key}": {
+      "delete": {
+        "operationId": "apps_atlas_api_admin_delete_node",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_key",
+            "required": true,
+            "schema": {
+              "title": "Node Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete Node"
+      },
+      "get": {
+        "operationId": "apps_atlas_api_admin_get_node",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_key",
+            "required": true,
+            "schema": {
+              "title": "Node Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasNodeRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get Node"
+      },
+      "patch": {
+        "operationId": "apps_atlas_api_admin_patch_node",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_key",
+            "required": true,
+            "schema": {
+              "title": "Node Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasNodePatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasNodeRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Patch Node"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/preview-token": {
+      "post": {
+        "operationId": "apps_atlas_api_admin_mint_preview_token",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasPreviewMintIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Mint Preview Token"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/relations": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_list_relations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AtlasRelationRowOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List Relations"
+      },
+      "post": {
+        "operationId": "apps_atlas_api_admin_create_relation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasRelationWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasRelationRowOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create Relation"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/relations/{relation_key}": {
+      "delete": {
+        "operationId": "apps_atlas_api_admin_delete_relation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "relation_key",
+            "required": true,
+            "schema": {
+              "title": "Relation Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Delete Relation"
+      },
+      "patch": {
+        "operationId": "apps_atlas_api_admin_patch_relation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "relation_key",
+            "required": true,
+            "schema": {
+              "title": "Relation Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtlasRelationPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtlasRelationRowOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Patch Relation"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/status": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_version_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Version Status"
+      }
+    },
+    "/api/v1/admin/atlas/versions/{version_id}/validate": {
+      "get": {
+        "operationId": "apps_atlas_api_admin_validate_version_endpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Validate Version Endpoint"
       }
     },
     "/api/v1/admin/auth/csrf": {
