@@ -306,3 +306,10 @@ admin_api.add_router("/publication-jobs", publication_jobs_router)
 from apps.analytics.api import analytics_admin_router  # noqa: E402
 
 admin_api.add_router("/analytics", analytics_admin_router)
+
+# Knowledge Atlas authoring (Plan B Task 1): guarded router skeleton beside
+# /graph — same guards (staff session, OTP, CSRF), shared If-Match gate and
+# shared audit; lifecycle business rules stay in apps.atlas.services.
+from apps.atlas.api_admin import atlas_router  # noqa: E402
+
+admin_api.add_router("/atlas", atlas_router)
