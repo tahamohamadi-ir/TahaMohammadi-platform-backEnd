@@ -45,13 +45,15 @@ import uuid
 from datetime import datetime
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from ninja import Field, Router, Schema
 
 from apps.api.admin_common import (
     IMMUTABLE_ACTIVE,
     PRECONDITION_REQUIRED,
     STALE_REVISION,
+    TAXONOMY_IN_USE,
     VALIDATION,
     VALIDATION_BLOCKED,
     AdminError,
@@ -836,8 +838,6 @@ def canonical_candidates(request, source: str = "", q: str = ""):
 # taxonomy rows answer 409 TAXONOMY_IN_USE (Task 4 step 3).
 # ---------------------------------------------------------------------------
 
-TAXONOMY_IN_USE = "TAXONOMY_IN_USE"
-
 
 class AtlasRelationWriteIn(Schema):
     """POST /versions/<id>/relations body (spec §5.3, camelCase on the wire)."""
@@ -876,6 +876,12 @@ class AtlasGroupWriteIn(Schema):
     label: str = Field(min_length=1, max_length=200)
 
 
+class AtlasGroupPatchIn(Schema):
+    """PATCH groups/{key}: rename per-locale copy (identity key immutable)."""
+
+    labels: dict[str, str] | None = Field(default=None)
+
+
 class AtlasGroupRowOut(Schema):
     key: str
     label: str
@@ -886,9 +892,6 @@ class AtlasGroupRowOut(Schema):
 class AtlasMembersIn(Schema):
     nodeKeys: list[str]
 
-def _atlas_model_validation(exc: DjangoValidationError, *, remap: dict | None = None) -> AdminError:
-    """Alias kept for symmetry with nodes (the same 400 envelope)."""
-    return _validation_from_django(exc, remap=remap)
 
 
 def _resolve_relation_endpoints(version: AtlasVersion, payload: AtlasRelationWriteIn) -> dict:
@@ -1053,14 +1056,6 @@ def _relation_row(relation) -> AtlasRelationRowOut:
     )
 
 
-def _atlas_taxonomy_in_use(exc: Exception) -> AdminError:
-    """Stack the taxonomy in-use boundary under one canonical envelope."""
-    return AdminError(
-        409,
-        TAXONOMY_IN_USE,
-        "This taxonomy row is in use and cannot be deleted.",
-        fields={"key": ["referenced by existing atlas rows."]},
-    )
 
 
 @atlas_router.put("/versions/{version_id}/groups/{group_key}/members", response=AtlasGroupRowOut)
@@ -1089,18 +1084,15 @@ def replace_group_members(request, version_id: int, group_key: str, payload: Atl
             },
         )
     with transaction.atomic():
-        AtlasGroupMembership.objects.filter(group=group, node__version=version).exclude(
+        AtlasGroupMembership.objects.filter(group=group).exclude(
             node__public_key__in=node_keys
         ).delete()
-        existing = set(
-            AtlasGroupMembership.objects.filter(group=group).values_list(
-                "node__public_key", flat=True
-            )
-        )
+        nodes_by_key = {node.public_key: node for node in nodes}
         for sort_order, node_key in enumerate(node_keys):
-            node = next(n for n in nodes if n.public_key == node_key)
-            if node_key not in existing:
-                AtlasGroupMembership.objects.create(group=group, node=node, sort_order=sort_order)
+            node = nodes_by_key[node_key]
+            AtlasGroupMembership.objects.update_or_create(
+                group=group, node=node, defaults={"sort_order": sort_order}
+            )
     _atlas_audit(
         request,
         action="atlas.group.members.replace",
@@ -1137,7 +1129,16 @@ def delete_node_type(request, type_key: str):
     if in_use:
         raise AdminError(409, TAXONOMY_IN_USE, "A node type in use cannot be deleted.",
                          fields={"key": [f"{type_key!r} has nodes referencing it."]})
-    node_type.delete()
+    try:
+        node_type.delete()
+    except ProtectedError as exc:
+        raise AdminError(
+            409,
+            TAXONOMY_IN_USE,
+            "A node type in use cannot be deleted.",
+            fields={"key": [f"{type_key!r} has rows referencing it."]},
+        ) from exc
+
     _atlas_audit_generic(
         request,
         action="atlas.nodeType.delete",
@@ -1278,3 +1279,285 @@ def delete_group(request, version_id: int, group_key: str):
         detail=f"DELETE groups/{group_key} -> 204",
     )
     return 204, None
+
+
+# ---------------------------------------------------------------------------
+# Task-4 fix round: the taxonomy CRUD the plan pins in full (node-types and
+# relation-types, each GET|POST|PATCH|DELETE), plus the group PATCH that makes
+# "every authorable semantic has an admin path" true for group copy.
+# ---------------------------------------------------------------------------
+
+
+class AtlasNodeTypeRowOut(Schema):
+    key: str
+    label_en: str
+    label_fa: str
+    active: bool
+    sort_order: int
+    defaultImportance: int = 50
+    canonicalSource: str = "none"
+
+
+class AtlasNodeTypeWriteIn(Schema):
+    key: str = Field(min_length=2, max_length=64)
+    label_en: str = Field(min_length=1, max_length=120)
+    label_fa: str = Field(min_length=1, max_length=120)
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+
+
+class AtlasNodeTypePatchIn(Schema):
+    label_en: str | None = Field(default=None, max_length=120)
+    label_fa: str | None = Field(default=None, max_length=120)
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+
+
+class AtlasRelationTypeRowOut(AtlasNodeTypeRowOut):
+    key: str
+    label_en: str
+    label_fa: str
+    active: bool
+    sort_order: int
+    directedDefault: bool = True
+    overridableDirection: bool = False
+
+
+class AtlasRelationTypeWriteIn(Schema):
+    key: str = Field(min_length=2, max_length=64)
+    label_en: str = Field(min_length=1, max_length=120)
+    label_fa: str = Field(min_length=1, max_length=120)
+    directedDefault: bool | None = None
+    overridableDirection: bool | None = None
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+    allowedSourceTypes: list[str] | None = Field(default=None)
+    allowedTargetTypes: list[str] | None = Field(default=None)
+
+
+def _taxonomy_row(row) -> AtlasNodeTypeRowOut | AtlasRelationTypeRowOut:
+    """One taxonomy row in the admin surface (wire camelCase where §20.3 needs)."""
+    return AtlasNodeTypeRowOut(
+        key=row.key,
+        label_en=row.label_en,
+        label_fa=row.label_fa,
+        active=row.active,
+        sort_order=row.sort_order,
+        defaultImportance=getattr(row, "default_importance", 50),
+        canonicalSource=getattr(row, "canonical_source", "none"),
+    )
+
+
+def _relation_taxonomy_row(row) -> AtlasRelationTypeRowOut:
+    return AtlasRelationTypeRowOut(
+        key=row.key,
+        label_en=row.label_en,
+        label_fa=row.label_fa,
+        active=row.active,
+        sort_order=row.sort_order,
+        directedDefault=row.directed_default,
+        overridableDirection=row.overridable_direction,
+    )
+
+
+def _taxonomy_delete(request, model, type_key: str, *, audit_action: str):
+    row = model.objects.filter(key=type_key).first()
+    if row is None:
+        raise AdminError(404, "NOT_FOUND", "Taxonomy row not found.")
+    if row._referencing_rows_exist():
+        raise AdminError(
+            409,
+            TAXONOMY_IN_USE,
+            "A taxonomy row in use cannot be deleted.",
+            fields={"key": [f"{type_key!r} has rows referencing it."]},
+        )
+    try:
+        row.delete()
+    except ProtectedError as exc:
+        raise AdminError(
+            409,
+            TAXONOMY_IN_USE,
+            "A taxonomy row in use cannot be deleted.",
+            fields={"key": [f"{type_key!r} has rows referencing it."]},
+        ) from exc
+    _atlas_audit_generic(
+        request, action=audit_action, object_id=type_key,
+        detail=f"DELETE {audit_action.split('.')[-1]} {type_key} -> 204",
+    )
+    return 204, None
+
+
+@atlas_router.get("/node-types", response=list[AtlasNodeTypeRowOut])
+def list_node_types(request):
+    _require_admin_otp(request)
+    return [_taxonomy_row(row) for row in AtlasNodeType.objects.order_by("sort_order", "key")]
+
+
+@atlas_router.post("/node-types", response={201: AtlasNodeTypeRowOut})
+def create_node_type(request, payload: AtlasNodeTypeWriteIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    row = AtlasNodeType(
+        key=payload.key,
+        label_en=payload.label_en,
+        label_fa=payload.label_fa,
+        semantic_role="record",
+        visual_role="record",
+        active=payload.active if payload.active is not None else True,
+        sort_order=payload.sort_order if payload.sort_order is not None else 0,
+    )
+    try:
+        row.full_clean()
+        row.save()
+    except (DjangoValidationError, IntegrityError) as exc:
+        if isinstance(exc, IntegrityError):
+            raise AdminError(
+                400,
+                VALIDATION,
+                "Duplicate taxonomy key.",
+                fields={"key": [f"{payload.key!r} already exists."]},
+            ) from exc
+        raise _validation_from_django(exc) from exc
+    _atlas_audit_generic(request, action="atlas.nodeType.create",
+                         object_id=row.key, detail=f"POST /node-types {row.key} -> 201")
+    return _taxonomy_row(row)
+
+
+@atlas_router.patch("/node-types/{type_key}", response=AtlasNodeTypeRowOut)
+def patch_node_type(request, type_key: str, payload: AtlasNodeTypePatchIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    node_type = AtlasNodeType.objects.filter(key=type_key).first()
+    if node_type is None:
+        raise AdminError(404, "NOT_FOUND", "Node type not found.")
+    if payload.label_en is not None:
+        node_type.label_en = payload.label_en
+    if payload.label_fa is not None:
+        node_type.label_fa = payload.label_fa
+    if payload.active is not None:
+        if node_type._referencing_rows_exist() and not payload.active:
+            raise AdminError(409, TAXONOMY_IN_USE, "A node type in use cannot be retired.",
+                             fields={"active": [f"{type_key!r} still has nodes."]})
+        node_type.active = payload.active
+    if payload.sort_order is not None:
+        node_type.sort_order = payload.sort_order
+    try:
+        node_type.full_clean()
+        node_type.save()
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    _atlas_audit_generic(request, action="atlas.nodeType.update", object_id=type_key,
+                         detail=f"PATCH /node-types/{type_key} -> 200")
+    return _taxonomy_row(node_type)
+
+
+@atlas_router.delete("/relation-types/{type_key}", response={204: None})
+def delete_relation_type(request, type_key: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    return _taxonomy_delete(request, AtlasRelationType, type_key,
+                            audit_action="atlas.relationType.delete")
+
+
+@atlas_router.get("/relation-types", response=list[AtlasRelationTypeRowOut])
+def list_relation_types(request):
+    _require_admin_otp(request)
+    rows = AtlasRelationType.objects.order_by("sort_order", "key")
+    return [_relation_taxonomy_row(row) for row in rows]
+
+
+@atlas_router.post("/relation-types", response={201: AtlasRelationTypeRowOut})
+def create_relation_type(request, payload: AtlasRelationTypeWriteIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    row = AtlasRelationType(
+        key=payload.key,
+        label_en=payload.label_en,
+        label_fa=payload.label_fa,
+        inverse_label_en=f"Inverse of {payload.label_en}",
+        inverse_label_fa=f"معکوسِ {payload.label_fa}",
+        semantic_role="utility",
+        directed_default=payload.directedDefault if payload.directedDefault is not None else True,
+        overridable_direction=payload.overridableDirection or False,
+        active=payload.active if payload.active is not None else True,
+        sort_order=payload.sort_order if payload.sort_order is not None else 0,
+    )
+    try:
+        row.full_clean()
+        row.save()
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    for source_key in (payload.allowedSourceTypes or []):
+        node_type = AtlasNodeType.objects.filter(key=source_key).first()
+        if node_type is None:
+            raise AdminError(400, VALIDATION, "Unknown allowedSourceTypes entry.",
+                             fields={"allowedSourceTypes": [f"no node type {source_key!r}."]})
+        row.allowed_source_types.add(node_type)
+    for target_key in (payload.allowedTargetTypes or []):
+        node_type = AtlasNodeType.objects.filter(key=target_key).first()
+        if node_type is None:
+            raise AdminError(400, VALIDATION, "Unknown allowedTargetTypes entry.",
+                             fields={"allowedTargetTypes": [f"no node type {target_key!r}."]})
+        row.allowed_target_types.add(node_type)
+    _atlas_audit_generic(request, action="atlas.relationType.create", object_id=row.key,
+                         detail=f"POST /relation-types {row.key} -> 201")
+    return _relation_taxonomy_row(row)
+
+
+@atlas_router.patch("/relation-types/{type_key}", response=AtlasRelationTypeRowOut)
+def patch_relation_type(request, type_key: str, payload: AtlasNodeTypePatchIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    row = AtlasRelationType.objects.filter(key=type_key).first()
+    if row is None:
+        raise AdminError(404, "NOT_FOUND", "Relation type not found.")
+    if payload.label_en is not None:
+        row.label_en = payload.label_en
+    if payload.label_fa is not None:
+        row.label_fa = payload.label_fa
+    if payload.active is not None:
+        if row._referencing_rows_exist() and not payload.active:
+            raise AdminError(409, TAXONOMY_IN_USE, "A relation type in use cannot be retired.",
+                             fields={"active": [f"{type_key!r} still has relations using it."]})
+        row.active = payload.active
+    if payload.sort_order is not None:
+        row.sort_order = payload.sort_order
+    try:
+        row.full_clean()
+        row.save()
+    except DjangoValidationError as exc:
+        raise _validation_from_django(exc) from exc
+    _atlas_audit_generic(request, action="atlas.relationType.update", object_id=row.key,
+                         detail=f"PATCH /relation-types/{type_key} -> 200")
+    return _relation_taxonomy_row(row)
+
+
+@atlas_router.patch("/versions/{version_id}/groups/{group_key}", response=AtlasGroupRowOut)
+def patch_group(request, version_id: int, group_key: str, payload: AtlasGroupPatchIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    group = version.groups.filter(public_key=group_key).first()
+    if group is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas group not found.")
+    from apps.atlas.models import AtlasGroupTranslation
+
+    for locale, label in (payload.labels or {}).items():
+        if locale not in ("en", "fa"):
+            raise AdminError(400, VALIDATION, "Unknown label locale.",
+                             fields={"labels": [f"unsupported locale {locale!r}."]})
+        translation, _created = AtlasGroupTranslation.objects.get_or_create(
+            group=group, locale=locale
+        )
+        translation.label = label
+        translation.full_clean()
+        translation.save()
+    _atlas_audit(
+        request, action="atlas.group.update", version=version, status=200,
+        detail=f"PATCH groups/{group_key} -> 200",
+    )
+    return _group_row(group)

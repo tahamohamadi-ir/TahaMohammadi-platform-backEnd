@@ -713,3 +713,160 @@ def test_active_taxonomy_gate_does_not_block_group_membership(
         content_type="application/json",
     )
     assert response.status_code == 200, response.content
+
+
+# ---------------------------------------------------------------------------
+# Task-4 fix round tests (review 4-r findings 1-4, 6, 9)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_delete_node_type_in_use_maps_to_taxonomy_in_use(admin_client, draft_version):
+    response = admin_client.delete(
+        f"{BASE}/node-types/{_default_node_type().key}",
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "TAXONOMY_IN_USE"
+    assert _default_node_type().__class__.objects.filter(
+        key=_default_node_type().key
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_node_types_list_and_create(admin_client):
+    created = admin_client.post(
+        f"{BASE}/node-types",
+        {"key": "dataset", "label_en": "Dataset", "label_fa": "مجموعه‌داده"},
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content
+    assert created.json()["canonicalSource"] == "none"
+    duplicate = admin_client.post(
+        f"{BASE}/node-types",
+        {"key": "dataset", "label_en": "Dataset 2", "label_fa": "دومی"},
+        content_type="application/json",
+    )
+    assert duplicate.status_code == 400
+
+
+@pytest.mark.django_db
+def test_node_type_patch_can_retire_and_unretire(admin_client, draft_version):
+    type_key = _default_node_type().key
+    # in-use -> retire refused
+    refused = admin_client.patch(
+        f"{BASE}/node-types/{type_key}", {"active": False},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        content_type="application/json",
+    )
+    assert refused.status_code == 409
+    # unused type retires fine
+    unused = _node_type(key="policy", canonical_source="none", label_en="Unused", label_fa="بی‌اثر")
+    ok = admin_client.patch(
+        f"{BASE}/node-types/{unused.key}", {"active": False},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        content_type="application/json",
+    )
+    assert ok.status_code == 200
+    # back to active allowed
+    revived = admin_client.patch(
+        f"{BASE}/node-types/{unused.key}", {"active": True},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        content_type="application/json",
+    )
+    assert revived.status_code == 200
+
+
+@pytest.mark.django_db
+def test_relation_types_crud_roundtrip(admin_client, relation_fixtures):
+    admin_client.post(
+        f"{BASE}/node-types",
+        {"key": "dataset", "label_en": "Dataset", "label_fa": "مجموعه‌داده"},
+        content_type="application/json",
+    )
+    created = admin_client.post(
+        f"{BASE}/relation-types",
+        {
+            "key": "informed-by",
+            "label_en": "informed by",
+            "label_fa": "مطلع از",
+            "directedDefault": True,
+            "allowedSourceTypes": ["dataset"],
+            "allowedTargetTypes": ["project"],
+        },
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content
+    listing = admin_client.get(f"{BASE}/relation-types").json()
+    row = next(r for r in listing if r["key"] == "informed-by")
+    assert row["directedDefault"] is True
+    renamed = admin_client.patch(
+        f"{BASE}/relation-types/informed-by", {"label_en": "informed by (renamed)"},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        content_type="application/json",
+    )
+    assert renamed.status_code == 200
+    deleted = admin_client.delete(
+        f"{BASE}/relation-types/informed-by",
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+    )
+    assert deleted.status_code == 204
+
+
+@pytest.mark.django_db
+def test_relation_type_in_use_cannot_be_deleted(admin_client, draft_version, relation_fixtures):
+    keys = _node_keys(relation_fixtures)
+    created = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+    })
+    assert created.status_code == 201
+    refused = admin_client.delete(
+        f"{BASE}/relation-types/uses",
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+    )
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "TAXONOMY_IN_USE"
+
+
+@pytest.mark.django_db
+def test_group_patch_renames_labels(admin_client, draft_version, group_fixtures):
+    group = group_fixtures["group"]
+    response = admin_client.patch(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group.public_key}",
+        {"labels": {"en": "Renamed group", "fa": "گروه بازنامید‌ه"}},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    assert response.json()["label"] == "Renamed group"
+
+
+@pytest.mark.django_db
+def test_membership_put_reorders_existing_members(admin_client, draft_version, group_fixtures):
+    group = group_fixtures["group"]
+    project_node = group_fixtures["nodes"]["project"]
+    response = admin_client.put(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group.public_key}/members",
+        {"nodeKeys": [project_node.public_key, group_fixtures["method"].public_key]},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert response.json()["memberKeys"] == [
+        project_node.public_key,
+        group_fixtures["method"].public_key,
+    ]
+    # Reverse order must reorder the SAME members (fix round pin).
+    reversed_response = admin_client.put(
+        f"{BASE}/versions/{draft_version.pk}/groups/{group.public_key}/members",
+        {"nodeKeys": [group_fixtures["method"].public_key, project_node.public_key]},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert reversed_response.json()["memberKeys"] == [  # the pinned order
+        group_fixtures["method"].public_key,
+        project_node.public_key,
+    ]
