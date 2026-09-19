@@ -21,7 +21,7 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-19T06:27:26.726326+00:00",
-  "sourceCommit": "5eb7b421e02df2f1640ce57fac3dd5e7af5c1b26",
+  "generatedAtUtc": "2026-09-19T06:49:10.899725+00:00",
+  "sourceCommit": "bc0baa0f20ed3dca554b00515b131682e2ab058f",
   "status": "source-generated-unaccepted"
 }
