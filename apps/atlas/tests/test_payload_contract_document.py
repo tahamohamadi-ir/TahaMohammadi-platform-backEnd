@@ -19,13 +19,23 @@ from apps.atlas.validation import BLOCKING_CODES, WARNING_CODES
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 DOC_PATH = BACKEND_ROOT / "docs" / "contracts" / "ATLAS-PAYLOAD-CONTRACT.md"
-# The spec lives in the coordination root above the main platform checkout.
-# The worktree sits at D:/Project/.atlas-worktrees/backend-plan-a, whose
-# sibling tahamohammadi-platform checkout carries Docs/.
-SPEC_PATH = (
+# The spec lives in the coordination root above the main platform checkout:
+# try sibling worktree layouts, then fall back to repo-rooted candidates.
+_SPEC_CANDIDATES = (
+    Path(__file__).resolve().parents[4]  # worktrees live under .atlas-worktrees/
+    / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md",
     Path("D:/Project/tahamohammadi-platform")
-    / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md"
+    / "Docs/05-delivery/knowledge-atlas/KNOWLEDGE-ATLAS-V1-DESIGN-SPEC.md",
 )
+SPEC_PATH = next(
+    (candidate for candidate in _SPEC_CANDIDATES if candidate.exists()),
+    _SPEC_CANDIDATES[0],
+)
+
+
+def _spec() -> str:
+    assert SPEC_PATH.exists(), f"design spec missing: {SPEC_PATH}"
+    return SPEC_PATH.read_text(encoding="utf-8")
 
 
 def _doc() -> str:
@@ -35,7 +45,7 @@ def _doc() -> str:
 
 def _wire_field_names() -> list[str]:
     """Every field name in the §10.2 response example, parsed from the SPEC."""
-    spec = SPEC_PATH.read_text(encoding="utf-8")
+    spec = _spec()
     payload = json.loads(re.search(r"```json\n(.+?)\n```", spec, re.S).group(1))
     names: list[str] = []
 
