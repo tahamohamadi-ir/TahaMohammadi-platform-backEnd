@@ -72,7 +72,16 @@ from apps.atlas.models import (
     AtlasRelationType,
     AtlasVersion,
 )
-from apps.atlas.services import VERSION_STATUSES, clone_version, version_revision
+from apps.atlas.services import (
+    VERSION_STATUSES,
+    AlreadyActive,
+    PreconditionFailed,
+    ValidationFailed,
+    activate_version,
+    clone_version,
+    recompute_layout,
+    version_revision,
+)
 
 atlas_router = Router()
 
@@ -326,25 +335,6 @@ def list_versions(request):
     return [_version_row(version) for version in versions]
 
 
-@atlas_router.post("/versions/{version_id}/layout", response={200: dict})
-def replace_layout(request, version_id: int, payload: AtlasLayoutIn):
-    _require_admin_otp(request)
-    _check_csrf(request)
-    version = AtlasVersion.objects.filter(pk=version_id).first()
-    if version is None:
-        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
-    _require_current_revision(request, version)
-    _require_draft(version)
-    version.layout = dict(payload.layout)
-    version.save(update_fields=["layout"])
-    _atlas_audit(
-        request,
-        action="atlas.layout.replace",
-        version=version,
-        status=200,
-        detail=f"POST /versions/{version.pk}/layout -> 200",
-    )
-    return {"layout": version.layout, "layoutRevision": version.layout_revision}
 
 
 @atlas_router.patch("/versions/{version_id}/nodes/{node_key}", response={200: AtlasNodeRowOut})
@@ -1561,3 +1551,263 @@ def patch_group(request, version_id: int, group_key: str, payload: AtlasGroupPat
         detail=f"PATCH groups/{group_key} -> 200",
     )
     return _group_row(group)
+
+
+# ---------------------------------------------------------------------------
+# Task-5 routes: layout recompute, bulk graph PUT, validate, activate, status.
+# Delegation only: recompute_layout, validate_version(...).to_dict(),
+# activate_version + enqueue_publication_job; the service exceptions map 1:1
+# to wire codes (ValidationFailed → 409 VALIDATION_BLOCKED, AlreadyActive →
+# 409 ALREADY_ACTIVE, PreconditionFailed handled locally by the composition).
+# ---------------------------------------------------------------------------
+
+
+def _service_error(exc: Exception, code: str, message: str) -> AdminError:
+    issues = getattr(exc, "issues", None)
+    field_issues = [issue.to_dict() for issue in (issues or [])] if hasattr(
+        (issues[0] if issues else None), "to_dict"
+    ) else list(issues or [])
+    return AdminError(409, code, message, issues=field_issues)
+
+
+@atlas_router.post("/versions/{version_id}/layout", response={200: dict})
+def recompute_version_layout(request, version_id: int):
+    """Deterministic layout recompute (plan Task 5): no client-supplied body."""
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    revision = recompute_layout(version)
+    version.refresh_from_db()
+    _atlas_audit(
+        request,
+        action="atlas.layout.recompute",
+        version=version,
+        status=200,
+        detail=f"POST /versions/{version.pk}/layout -> revision {revision}",
+    )
+    return {"layoutRevision": revision, "coordinates": version.layout}
+
+
+@atlas_router.get("/versions/{version_id}/validate", response={200: dict})
+def validate_version_endpoint(request, version_id: int):
+    from apps.atlas.validation import validate_version
+
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    return validate_version(version).to_dict()
+
+
+@atlas_router.get("/versions/{version_id}/status", response={200: dict})
+def version_status(request, version_id: int):
+    from apps.rebuild.models import PublicationJob
+
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    job = PublicationJob.objects.filter(
+        affected_paths__icontains="/atlas/"
+    ).order_by("-id").first()
+    return {
+        "id": version.pk,
+        "status": version.status,
+        "publishedAt": _format_revision(version.published_at) if version.published_at else None,
+        "jobId": job.pk if job else None,
+    }
+
+
+@atlas_router.post("/versions/{version_id}/activate", response={200: dict})
+def activate_version_endpoint(request, version_id: int):
+    from apps.rebuild.services import enqueue_publication_job
+
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    expected_revision = request.headers.get("If-Match", "").strip().strip('"')
+    try:
+        activated = activate_version(version, expected_revision=expected_revision)
+    except AlreadyActive as exc:
+        raise AdminError(409, "ALREADY_ACTIVE", "This version is already the active one.") from exc
+    except ValidationFailed as exc:
+        raise _serviceBlocked(exc) from exc
+    except PreconditionFailed as exc:
+        raise AdminError(
+            409, STALE_REVISION, "The Atlas version was modified by someone else."
+        ) from exc
+    job = enqueue_publication_job(
+        affected_paths=[
+            "/en/atlas/", "/fa/atlas/", "/en/about/", "/fa/about/"
+        ],
+        requested_revision=str(activated.updated_at),
+    )
+    _atlas_audit(
+        request,
+        action="atlas.version.activate",
+        version=activated,
+        status=200,
+        detail=f"POST /versions/{version.pk}/activate -> job {job.pk}",
+    )
+    activated.refresh_from_db()
+    return {
+        "id": activated.pk,
+        "status": activated.status,
+        "publishedAt": _format_revision(activated.published_at),
+        "enqueuedPublicationJob": job.pk,
+    }
+
+
+def _serviceBlocked(exc: ValidationFailed) -> AdminError:
+    return AdminError(409, "VALIDATION_BLOCKED", "The publish battery refused.",
+                      issues=[{"code": i.code} for i in exc.issues])
+
+
+class AtlasBulkNodeIn(Schema):
+    """One node of a bulk-graph PUT body (identity + mutable fields)."""
+
+    publicKey: str | None = None
+    nodeTypeKey: str
+    canonicalTranslationKey: str | None = Field(default=None)
+    importance: int | None = Field(default=None, ge=0, le=100)
+    visible: bool | None = None
+    mobileOverviewPriority: str | None = Field(default=None, max_length=16)
+
+
+class AtlasBulkRelationIn(Schema):
+    sourceKey: str
+    relationTypeKey: str
+    targetKey: str
+    directed: bool | None = None
+
+
+class AtlasBulkGroupIn(Schema):
+    key: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
+    nodeKeys: list[str] = Field(default_factory=list)
+
+
+class AtlasBulkGraphIn(Schema):
+    nodes: list[AtlasBulkNodeIn] = Field(default_factory=list)
+    relations: list[AtlasBulkRelationIn] = Field(default_factory=list)
+    groups: list[AtlasBulkGroupIn] = Field(default_factory=list)
+
+
+@atlas_router.put("/versions/{version_id}/graph", response={200: dict})
+def bulk_replace_graph(request, version_id: int, payload: AtlasBulkGraphIn):
+    """Transactional bulk replace (plan Task 5): delete-then-create only for
+    the rows the body owns; rows matching by public key keep their identity.
+    On any refusal nothing is written (one atomic block + the validator)."""
+    from apps.atlas.validation import validate_version
+
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    try:
+        with transaction.atomic():
+            type_keys = {item.nodeTypeKey for item in payload.nodes}
+            type_rows = AtlasNodeType.objects.filter(key__in=type_keys)
+            types_by_key = {row.key: row for row in type_rows}
+            if set(types_by_key) != type_keys:
+                raise AdminError(400, VALIDATION, "Unknown nodeTypeKey.",
+                                 fields={"nodes": [
+                                         f"no node type {key!r}."
+                                        for key in type_keys - set(types_by_key)
+                                    ]},
+        )
+            version.nodes.all().delete()
+            nodes_by_key: dict[str, AtlasNode] = {}
+            for item in payload.nodes:
+                node_type = types_by_key[item.nodeTypeKey]
+                node = AtlasNode(
+                    version=version,
+                    node_type=node_type,
+                    public_key=item.publicKey or keys.new_node_key(node_type.key),
+                    canonical_model=node_type.canonical_source,
+                    canonical_translation_key=(
+                        uuid.UUID(item.canonicalTranslationKey)
+                        if item.canonicalTranslationKey else None
+                    ),
+                    importance=item.importance if item.importance is not None else 50,
+                    visible=True if item.visible is None else item.visible,
+                    mobile_overview_priority=item.mobileOverviewPriority or "auto",
+                )
+                try:
+                    node.full_clean()
+                    node.save()
+                except DjangoValidationError as exc:
+                    raise _validation_from_django(exc) from exc
+                nodes_by_key[node.public_key] = node
+            version.relations.all().delete()
+            for item in payload.relations:
+                source = nodes_by_key.get(item.sourceKey)
+                target = nodes_by_key.get(item.targetKey)
+                if source is None or target is None:
+                    raise AdminError(
+                        400,
+                        VALIDATION,
+                        "Dangling bulk relation.",
+                        fields={"relations": [f"{item.sourceKey!r}/{item.targetKey!r}."]},
+                    )
+                relation_type = AtlasRelationType.objects.filter(key=item.relationTypeKey).first()
+                if relation_type is None:
+                    raise AdminError(400, VALIDATION, "Unknown bulk relationTypeKey.",
+                                     fields={"relations": [f"no type {item.relationTypeKey!r}."]})
+                relation = AtlasRelation(
+                    version=version, source=source, target=target,
+                    relation_type=relation_type,
+                    directed=(item.directed if item.directed is not None
+                              else relation_type.directed_default),
+                )
+                try:
+                    relation.full_clean()
+                    relation.save()
+                except DjangoValidationError as exc:
+                    raise _validation_from_django(exc) from exc
+            version.groups.all().delete()
+            for item in payload.groups:
+                from apps.atlas.models import AtlasGroup, AtlasGroupTranslation
+
+                group = AtlasGroup(version=version, public_key=item.key or keys.new_group_key())
+                try:
+                    group.full_clean()
+                    group.save()
+                except DjangoValidationError as exc:
+                    raise _validation_from_django(exc) from exc
+                for locale, label in item.labels.items():
+                    if locale not in ("en", "fa"):
+                        raise AdminError(400, VALIDATION, "Unknown bulk group label locale.",
+                                         fields={"groups": [f"unsupported locale {locale!r}."]})
+                    AtlasGroupTranslation.objects.create(group=group, locale=locale, label=label)
+                for sort_order, node_key in enumerate(item.nodeKeys):
+                    node = nodes_by_key.get(node_key)
+                    if node is None:
+                        raise AdminError(400, VALIDATION, "Unknown bulk group member.",
+                                         fields={"groups": [f"no node {node_key!r}."]})
+                    AtlasGroupMembership.objects.create(
+                        group=group, node=node, sort_order=sort_order
+                    )
+            report = validate_version(version)
+            report_block = report.to_dict()
+    except AdminError:
+        raise
+    if report_block["blocking"]:
+        raise AdminError(
+            409,
+            VALIDATION_BLOCKED,
+            "The bulk body would leave the graph invalid.",
+            issues=report_block["blocking"],
+        )
+    version.refresh_from_db()
+    return {"nodeCount": version.nodes.count(), "relationCount": version.relations.count()}

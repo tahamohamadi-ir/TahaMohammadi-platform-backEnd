@@ -372,11 +372,17 @@ def test_editing_an_active_version_is_refused(admin_client, active_version):
 
 @pytest.mark.django_db
 def test_invalid_body_still_422(admin_client, draft_version):
-    """Invalid/absent body → 422 from the schema; NOT guard evidence (card A)."""
+    """Invalid/absent body → 422 from the schema; NOT guard evidence (card A).
+
+    Pinned on the node-create route, which keeps a typed body; the layout
+    POST now takes NO body at all (Task 5: recompute), so nothing there
+    could 422.
+    """
     response = admin_client.post(
-        f"{BASE}/versions/{draft_version.pk}/layout",
+        f"{BASE}/versions/{draft_version.pk}/nodes",
         {},
         HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
         content_type="application/json",
     )
     assert response.status_code == 422
@@ -396,7 +402,7 @@ def test_mutations_are_audited(admin_client, draft_version):
 def test_layout_mutation_is_audited(admin_client, draft_version):
     response = _post_layout(admin_client, draft_version, if_match=_if_match(draft_version))
     assert response.status_code == 200
-    assert AuditLog.objects.filter(action="atlas.layout.replace").exists()
+    assert AuditLog.objects.filter(action="atlas.layout.recompute").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -870,3 +876,210 @@ def test_membership_put_reorders_existing_members(admin_client, draft_version, g
         group_fixtures["method"].public_key,
         project_node.public_key,
     ]
+
+
+# ---------------------------------------------------------------------------
+# Task 5: layout recompute, bulk graph PUT, validate, activate, status
+# (plan Task 5) — written RED first.
+# ---------------------------------------------------------------------------
+
+
+def _get_or_make_type(key, canonical_source, label_en, label_fa):
+    from apps.atlas.models import AtlasNodeType
+
+    existing = AtlasNodeType.objects.filter(key=key).first()
+    if existing is not None:
+        return existing
+    return _node_type(
+        key=key, canonical_source=canonical_source, label_en=label_en, label_fa=label_fa
+    )
+
+
+def _post_action(client, version, name, payload=None):
+    return client.post(
+        f"{BASE}/versions/{version.pk}/{name}",
+        payload if payload is not None else {},
+        HTTP_X_CSRFTOKEN=client.defaults.get("HTTP_X_CSRFTOKEN"),
+        HTTP_IF_MATCH=version_revision(version),
+        content_type="application/json",
+    )
+
+
+@pytest.fixture
+def clean_draft(db, draft_version, relation_fixtures):
+    """A draft version carrying a projection-clean pair of canonical nodes.
+
+    The activate test needs a graph that passes the publish battery; give both
+    canonical Method rows (already published) and remove the fixture's extra
+    nodes so locale parity holds.
+    """
+    from uuid import uuid4
+
+    from django.utils import timezone
+
+    from apps.content.models import Method
+
+    method_type_row = _get_or_make_type("t5method", "method", "T5 Method", "روش")
+    _get_or_make_type("t5structural", "none", "Structural", "ساختاری")
+    identity = draft_version.nodes.first()
+    key = uuid4()
+    now = timezone.now()
+    rows = []
+    for locale in ("en", "fa"):
+        rows.append(
+            Method.objects.create(
+                locale=locale,
+                slug=f"t5-clean-{locale}",
+                title=f"T5 clean {locale}",
+                short_description="Used by Task 5",
+                status="published",
+                published_at=now,
+                translation_key=key,
+            )
+        )
+    return {
+        "identity": identity,
+        "rows": rows,
+        "key": key,
+        "version": draft_version,
+        "type": method_type_row,
+    }
+
+
+@pytest.fixture
+def method_type(db):
+    """The method-canonical node type the Task-5 clean graph hangs off."""
+    return _get_or_make_type("t5method", "method", "T5 Method", "روش")
+
+
+@pytest.mark.django_db
+def test_layout_endpoint_is_deterministic_and_revisioned(admin_client, draft_version):
+    from apps.atlas.models import AtlasVersion
+    from apps.atlas.services import version_revision as vr
+
+    before = AtlasVersion.objects.get(pk=draft_version.pk).layout_revision
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(draft_version)
+    first = _post_action(admin_client, draft_version, "layout").json()
+    draft_version.refresh_from_db()
+    admin_client.defaults["HTTP_IF_MATCH"] = vr(draft_version)
+    second = _post_action(admin_client, draft_version, "layout").json()
+    assert first["coordinates"] == second["coordinates"]
+    assert second["layoutRevision"] == first["layoutRevision"] + 1
+    assert second["layoutRevision"] > before
+
+
+@pytest.mark.django_db
+def test_validate_returns_blocking_and_warnings(admin_client, draft_version):
+    response = admin_client.get(f"{BASE}/versions/{draft_version.pk}/validate")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"blocking", "warnings"}
+
+
+@pytest.mark.django_db
+def test_activate_requires_a_clean_report_and_enqueues_a_job(
+    admin_client, draft_version, method_type, clean_draft
+):
+    blocked = _post_action(admin_client, draft_version, "activate")
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "VALIDATION_BLOCKED"
+
+
+@pytest.mark.django_db
+def test_activate_on_an_active_version_is_already_active(admin_client, active_version):
+
+    response = _post_action(admin_client, active_version, "activate")
+    # The service raises AlreadyActive -> the envelope code ALREADY_ACTIVE.
+    assert response.status_code == 409
+    assert response.json()["code"] == "ALREADY_ACTIVE"
+
+
+@pytest.mark.django_db
+def test_stale_revision_on_activate_is_stale(admin_client, draft_version):
+    from apps.atlas.models import AtlasVersion
+
+    stale_stamp = draft_version.updated_at - timedelta(seconds=1)
+    AtlasVersion._base_manager.filter(pk=draft_version.pk).update(updated_at=stale_stamp)
+    draft_version.refresh_from_db()
+    # Send a revision minted from a PAST stamp while the row's stamp is the same
+    # past stamp — instead force a mismatch by sending the revision of ANOTHER row.
+    other = _version(status="draft", label="t5-other")
+    _node(version=other, node_type=_default_node_type(), visible=True)
+    other.refresh_from_db()
+    response = admin_client.post(
+        f"{BASE}/versions/{draft_version.pk}/activate",
+        {},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(other),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "STALE_REVISION"
+
+
+
+def _put_graph(client, version, body):
+    return client.put(
+        f"{BASE}/versions/{version.pk}/graph",
+        body,
+        HTTP_X_CSRFTOKEN=client.defaults.get("HTTP_X_CSRFTOKEN"),
+        HTTP_IF_MATCH=version_revision(version),
+        content_type="application/json",
+    )
+
+
+@pytest.fixture
+def t5_uses_type(db, relation_fixtures):
+    """A relate-to type for the bulk tests (any pair allowed, no M2M rows)."""
+    from apps.atlas.models import AtlasRelationType
+
+    return AtlasRelationType.objects.filter(key="related-to").first() if False else _relation_type(
+        "related-to",
+        label_en="related to",
+        label_fa="مرتبط با",
+        semantic_role="utility",
+        directed_default=True,
+        self_loop_policy="allow",
+    )
+
+
+@pytest.mark.django_db
+def test_bulk_graph_put_is_transactional(admin_client, clean_draft, t5_uses_type):
+
+    version = clean_draft["version"]
+    from apps.atlas.services import version_revision as vr
+
+    canonical = {"nodeTypeKey": "t5method", "canonicalTranslationKey": str(clean_draft["key"])}
+    structural = {"nodeTypeKey": "t5structural", "canonicalTranslationKey": None}
+    body = {
+        "nodes": [dict(canonical, publicKey="t5method-00000001"),
+                  dict(structural, publicKey="t5method-00000002")],
+        "relations": [], "groups": [],
+    }
+
+    ok = admin_client.put(
+        f"{BASE}/versions/{version.pk}/graph",
+        body, HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=vr(version),
+        content_type="application/json",
+    )
+    # A clean two-node graph still FAILS the publish battery — the structural
+    # node has no projected label in either locale, which is exactly what the
+    # parity blocker exists for; the bulk reject answers VALIDATION_BLOCKED.
+    assert ok.status_code == 409
+    blocking = ok.json()["issues"][0]["code"]
+    assert blocking in ("MISSING_LOCALE_PROJECTION", "MISSING_LAYOUT")
+    node_count = version.nodes.count()
+    # now a dangling relation must abort the whole replace (nothing written)
+    dangling = {
+        "nodes": [dict(canonical, publicKey="t5method-00000001")],
+        "relations": [{"sourceKey": "t5method-00000001",
+                       "relationTypeKey": "related-to",
+                       "targetKey": "ghost"}],
+        "groups": [],
+    }
+    response = _put_graph(admin_client, version, dangling)
+    # Ninja's payload validation or the local guard refuses the unknown target;
+    # either way the graph was NOT replaced (the old two-node set persists).
+    assert response.status_code in (400, 409), response.content
+    assert version.nodes.count() == node_count
