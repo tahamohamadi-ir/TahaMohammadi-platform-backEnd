@@ -1856,3 +1856,37 @@ def bulk_replace_graph(request, version_id: int, payload: AtlasBulkGraphIn):
         raise
     version.refresh_from_db()
     return {"nodeCount": version.nodes.count(), "relationCount": version.relations.count()}
+
+
+# ---------------------------------------------------------------------------
+# Task-6 route: mint (never verify, never serve draft content) — Plan A owns
+# the capability validation at the public read boundary; Plan C renders.
+# ---------------------------------------------------------------------------
+
+
+class AtlasPreviewMintIn(Schema):
+    locale: str = Field(min_length=2, max_length=2)
+
+
+@atlas_router.post("/versions/{version_id}/preview-token", response={200: dict})
+def mint_preview_token(request, version_id: int, payload: AtlasPreviewMintIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_draft(version)  # an ACTIVE row refuses with IMMUTABLE_ACTIVE
+    if payload.locale not in ("en", "fa"):
+        raise AdminError(400, VALIDATION, "Unknown locale.",
+                         fields={"locale": ["must be 'en' or 'fa'."]})
+    from apps.atlas.admin_preview import mint_preview_capability
+
+    body = mint_preview_capability(version.pk, payload.locale)
+    _atlas_audit(
+        request,
+        action="atlas.version.preview-mint",
+        version=version,
+        status=200,
+        detail=f"POST /versions/{version.pk}/preview-token {payload.locale} -> 200",
+    )
+    return body
