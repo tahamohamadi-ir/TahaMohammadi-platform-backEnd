@@ -42,7 +42,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ninja import Router, Schema
+from ninja import Field, Router, Schema
 
 from apps.api.admin_common import (
     IMMUTABLE_ACTIVE,
@@ -51,10 +51,11 @@ from apps.api.admin_common import (
     AdminError,
     _audit_log,
     _check_csrf,
+    _format_revision,
     _require_admin_otp,
 )
 from apps.atlas.models import AtlasVersion
-from apps.atlas.services import version_revision
+from apps.atlas.services import VERSION_STATUSES, clone_version, version_revision
 
 atlas_router = Router()
 
@@ -161,6 +162,18 @@ class AtlasVersionRowOut(Schema):
     relationCount: int
 
 
+class AtlasVersionDetailOut(AtlasVersionRowOut):
+    """Detail row: publishedAt instead of createdAt duplication (plan Task 2)."""
+
+    publishedAt: str | None = None
+
+
+class AtlasVersionCreateIn(Schema):
+    """POST /versions body — a draft starts with only a label."""
+
+    label: str = Field(min_length=1, max_length=120)
+
+
 class AtlasLayoutIn(Schema):
     """The stored layout dict shape: node public key -> [x, y, z]."""
 
@@ -182,6 +195,23 @@ class AtlasNodeOut(Schema):
 
 def _version_counts(version: AtlasVersion) -> tuple[int, int]:
     return (version.nodes.count(), version.relations.count())
+
+
+def _version_detail(version: AtlasVersion) -> AtlasVersionDetailOut:
+    """Detail row (Task 2): the row shape plus ``publishedAt``."""
+    nodes, relations = _version_counts(version)
+    published = version.published_at
+    return AtlasVersionDetailOut(
+        id=version.pk,
+        status=version.status,
+        label=version.label,
+        revision=version_revision(version),
+        createdAt=_format_revision(version.created_at),
+        updatedAt=_format_revision(version.updated_at),
+        nodeCount=nodes,
+        relationCount=relations,
+        publishedAt=(_format_revision(published) if published else None),
+    )
 
 
 def _version_row(version: AtlasVersion) -> AtlasVersionRowOut:
@@ -255,3 +285,77 @@ def patch_node(request, version_id: int, node_key: str, payload: AtlasNodeUpdate
         detail=f"PATCH /versions/{version.pk}/nodes/{node_key} -> 200",
     )
     return AtlasNodeOut(key=node.public_key, importance=node.importance)
+
+
+# ---------------------------------------------------------------------------
+# Task-2 routes: version lifecycle (create / detail / clone / archive).
+# List counts/status reuse the Task-1 row serializer; lifecycle rules stay in
+# apps.atlas.services (create = a bare draft row; clone = clone_version; the
+# one inline status rule is the plan's own: archiving a DRAFT is refused 409).
+# ---------------------------------------------------------------------------
+
+
+@atlas_router.post("/versions", response={201: AtlasVersionDetailOut})
+def create_version(request, payload: AtlasVersionCreateIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.create(status=VERSION_STATUSES.DRAFT, label=payload.label)
+    _atlas_audit(
+        request,
+        action="atlas.version.create",
+        version=version,
+        status=201,
+        detail=f"POST /versions label={payload.label!r} -> 201",
+    )
+    return _version_detail(version)
+
+
+@atlas_router.get("/versions/{version_id}", response=AtlasVersionDetailOut)
+def version_detail(request, version_id: int):
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    return _version_detail(version)
+
+
+@atlas_router.post("/versions/{version_id}/clone", response={201: AtlasVersionDetailOut})
+def clone_version_route(request, version_id: int, payload: AtlasVersionCreateIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    if not AtlasVersion.objects.filter(pk=version_id).exists():
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    version = clone_version(version_id, payload.label)
+    _atlas_audit(
+        request,
+        action="atlas.version.clone",
+        version=version,
+        status=201,
+        detail=f"POST /versions/{version_id}/clone label={payload.label!r} -> 201",
+    )
+    return _version_detail(version)
+
+
+@atlas_router.post("/versions/{version_id}/archive", response={200: AtlasVersionDetailOut})
+def archive_version(request, version_id: int):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    if version.status == VERSION_STATUSES.DRAFT:
+        raise AdminError(
+            409,
+            IMMUTABLE_ACTIVE,
+            "A draft Atlas version cannot be archived. Delete it instead.",
+        )
+    version.status = VERSION_STATUSES.ARCHIVED
+    version.save(update_fields=["status"])
+    _atlas_audit(
+        request,
+        action="atlas.version.archive",
+        version=version,
+        status=200,
+        detail=f"POST /versions/{version_id}/archive -> 200",
+    )
+    return _version_detail(version)

@@ -402,6 +402,115 @@ def test_layout_mutation_is_audited(admin_client, draft_version):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Task 2: version lifecycle endpoints (plan Task 2) — written RED first.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_create_version_returns_draft_with_revision(admin_client):
+    response = admin_client.post(
+        f"{BASE}/versions", {"label": "t2-created"}, content_type="application/json"
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "draft"
+    assert body["label"] == "t2-created"
+    assert body["revision"]  # the version_revision() wire value
+
+
+@pytest.mark.django_db
+def test_version_detail_includes_revision(admin_client, draft_version):
+    response = admin_client.get(f"{BASE}/versions/{draft_version.pk}")
+    assert response.status_code == 200
+    assert response.json()["revision"] == version_revision(draft_version)
+
+
+@pytest.mark.django_db
+def test_clone_returns_distinct_id_with_identical_keys(admin_client, draft_version):
+    node_keys_before = list(draft_version.nodes.values_list("public_key", flat=True))
+    relation_keys_before = [
+        (r.source.public_key, r.target.public_key, r.relation_type.key)
+        for r in draft_version.relations.select_related(
+            "source", "target", "relation_type"
+        )
+    ]
+    response = admin_client.post(
+        f"{BASE}/versions/{draft_version.pk}/clone",
+        {"label": "t2-clone"},
+        content_type="application/json",
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] != draft_version.pk
+    assert body["status"] == "draft"
+    clone = AtlasVersion.objects.get(pk=body["id"])
+    assert list(clone.nodes.values_list("public_key", flat=True)) == node_keys_before
+    cloned_pairs = [
+        (r.source.public_key, r.target.public_key, r.relation_type.key)
+        for r in clone.relations.select_related("source", "target", "relation_type")
+    ]
+    assert cloned_pairs == relation_keys_before
+
+
+@pytest.mark.django_db
+def test_archiving_a_draft_is_refused(admin_client, draft_version):
+    response = admin_client.post(f"{BASE}/versions/{draft_version.pk}/archive")
+    assert response.status_code == 409
+
+
+@pytest.mark.django_db
+def test_version_listing_counts_match_the_orm(admin_client, draft_version):
+    listing = admin_client.get(f"{BASE}/versions").json()
+    row = next(r for r in listing if r["id"] == draft_version.pk)
+    assert row["nodeCount"] == draft_version.nodes.count()
+    assert row["relationCount"] == draft_version.relations.count()
+    assert row["nodeCount"] == 2  # fixture: identity + one target
+    assert row["relationCount"] == 1
+
+
+@pytest.mark.django_db
+def test_archiving_an_active_version_succeeds(admin_client):
+    version = _version(status="active", label="t2-archive-active")
+    identity = _node(version=version, node_type=_default_node_type(), visible=True)
+    _apply_placeholder_layout(version, [identity])
+    version.refresh_from_db()
+    response = admin_client.post(f"{BASE}/versions/{version.pk}/archive")
+    assert response.status_code == 200
+    version.refresh_from_db()
+    assert version.status == "archived"
+
+
+@pytest.mark.parametrize(
+    "verb,body",
+    [
+        ("create", {"label": "audit-check"}),
+        ("clone", {"label": "audit-check-clone"}),
+        ("archive", None),
+    ],
+)
+@pytest.mark.django_db
+def test_version_mutations_are_audited(admin_client, draft_version, verb, body):
+    if verb == "clone":
+        path = f"{BASE}/versions/{draft_version.pk}/clone"
+    elif verb == "archive":
+        active = _version(status="active", label=f"t2-audit-{verb}")
+        _node(version=active, node_type=_default_node_type(), visible=True)
+        path = f"{BASE}/versions/{active.pk}/archive"
+    else:
+        path = f"{BASE}/versions"
+    response = admin_client.post(path, body, content_type="application/json")
+    assert response.status_code == 201 if verb != "archive" else response.status_code == 200
+    assert AuditLog.objects.filter(action=f"atlas.version.{verb}").exists()
+
+
+@pytest.mark.django_db
+def test_unknown_version_answers_404(admin_client, db):
+    assert admin_client.get(f"{BASE}/versions/9999").status_code == 404
+    assert admin_client.post(
+        f"{BASE}/versions/9999/clone", {"label": "x"}, content_type="application/json"
+    ).status_code == 404
+
+
 @pytest.mark.parametrize(
     "value,expected_pk,expected_us",
     [
