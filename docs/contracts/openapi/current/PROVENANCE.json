@@ -10,18 +10,18 @@
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 125,
-      "sha256": "b4ca00dfa302130dd250211705637614b11e8761078b6f00fd2d160b581af166"
+      "operations": 127,
+      "sha256": "3dad8b12f7dbbbd377a6eea3a02730bfade4a07b4420b38d45e6b661b64af926"
     },
     "public-openapi.json": {
-      "paths": 49,
-      "sha256": "469bd51ed7e1e0d3bed7c64affaf9d488c8ee124da69496e8f5b8acc36eda914",
+      "paths": 51,
+      "sha256": "bead273e13a6296030e3255b4a527e956cac8c09ccfff6b2c056df61bbf42139",
       "version": "0.4.0"
     }
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-08T15:15:53.391521+00:00",
-  "sourceCommit": "286ec4214716c3e4fce4bbba2d00fe427d2aa49f",
+  "generatedAtUtc": "2026-09-19T06:27:26.726326+00:00",
+  "sourceCommit": "5eb7b421e02df2f1640ce57fac3dd5e7af5c1b26",
   "status": "source-generated-unaccepted"
 }

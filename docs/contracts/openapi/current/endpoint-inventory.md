@@ -7,6 +7,8 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/article-redirects/{locale}` | List article slug redirects for a locale |
 | public | GET | `/api/articles/{locale}` | List published articles for a locale (paginated) |
 | public | GET | `/api/articles/{locale}/{slug}` | Get one published article by slug |
+| public | GET | `/api/atlas/preview` | The draft Knowledge Atlas projection behind a Bearer capability |
+| public | GET | `/api/atlas/{locale}` | The active Knowledge Atlas payload for a locale (spec §10.2) |
 | public | GET | `/api/books/{locale}` | List published books for a locale (paginated) |
 | public | GET | `/api/books/{locale}/{slug}` | Get one published book by slug |
 | public | POST | `/api/contact` | Contact form (emailed to owner, not stored). |

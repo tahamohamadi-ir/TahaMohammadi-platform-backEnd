@@ -4602,6 +4602,131 @@
         "summary": "Get one published article by slug"
       }
     },
+    "/api/atlas/preview": {
+      "get": {
+        "description": "``GET /api/atlas/preview?locale=<en|fa>`` with ``Authorization: Bearer …``.\n\nThe credential travels only in the ``Authorization`` header — never in a\npath segment or the query string, and a probe never learns that a draft\nexists: bad credentials answer 401 (absent/unparseable) or 403\n(expired/wrong purpose/wrong locale/unknown version), never 404. The signing\nsecret stays backend-only (settings); the payload is the exact-locale,\nfail-closed draft projection of the token's version.",
+        "operationId": "apps_api_api_get_atlas_preview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "The draft Knowledge Atlas projection behind a Bearer capability"
+      }
+    },
+    "/api/atlas/{locale}": {
+      "get": {
+        "description": "Fail-closed serving of the ACTIVE version's projection only.\n\n404 ``atlas_not_found`` for an unsupported locale or no active version; 500\n``atlas_inval`` with no partial body when the active version fails its own\ncontract check. Draft rows are unreachable by construction — the serving\npath reads nothing but the ``status=\"active\"`` row. Conditional GET\n(plan Task 16): a matching ``If-None-Match`` answers 304 with no body and a\npublic ``max-age=60`` cache header, while an active version that fails its\ncontract check never earns a 304 — the short-circuit fires only after the\nfreshly computed validator proves the current payload is still servable.",
+        "operationId": "apps_api_api_get_atlas",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "locale",
+            "required": true,
+            "schema": {
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelopeOut"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "The active Knowledge Atlas payload for a locale (spec §10.2)"
+      }
+    },
     "/api/books/{locale}": {
       "get": {
         "operationId": "apps_api_api_list_books",
