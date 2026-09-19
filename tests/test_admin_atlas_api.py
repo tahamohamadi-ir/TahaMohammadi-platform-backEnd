@@ -38,6 +38,7 @@ from apps.atlas.tests.factories import (
     _apply_placeholder_layout,
     _default_node_type,
     _node,
+    _node_type,
     _relation,
     _research_focus_type,
     _version,
@@ -224,7 +225,7 @@ def test_revision_roundtrip_accepts_then_rejects(admin_client, draft_version):
     # 1+2: accept the current revision end-to-end.
     response = _patch_node(admin_client, draft_version)
     assert response.status_code == 200, response.content
-    assert response.json()["key"] == _first_key(draft_version)
+    assert response.json()["publicKey"] == _first_key(draft_version)
 
     # 3: mint a revision, mutate the row underneath it → stale.
     version = _version(status="draft", label="plan-b-roundtrip-stale")
@@ -538,3 +539,122 @@ def test_split_atlas_revision_accepts_wire_shape(value, expected_pk, expected_us
 )
 def test_split_atlas_revision_rejects_non_wire_shape(value):
     assert _split_atlas_revision(value) == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: node endpoints + canonical picker (plan Task 3) — written RED first.
+# ---------------------------------------------------------------------------
+
+
+def _create_node(client, version, payload):
+    """POST a node with a valid session/CSRF/If-Match (card section A)."""
+    return client.post(
+        f"{BASE}/versions/{version.pk}/nodes",
+        payload,
+        HTTP_X_CSRFTOKEN=client.defaults.get("HTTP_X_CSRFTOKEN"),
+        HTTP_IF_MATCH=version_revision(version),
+        content_type="application/json",
+    )
+
+
+@pytest.fixture
+def method_pair(db):
+    """A published EN+FA Method pair and a method-canonical node type."""
+    from django.utils import timezone
+
+    from apps.content.models import Method
+
+    method_type = _node_type(
+        key="method", canonical_source="method", label_en="Method", label_fa="روش"
+    )
+    from uuid import uuid4
+    key = uuid4()
+    now = timezone.now()
+    en = Method.objects.create(
+        locale="en", slug="t3-method-en", title="T3 method EN",
+        status="published", published_at=now, translation_key=key,
+    )
+    fa = Method.objects.create(
+        locale="fa", slug="t3-method-fa", title="روش تی‌۳",
+        status="published", published_at=now, translation_key=key,
+    )
+    return {"type": method_type, "en": en, "fa": fa, "translation_key": key}
+
+
+@pytest.fixture
+def draft_only_method(db):
+    """A Method whose ONLY row is a draft — never publishable (Task 3 pin)."""
+    from uuid import uuid4
+
+    from apps.content.models import Method
+
+    fake_key = uuid4()
+    row = Method.objects.create(
+        locale="en", slug="t3-draft-only", title="Draft only",
+        status="draft", translation_key=fake_key,
+    )
+    row.refresh_from_db()
+    _node_type(key="method", canonical_source="method", label_en="Method", label_fa="روش")
+    return row
+
+
+@pytest.mark.django_db
+def test_create_node_validates_the_canonical_pair(admin_client, draft_version, method_pair):
+    version = draft_version
+    version.nodes.all().delete()  # a clean topology for this test
+    response = _create_node(admin_client, version, {
+        "nodeTypeKey": "method", "canonicalSource": "method",
+        "canonicalTranslationKey": str(method_pair["translation_key"]), "importance": 45,
+    })
+    assert response.status_code == 201, response.content
+    assert response.json()["publicKey"].startswith("method-")
+    assert response.json()["localeStatus"] == {"en": True, "fa": True}
+
+
+@pytest.mark.django_db
+def test_create_node_rejects_an_unpublishable_canonical_record(
+    admin_client, draft_version, draft_only_method
+):
+    version = draft_version
+    response = _create_node(admin_client, version, {
+        "nodeTypeKey": "method", "canonicalSource": "method",
+        "canonicalTranslationKey": str(draft_only_method.translation_key),
+    })
+    assert response.status_code == 400
+    assert response.json()["fields"]["canonicalTranslationKey"]
+
+
+@pytest.mark.django_db
+def test_pin_requires_both_coordinates(admin_client, draft_version):
+    node = _node(version=draft_version, node_type=_default_node_type(), visible=True)
+    response = admin_client.patch(
+        f"{BASE}/versions/{draft_version.pk}/nodes/{node.public_key}",
+        {"importance": 50, "pin": {"x": 4.0}},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert "pin" in response.json()["fields"]
+
+
+@pytest.mark.django_db
+def test_node_public_key_is_never_editable(admin_client, draft_version):
+    node = _node(version=draft_version, node_type=_default_node_type(), visible=True)
+    response = admin_client.patch(
+        f"{BASE}/versions/{draft_version.pk}/nodes/{node.public_key}",
+        {"importance": 50, "publicKey": "attacker-chosen"},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_canonical_candidates_are_publish_gated(admin_client, draft_only_method):
+    rows = admin_client.get(f"{BASE}/canonical-candidates?source=method").json()
+    assert all(row["publishable"]["en"] or row["publishable"]["fa"] for row in rows)
+    assert str(draft_only_method.translation_key) not in {
+        row["translationKey"] for row in rows if row["publishable"]["en"]
+    }

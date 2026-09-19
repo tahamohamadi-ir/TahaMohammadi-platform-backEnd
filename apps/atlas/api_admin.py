@@ -40,21 +40,27 @@ bumps ``updated_at`` through ``auto_now`` — never audit-tagged).
 
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import datetime
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from ninja import Field, Router, Schema
 
 from apps.api.admin_common import (
     IMMUTABLE_ACTIVE,
     PRECONDITION_REQUIRED,
     STALE_REVISION,
+    VALIDATION,
     AdminError,
     _audit_log,
     _check_csrf,
     _format_revision,
     _require_admin_otp,
 )
-from apps.atlas.models import AtlasVersion
+from apps.atlas import keys
+from apps.atlas.models import AtlasGroupMembership, AtlasNode, AtlasNodeType, AtlasVersion
 from apps.atlas.services import VERSION_STATUSES, clone_version, version_revision
 
 atlas_router = Router()
@@ -180,17 +186,84 @@ class AtlasLayoutIn(Schema):
     layout: dict[str, list[float]]
 
 
-class AtlasNodeUpdateIn(Schema):
-    """PATCH /versions/<id>/nodes/<key> body — Task 1 accepts importance only."""
+class AtlasNodePinIn(Schema):
+    """An optional layout pin.
 
+    Fields are optional at the SCHEMA level on purpose: the paired rule
+    ("x and y together; z only with both") is the MODEL's ``clean()`` rule,
+    which surfaces as 400 ``VALIDATION`` with ``fields`` (plan Task 3); a
+    pin carrying only ``x`` must reach the model, not die at a schema 422.
+    """
+
+    x: float | None = None
+    y: float | None = None
+    z: float | None = None
+
+
+class AtlasNodeOverridesIn(Schema):
+    """Per-locale overrides of one locale (spec §5): upserted translations."""
+
+    label: str | None = Field(default=None, max_length=200)
+    summary: str | None = Field(default=None)
+    accessibleLabel: str | None = Field(default=None, max_length=300)
+    aliases: list[str] | None = Field(default=None)
+
+
+class AtlasNodeWriteIn(Schema):
+    """POST /versions/<id>/nodes body (spec §5 fields, camelCase on the wire)."""
+
+    nodeTypeKey: str
+    canonicalSource: str | None = Field(default=None, max_length=32)
+    canonicalTranslationKey: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    )
+    importance: int | None = Field(default=None, ge=0, le=100)
+    visible: bool | None = None
+    mobileOverviewPriority: str | None = Field(default=None, max_length=16)
+    groupKeys: list[str] | None = Field(default=None)
+    pin: AtlasNodePinIn | None = Field(default=None)
+    overrides: dict[str, AtlasNodeOverridesIn] | None = Field(default=None)
+
+
+class AtlasNodePatchIn(Schema):
+    """PATCH body — every field optional; ``publicKey`` is deliberately absent
+    (a node key is minted once and immutable: a PATCH carrying it answers 400)."""
+
+    canonicalTranslationKey: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    )
+    importance: int | None = Field(default=None, ge=0, le=100)
+    visible: bool | None = Field(default=None)
+    mobileOverviewPriority: str | None = Field(default=None, max_length=16)
+    groupKeys: list[str] | None = Field(default=None)
+    pin: AtlasNodePinIn | None = Field(default=None)
+    overrides: dict[str, AtlasNodeOverridesIn] | None = Field(default=None)
+
+
+class AtlasNodeRowOut(Schema):
+    """One node row of the admin surface (Task 3 row shape)."""
+
+    publicKey: str
+    nodeTypeKey: str
+    canonicalSource: str
+    canonicalTranslationKey: str | None = None
     importance: int
+    visible: bool
+    mobileOverviewPriority: str
+    groupKeys: list[str]
+    pin: dict | None = None
+    localeStatus: dict | None = None
 
 
-class AtlasNodeOut(Schema):
-    """The patch response for a single node — minimal Task-1 surface."""
+class AtlasCanonicalCandidateOut(Schema):
+    """One picker row (plan Task 3): identity + per-locale publish gates."""
 
-    key: str
-    importance: int
+    translationKey: str
+    title: str
+    localeStatus: dict[str, bool]
+    publishable: dict[str, bool]
 
 
 def _version_counts(version: AtlasVersion) -> tuple[int, int]:
@@ -263,10 +336,26 @@ def replace_layout(request, version_id: int, payload: AtlasLayoutIn):
     return {"layout": version.layout, "layoutRevision": version.layout_revision}
 
 
-@atlas_router.patch("/versions/{version_id}/nodes/{node_key}", response={200: AtlasNodeOut})
-def patch_node(request, version_id: int, node_key: str, payload: AtlasNodeUpdateIn):
+@atlas_router.patch("/versions/{version_id}/nodes/{node_key}", response={200: AtlasNodeRowOut})
+def patch_node(request, version_id: int, node_key: str, payload: AtlasNodePatchIn):
     _require_admin_otp(request)
     _check_csrf(request)
+    # ``publicKey`` is deliberately absent from AtlasNodePatchIn, but ninja's
+    # schema tolerates unknown keys — an attempt to re-key a node must surface
+    # (400), never silently succeed with the key ignored.
+    try:
+        body = json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    if "publicKey" in body:
+        raise AdminError(
+            400,
+            VALIDATION,
+            "A node public key is immutable once it exists.",
+            fields={"publicKey": ["cannot be edited."]},
+        )
     version = AtlasVersion.objects.filter(pk=version_id).first()
     if version is None:
         raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
@@ -275,8 +364,7 @@ def patch_node(request, version_id: int, node_key: str, payload: AtlasNodeUpdate
     node = version.nodes.filter(public_key=node_key).first()
     if node is None:
         raise AdminError(404, "NOT_FOUND", "Atlas node not found.")
-    node.importance = payload.importance
-    node.save(update_fields=["importance"])
+    _apply_node_write(node, payload)
     _atlas_audit(
         request,
         action="atlas.node.update",
@@ -284,7 +372,7 @@ def patch_node(request, version_id: int, node_key: str, payload: AtlasNodeUpdate
         status=200,
         detail=f"PATCH /versions/{version.pk}/nodes/{node_key} -> 200",
     )
-    return AtlasNodeOut(key=node.public_key, importance=node.importance)
+    return _node_row(node)
 
 
 # ---------------------------------------------------------------------------
@@ -359,3 +447,372 @@ def archive_version(request, version_id: int):
         detail=f"POST /versions/{version_id}/archive -> 200",
     )
     return _version_detail(version)
+
+
+# ---------------------------------------------------------------------------
+# Task-3 routes: nodes + canonical picker (plan Task 3). Business rules stay in
+# the model layer: writes go through full_clean() so ``clean()`` errors surface
+# as 400 VALIDATION with ``fields``; overrides upsert AtlasNodeTranslation rows
+# and group membership is replaced transactionally; the picker reads the
+# canonical allow-list (canonical.CANONICAL_SOURCES) — never invents a record.
+# ---------------------------------------------------------------------------
+def _require_canonical_publishable(canonical_source: str, translation_key) -> None:
+    """The picker rule as a write gate: the record must be publishable per locale.
+
+    A canonical reference that resolves in neither locale is refused (400);
+    one that resolves in only ONE locale is allowed — the parity publish gate
+    will block publication until the other locale is covered (spec §5.4).
+    """
+    from apps.atlas.canonical import AmbiguousCanonicalRef, resolve_canonical_pair
+
+    try:
+        resolutions = resolve_canonical_pair(canonical_source, translation_key)
+    except AmbiguousCanonicalRef as exc:
+        raise AdminError(
+            400,
+            VALIDATION,
+            "Ambiguous canonical reference.",
+            fields={"canonicalTranslationKey": [str(exc)]},
+        ) from exc
+    if not any(resolved is not None for resolved in resolutions.values()):
+        raise AdminError(
+            400,
+            VALIDATION,
+            "Canonical record is not publishable in any locale.",
+            fields={"canonicalTranslationKey": ["no published row for en or fa."]},
+        )
+
+
+def _as_uuid(text: str, field: str):
+    try:
+        return uuid.UUID(text)
+    except ValueError as exc:
+        raise AdminError(400, VALIDATION, "Invalid identifier.",
+                         fields={field: [f"{text!r} is not a UUID."]}) from exc
+
+
+def _validation_from_django(exc, *, prefix: str = "", remap: dict | None = None) -> AdminError:
+    """Surface a Django ValidationError as 400 VALIDATION with ``fields``.
+
+    ``remap`` renames one model-side field key to the wire key it belongs to
+    (the pin's model columns are ``pin_x``/``pin_y``/``pin_z``; the wire is
+    one ``pin`` object carrying them).
+    """
+    field_errors: dict = {}
+    if hasattr(exc, "error_dict"):
+        items = exc.error_dict.items()
+    else:
+        items = [("", exc.messages)]
+    remap = remap or {}
+    for field, errors in items:
+        if hasattr(errors, "__iter__"):
+            messages = [str(e.message) for e in errors]
+        else:
+            messages = [str(errors)]
+        key = remap.get(field, field)
+        key = f"{prefix}.{key}" if prefix else key
+        field_errors[key] = field_errors.get(key, []) + messages
+    return AdminError(400, VALIDATION, "Validation failed.", fields=field_errors)
+
+
+def _apply_node_write(node: AtlasNode, payload: AtlasNodePatchIn) -> AtlasNode:
+    """Field assignment + nested writes under the model's own rules.
+
+    Identity fields never arrive (the schema omits ``publicKey``), the pin is
+    written as a unit (the model's ``clean()`` enforces the paired rule),
+    overrides upsert per-locale translation rows in place, and group
+    membership is replaced transactionally against same-version groups.
+    """
+    from apps.atlas.models import (
+        MOBILE_OVERVIEW_PRIORITIES,
+        AtlasGroup,
+        AtlasGroupMembership,
+        AtlasNodeTranslation,
+    )
+
+    if payload.canonicalTranslationKey is not None:
+        node.canonical_translation_key = _as_uuid(
+            payload.canonicalTranslationKey, "canonicalTranslationKey"
+        )
+    if payload.importance is not None:
+        node.importance = payload.importance
+    if payload.visible is not None:
+        node.visible = payload.visible
+    if payload.mobileOverviewPriority is not None:
+        if payload.mobileOverviewPriority not in MOBILE_OVERVIEW_PRIORITIES.values:
+            raise AdminError(
+                400,
+                VALIDATION,
+                "Unknown mobileOverviewPriority.",
+                fields={"mobileOverviewPriority": ["must be one of auto/featured/hidden."]},
+            )
+        node.mobile_overview_priority = payload.mobileOverviewPriority
+    if payload.pin is not None:
+        node.pin_x = payload.pin.x
+        node.pin_y = payload.pin.y
+        node.pin_z = payload.pin.z
+
+    try:
+        node.full_clean()
+        node.save()
+    except DjangoValidationError as exc:
+            raise _validation_from_django(
+            exc, remap={"pin_x": "pin", "pin_y": "pin", "pin_z": "pin"}
+        ) from exc
+
+    overrides = payload.overrides or {}
+    for locale, override in overrides.items():
+        if locale not in ("en", "fa"):
+            raise AdminError(
+                400,
+                VALIDATION,
+                "Unknown override locale.",
+                fields={"overrides": [f"unsupported locale {locale!r}."]},
+            )
+        row, _created = AtlasNodeTranslation.objects.get_or_create(node=node, locale=locale)
+        touched: list[str] = []
+        for attr, wire in (
+            ("label_override", "label"),
+            ("summary_override", "summary"),
+            ("accessible_label_override", "accessibleLabel"),
+            ("aliases", "aliases"),
+        ):
+            value = getattr(override, wire, None)
+            if value is not None:
+                setattr(row, attr, value)
+                touched.append(attr)
+        try:
+            row.full_clean()
+            row.save()
+        except DjangoValidationError as exc:
+            raise _validation_from_django(exc, prefix=f"overrides.{locale}") from exc
+
+    if payload.groupKeys is not None:
+        keys = list(dict.fromkeys(payload.groupKeys))
+        groups = list(AtlasGroup.objects.filter(version=node.version, public_key__in=keys))
+        known = {g.public_key for g in groups}
+        if set(keys) != known:
+            unknown = [k for k in keys if k not in known]
+            raise AdminError(
+                400,
+                VALIDATION,
+                "Unknown groupKeys.",
+                fields={"groupKeys": [f"no group {k!r} in this version." for k in unknown]},
+            )
+        with transaction.atomic():
+            AtlasGroupMembership.objects.filter(node=node).exclude(
+                group__public_key__in=keys
+            ).delete()
+            existing = set(
+                AtlasGroupMembership.objects.filter(node=node).values_list(
+                    "group__public_key", flat=True
+                )
+            )
+            for sort_order, group_key in enumerate(keys):
+                group = next(g for g in groups if g.public_key == group_key)
+                if group_key not in existing:
+                    AtlasGroupMembership.objects.create(
+                        group=group, node=node, sort_order=sort_order
+                    )
+    return node
+
+
+def _node_row(node: AtlasNode) -> AtlasNodeRowOut:
+    """One node row — group keys and the per-locale publish gates included."""
+    from apps.atlas.canonical import resolve_canonical_pair
+
+    groups = list(
+        AtlasGroupMembership.objects.filter(node=node)
+        .select_related("group")
+        .order_by("sort_order")
+        .values_list("group__public_key", flat=True)
+    )
+    pin = None
+    if node.pin_x is not None and node.pin_y is not None:
+        pin = {"x": node.pin_x, "y": node.pin_y, "z": node.pin_z}
+    resolutions = resolve_canonical_pair(
+        node.canonical_model, node.canonical_translation_key
+    )
+    locale_status = {
+        locale: resolved is not None for locale, resolved in resolutions.items()
+    }
+    return AtlasNodeRowOut(
+        publicKey=node.public_key,
+        nodeTypeKey=node.node_type.key,
+        canonicalSource=node.canonical_model,
+        canonicalTranslationKey=(
+            str(node.canonical_translation_key) if node.canonical_translation_key else None
+        ),
+        importance=node.importance,
+        visible=node.visible,
+        mobileOverviewPriority=node.mobile_overview_priority,
+        groupKeys=list(groups),
+        pin=pin,
+        localeStatus=locale_status,
+    )
+
+
+@atlas_router.get("/versions/{version_id}/nodes", response=list[AtlasNodeRowOut])
+def list_nodes(request, version_id: int):
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    return [
+        _node_row(node)
+        for node in version.nodes.select_related("node_type").order_by("public_key")
+    ]
+
+
+@atlas_router.post("/versions/{version_id}/nodes", response={201: AtlasNodeRowOut})
+def create_node(request, version_id: int, payload: AtlasNodeWriteIn):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+
+    node_type = AtlasNodeType.objects.filter(key=payload.nodeTypeKey).first()
+    if node_type is None:
+        raise AdminError(
+            400,
+            VALIDATION,
+            "Unknown nodeTypeKey.",
+            fields={"nodeTypeKey": [f"no node type {payload.nodeTypeKey!r}."]},
+        )
+    if payload.canonicalSource and payload.canonicalSource != node_type.canonical_source:
+        raise AdminError(
+            400,
+            VALIDATION,
+            "canonicalSource must equal the node type's canonical_source.",
+            fields={"canonicalSource": [f"expected {node_type.canonical_source!r}."]},
+        )
+    translation_key = (
+        _as_uuid(payload.canonicalTranslationKey, "canonicalTranslationKey")
+        if payload.canonicalTranslationKey
+        else None
+    )
+    # A canonical node must resolve in BOTH locales (the picker can never
+    # publish a half-resolvable record: spec §5.4, card rule).
+    if node_type.canonical_source != "none":
+        if translation_key is None:
+            raise AdminError(
+                400,
+                VALIDATION,
+                "A canonical node requires canonicalTranslationKey.",
+                fields={"canonicalTranslationKey": ["required for this node type."]},
+            )
+        _require_canonical_publishable(node_type.canonical_source, translation_key)
+
+    node = AtlasNode(
+        version=version,
+        node_type=node_type,
+        public_key=keys.new_node_key(node_type.key),
+        canonical_model=node_type.canonical_source,
+        canonical_translation_key=translation_key,
+    )
+    patch = AtlasNodePatchIn(
+        importance=payload.importance,
+        visible=payload.visible,
+        mobileOverviewPriority=payload.mobileOverviewPriority,
+        groupKeys=payload.groupKeys,
+        pin=payload.pin,
+        overrides=payload.overrides,
+    )
+    node = _apply_node_write(node, patch)
+    _atlas_audit(
+        request,
+        action="atlas.node.create",
+        version=version,
+        status=201,
+        detail=f"POST /versions/{version.pk}/nodes {node.public_key} -> 201",
+    )
+    return _node_row(node)
+
+
+@atlas_router.get("/versions/{version_id}/nodes/{node_key}", response=AtlasNodeRowOut)
+def get_node(request, version_id: int, node_key: str):
+    _require_admin_otp(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    node = version.nodes.filter(public_key=node_key).first()
+    if node is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas node not found.")
+    return _node_row(node)
+
+
+@atlas_router.delete("/versions/{version_id}/nodes/{node_key}", response={204: None})
+def delete_node(request, version_id: int, node_key: str):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    version = AtlasVersion.objects.filter(pk=version_id).first()
+    if version is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas version not found.")
+    _require_current_revision(request, version)
+    _require_draft(version)
+    node = version.nodes.filter(public_key=node_key).first()
+    if node is None:
+        raise AdminError(404, "NOT_FOUND", "Atlas node not found.")
+    node.delete()
+    _atlas_audit(
+        request,
+        action="atlas.node.delete",
+        version=version,
+        status=204,
+        detail=f"DELETE /versions/{version.pk}/nodes/{node_key} -> 204",
+    )
+    return 204, None
+
+
+@atlas_router.get("/canonical-candidates", response=list[AtlasCanonicalCandidateOut])
+def canonical_candidates(request, source: str = "", q: str = ""):
+    """The admin picker rows for one canonical family (plan Task 3).
+
+    Reads the canonical allow-list registry; a family outside it is a 404, a
+    never-resolving query would invent a record — the picker only ever offers
+    rows that exist in the CMS, gated per locale by ``objects.public()``.
+    """
+    _require_admin_otp(request)
+    from django.db.models import Q
+
+    from apps.atlas.canonical import CANONICAL_SOURCES as REGISTRY
+
+    source_key = (source or "").strip()
+    if source_key not in REGISTRY:
+        raise AdminError(
+            404,
+            "NOT_FOUND",
+            f"Unknown canonical source {source_key!r}; known: {', '.join(REGISTRY)}.",
+        )
+    model = REGISTRY[source_key]
+    queryset = model.objects.public()
+    if source_key in ("method", "technology"):
+        canonical_field = "short_description"
+    else:
+        canonical_field = "title"
+    if q:
+        queryset = queryset.filter(
+            Q(title__icontains=q) | Q(**{f"{canonical_field}__icontains": q})
+        )
+    rows: dict[str, dict] = {}
+    for row in queryset.distinct():
+        key_text = str(row.translation_key)
+        bucket = rows.setdefault(
+            key_text,
+            {
+                "translationKey": key_text,
+                "title": str(row.title or ""),
+                "localeStatus": {"en": False, "fa": False},
+                "publishable": {"en": False, "fa": False},
+            },
+        )
+        locale = row.locale or "en"
+        is_public = row in model.objects.public().filter(
+            translation_key=row.translation_key, locale=locale
+        )
+        bucket["localeStatus"][locale] = True
+        bucket["publishable"][locale] = is_public
+    return [rows[k] for k in sorted(rows)]
