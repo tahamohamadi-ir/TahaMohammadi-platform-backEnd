@@ -1173,6 +1173,17 @@ def patch_relation(request, version_id: int, relation_key: str, payload: AtlasRe
         relation.save(update_fields=["directed", "weight", "visible"])
     except DjangoValidationError as exc:
         raise _validation_from_django(exc) from exc
+    if payload.explanation is not None:
+        from apps.atlas.models import AtlasRelationTranslation
+
+        for locale, explanation in payload.explanation.items():
+            if locale not in ("en", "fa"):
+                raise AdminError(400, VALIDATION, "Unknown explanation locale.",
+                                 fields={"explanation": [f"unsupported locale {locale!r}."]})
+            AtlasRelationTranslation.objects.update_or_create(
+                relation=relation, locale=locale,
+                defaults={"explanation": str(explanation or "")},
+            )
     _atlas_audit(
         request, action="atlas.relation.update", version=version, status=200,
         detail=f"PATCH relations/{relation_key} -> 200",

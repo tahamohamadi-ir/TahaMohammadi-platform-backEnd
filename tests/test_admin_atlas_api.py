@@ -624,6 +624,53 @@ def test_relation_key_is_the_composed_public_key(admin_client, draft_version, re
 
 
 @pytest.mark.django_db
+def test_relation_patch_persists_explanations(admin_client, draft_version, relation_fixtures):
+    from apps.atlas.models import AtlasRelationTranslation
+
+    keys = _node_keys(relation_fixtures)
+    created = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+    })
+    assert created.status_code == 201, created.content
+    relation_key = created.json()["key"]
+    response = admin_client.patch(
+        f"{BASE}/versions/{draft_version.pk}/relations/{relation_key}",
+        {"explanation": {"en": "Uses it.", "fa": "از آن استفاده می‌کند."}},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    stored = {
+        t.locale: t.explanation
+        for t in AtlasRelationTranslation.objects.filter(
+            relation__version=draft_version, relation__source__public_key=keys["project"],
+        )
+    }
+    assert stored == {"en": "Uses it.", "fa": "از آن استفاده می‌کند."}
+
+
+@pytest.mark.django_db
+def test_relation_patch_rejects_unknown_explanation_locale(
+    admin_client, draft_version, relation_fixtures
+):
+    keys = _node_keys(relation_fixtures)
+    created = _create_relation(admin_client, draft_version, {
+        "sourceKey": keys["project"], "relationTypeKey": "uses", "targetKey": keys["method"],
+    })
+    assert created.status_code == 201, created.content
+    response = admin_client.patch(
+        f"{BASE}/versions/{draft_version.pk}/relations/{created.json()['key']}",
+        {"explanation": {"de": "Verwendet es."}},
+        HTTP_X_CSRFTOKEN=admin_client.defaults["HTTP_X_CSRFTOKEN"],
+        HTTP_IF_MATCH=version_revision(draft_version),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert response.json()["fields"]["explanation"]
+
+
+@pytest.mark.django_db
 def test_directed_override_is_refused_when_the_type_forbids_it(
     admin_client, draft_version, relation_fixtures
 ):
