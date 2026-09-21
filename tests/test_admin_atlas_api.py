@@ -835,6 +835,15 @@ def test_relation_type_in_use_cannot_be_deleted(admin_client, draft_version, rel
 
 
 @pytest.mark.django_db
+def test_relation_type_row_exposes_filter_fields(admin_client, relation_fixtures):
+    listing = admin_client.get(f"{BASE}/relation-types").json()
+    row = next(r for r in listing if r["key"] == "uses")
+    assert row["allowedSourceTypes"] == ["project"]
+    assert row["allowedTargetTypes"] == ["method", "publication"]
+    assert row["hierarchyRole"] is False
+
+
+@pytest.mark.django_db
 def test_group_patch_renames_labels(admin_client, draft_version, group_fixtures):
     group = group_fixtures["group"]
     response = admin_client.patch(

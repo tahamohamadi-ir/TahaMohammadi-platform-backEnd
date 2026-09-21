@@ -1310,6 +1310,12 @@ class AtlasRelationTypeRowOut(AtlasNodeTypeRowOut):
     sort_order: int
     directedDefault: bool = True
     overridableDirection: bool = False
+    # Task-12 frontend filters (allowed-pair + hierarchy) read these straight
+    # off the row: an empty allowed list means "any active type" (spec §6.2),
+    # mirroring validation.AllowedTypes.
+    hierarchyRole: bool = False
+    allowedSourceTypes: list[str] = []
+    allowedTargetTypes: list[str] = []
 
 
 class AtlasRelationTypeWriteIn(Schema):
@@ -1346,6 +1352,13 @@ def _relation_taxonomy_row(row) -> AtlasRelationTypeRowOut:
         sort_order=row.sort_order,
         directedDefault=row.directed_default,
         overridableDirection=row.overridable_direction,
+        hierarchyRole=row.hierarchy_role,
+        allowedSourceTypes=sorted(
+            t.key for t in row.allowed_source_types.all()
+        ),
+        allowedTargetTypes=sorted(
+            t.key for t in row.allowed_target_types.all()
+        ),
     )
 
 
@@ -1451,7 +1464,9 @@ def delete_relation_type(request, type_key: str):
 @atlas_router.get("/relation-types", response=list[AtlasRelationTypeRowOut])
 def list_relation_types(request):
     _require_admin_otp(request)
-    rows = AtlasRelationType.objects.order_by("sort_order", "key")
+    rows = AtlasRelationType.objects.prefetch_related(
+        "allowed_source_types", "allowed_target_types"
+    ).order_by("sort_order", "key")
     return [_relation_taxonomy_row(row) for row in rows]
 
 
