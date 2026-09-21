@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6)",
+  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6). Addendum 2026-09-21 — AtlasRelationTypeRowOut gains hierarchyRole + allowedSourceTypes + allowedTargetTypes (Plan B Task-12 prerequisite, owner-directed; additive only, zero removals)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -9,7 +9,7 @@
   "artifacts": {
     "admin-openapi.json": {
       "paths": 79,
-      "sha256": "da597b5f139c7e9c0acad98ebd8b137f3d080469aa74d3688c1bdffcbb2c9342",
+      "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
@@ -24,7 +24,7 @@
   },
   "djangoSettingsModule": "config.settings.development",
   "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md. 2026-09-08 re-pin (additive localized-settings featured/brand delta only, zero removed schema lines) verified by Backend CI provenance gate plus drift/access tests; evidence recorded in Back-End/docs/quality/product-v2/PU-03-settings-HANDOFF.md.",
-  "sourceCommit": "5ce30a10484188a8f478e9a53300d49b13f258e0",
+  "sourceCommit": "9d582d1c88330c5944de6b0431ce29aa7fe4daaf",
   "status": "scaffold-accepted",
   "supersedes": "The former PROVENANCE.json-embedded acceptance pointer (status scaffold-accepted plus acceptanceRecord), retired because every export regenerates PROVENANCE.json with a fresh timestamp, which made identical-snapshot acceptance ambiguous and broke the drift gate."
 }

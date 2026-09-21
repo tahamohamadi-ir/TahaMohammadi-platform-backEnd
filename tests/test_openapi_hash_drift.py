@@ -35,7 +35,7 @@ ACCEPTED = {
         "version": "0.4.0",
     },
     "admin-openapi.json": {
-        "sha256": "da597b5f139c7e9c0acad98ebd8b137f3d080469aa74d3688c1bdffcbb2c9342",
+        "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
         "paths": 79,
         "version": "0.1.0",
     },
@@ -48,7 +48,7 @@ ACCEPTED = {
 # Hashes of the same content with LF line endings (canonical repo form).
 CANONICAL_LF = {
     "public-openapi.json": "250c9a89d71381a9b29e39fc1a458a965ec3df4c2efd1535a0b8b7aa901536d2",
-    "admin-openapi.json": "43b8a666f1416412883b17b09c27571de52cbaec06e7bf3c9efe92bb03141dd3",
+    "admin-openapi.json": "76f29ffb5ebbe25cb7f2129f4e5c224c556bc9e0d5e5fb822701551b53cd43c5",
     "endpoint-inventory.md": "67b26266f5d74c8f4f2f4d9eb6ba2cbedefc545e10d3aca7e45d16b3656b74be",
 }
 

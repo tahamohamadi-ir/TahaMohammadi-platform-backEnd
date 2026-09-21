@@ -6,7 +6,7 @@
   "artifacts": {
     "admin-openapi.json": {
       "paths": 79,
-      "sha256": "da597b5f139c7e9c0acad98ebd8b137f3d080469aa74d3688c1bdffcbb2c9342",
+      "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
@@ -21,7 +21,7 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-19T13:28:00.777084+00:00",
-  "sourceCommit": "5ce30a10484188a8f478e9a53300d49b13f258e0",
+  "generatedAtUtc": "2026-09-21T08:01:27.786826+00:00",
+  "sourceCommit": "9d582d1c88330c5944de6b0431ce29aa7fe4daaf",
   "status": "source-generated-unaccepted"
 }

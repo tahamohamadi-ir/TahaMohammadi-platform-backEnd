@@ -1175,6 +1175,22 @@
             "title": "Active",
             "type": "boolean"
           },
+          "allowedSourceTypes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowedsourcetypes",
+            "type": "array"
+          },
+          "allowedTargetTypes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowedtargettypes",
+            "type": "array"
+          },
           "canonicalSource": {
             "default": "none",
             "title": "Canonicalsource",
@@ -1188,6 +1204,11 @@
           "directedDefault": {
             "default": true,
             "title": "Directeddefault",
+            "type": "boolean"
+          },
+          "hierarchyRole": {
+            "default": false,
+            "title": "Hierarchyrole",
             "type": "boolean"
           },
           "key": {
