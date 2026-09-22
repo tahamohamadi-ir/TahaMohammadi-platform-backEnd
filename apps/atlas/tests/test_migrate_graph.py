@@ -9,14 +9,18 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 
 from apps.atlas.models import AtlasVersion
-from apps.atlas.tests.factories import seed_pairs  # noqa: F401
+from apps.atlas.tests.factories import seed_pairs as _pairs_fixture
 from apps.content.models import (
     GraphEdge,
     GraphNode,
     GraphNodeRelated,
     GraphVersion,
-    GraphVersionStatus,
 )
+
+# Re-export the factory fixture under its canonical name so this module's
+# tests can request `seed_pairs` without shadowing anything: the parameter
+# name below refers to this fixture, not to a module-global function.
+seed_pairs = _pairs_fixture
 
 
 def _build_legacy_graph(seed_pairs):
@@ -65,7 +69,9 @@ def _build_legacy_graph(seed_pairs):
         for topic in topics_by_locale[locale]:
             node = GraphNode.objects.create(
                 version=version,
-                node_id='research-topic-%d' % topic.id,
+                node_id='research-topic-{}'.format(  # noqa: UP032
+                    topic.id
+                ),
                 label=topic.title,
                 type='research-topic',
                 weight=1,

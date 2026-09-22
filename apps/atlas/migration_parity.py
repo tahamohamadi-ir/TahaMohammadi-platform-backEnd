@@ -3,6 +3,14 @@
 ``compare_parity(legacy_payloads, atlas_projection)`` implements spec §23.4's
 five checks: node count, relation count, per-locale labels, canonical
 targets, relation display copy. The ``ok`` flag gates every downstream step.
+
+SHAPE CONTRACT (verified against the real wire on both sides):
+- legacy fixture: ``{nodes: [{id, label, relatedRecords: [{family, id}]}], edges:
+  [{relationType, source, target}]}`` (the live `/api/graph/{locale}` shape).
+- atlas projection: ``build_locale_projection`` output — nodes carry
+  ``{key, label, canonical: {family, id, slug, title}}``; relations carry
+  ``{key, type, source, target}`` with a composed relation ``key``; display
+  copy lives in the top-level ``relationTypes: [{key, label}]`` catalog.
 """
 
 from __future__ import annotations
@@ -32,16 +40,12 @@ def compare_parity(legacy_payloads, atlas_projection):
 
     legacy_nodes = _legacy_nodes(legacy)
     legacy_edges = _legacy_edges(legacy)
-    atlas_nodes = {
-        n['key'].split('-')[0] if False else n['key']: n
-        for n in atlas_projection.get('nodes', [])
-    }
     # Atlas public keys are stable slugs, not legacy ids: compare by COUNT
     # and by LABEL SET, and relations by endpoint labels.
     checks['nodes'] = len(atlas_projection.get('nodes', [])) == len(
         legacy_nodes
     )
-    checks['edges'] = len(atlas_projection.get('relations', [])) == len(
+    checks['relations'] = len(atlas_projection.get('relations', [])) == len(
         legacy_edges
     )
 
@@ -53,48 +57,78 @@ def compare_parity(legacy_payloads, atlas_projection):
     checks['labels'] = legacy_labels == atlas_labels
 
     # Canonical targets: every legacy relatedRecord family/id must resolve
-    # to an Atlas node whose canonical block names the same family.
-    atlas_by_label = {
-        (n.get('label') or n['key']): n
-        for n in atlas_projection.get('nodes', [])
-    }
-    canonical_ok = True
-    for node in legacy_nodes.values():
-        atlas_node = atlas_by_label.get(node['label'])
-        if atlas_node is None:
-            canonical_ok = False
-            break
-        canonical = atlas_node.get('canonical') or {}
-        for ref in node.get('relatedRecords', []):
-            if canonical.get('family') not in (
-                ref['family'],
-                'profile' if ref['family'] == 'profile' else ref['family'],
-            ):
-                # Family names differ in case only (`researchtopic` vs the
-                # canonical source vocabulary); compare case-insensitively.
-                want = ref['family'].lower()
-                got = str(canonical.get('family', '')).lower()
-                if want not in got and got not in want:
+    # to an Atlas node whose canonical block names the same family AND id.
+    # Family vocabulary differs in case only (legacy `researchtopic` vs the
+    # canonical source name), so compare case-insensitively.
+    #
+    # IDs compare by POSITION, not by value: the frozen legacy ids are the
+    # production row pks (1/2/3), while any seeded or migrated database mints
+    # its own pks. What parity must prove is that the Nth legacy node and
+    # the Nth Atlas node (in legacy id order vs projection order) resolve
+    # to the same family — i.e. the mapping preserved every link, not that
+    # two databases share primary keys.
+    legacy_ordered = [legacy_nodes[nid] for nid in sorted(legacy_nodes)]
+    atlas_ordered = sorted(
+        atlas_projection.get('nodes', []), key=lambda n: n['key']
+    )
+    canonical_ok = len(legacy_ordered) == len(atlas_ordered)
+    if canonical_ok:
+        for legacy_node, atlas_node in zip(legacy_ordered, atlas_ordered, strict=False):
+            if (atlas_node.get('label') or atlas_node['key']) != legacy_node[
+                'label'
+            ]:
+                canonical_ok = False
+                break
+            canonical = atlas_node.get('canonical') or {}
+            for ref in legacy_node.get('relatedRecords', []):
+                want_family = ref['family'].lower()
+                got_family = str(canonical.get('family', '')).lower()
+                if (
+                    want_family not in got_family
+                    and got_family not in want_family
+                ):
                     canonical_ok = False
                     break
-        if not canonical_ok:
-            break
-    checks['links'] = canonical_ok
+            if not canonical_ok:
+                break
+    checks['canonicalTargets'] = canonical_ok
 
-    # Relation display copy: legacy `research-focus` must read as the
-    # relation type label in the projection.
-    legacy_types = {e['relationType'] for e in legacy_edges.values()}
-    atlas_type_labels = {
-        (r.get('type'), r.get('label'))
-        for r in atlas_projection.get('relations', [])
+    # Relation display copy: every legacy relationType must exist in the
+    # projection's relationTypes catalog, and every legacy edge's endpoints
+    # (by LABEL) must appear as a relation between the same two Atlas nodes.
+    catalog = {
+        t['key']: t.get('label')
+        for t in atlas_projection.get('relationTypes', [])
     }
-    checks['localeParity'] = True
-    checks['displayCopy'] = all(
-        any(t == legacy for legacy, _ in atlas_type_labels)
-        or True  # relations carry endpoint labels; type key is structural
-        for legacy in legacy_types
+    legacy_types = {e['relationType'] for e in legacy_edges.values()}
+    checks['relationTypes'] = bool(legacy_types) and all(
+        t in catalog for t in legacy_types
     )
-    _ = atlas_nodes
+    atlas_label_by_key = {
+        n['key']: (n.get('label') or n['key'])
+        for n in atlas_projection.get('nodes', [])
+    }
+    legacy_label_by_id = {nid: n['label'] for nid, n in legacy_nodes.items()}
+    display_ok = True
+    for edge in legacy_edges.values():
+        want = (
+            legacy_label_by_id.get(edge['source']),
+            legacy_label_by_id.get(edge['target']),
+            edge['relationType'],
+        )
+        if not any(
+            (
+                atlas_label_by_key.get(r.get('source')),
+                atlas_label_by_key.get(r.get('target')),
+                r.get('type'),
+            )
+            == want
+            for r in atlas_projection.get('relations', [])
+        ):
+            display_ok = False
+            break
+    checks['relationEndpoints'] = display_ok
+    checks['localeParity'] = atlas_projection.get('locale') == locale
 
     ok = all(checks.values())
     return {'ok': ok, 'checks': checks}

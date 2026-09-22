@@ -9,7 +9,6 @@ and writes nothing. A second run updates the existing migrated draft.
 
 from __future__ import annotations
 
-from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -46,7 +45,7 @@ def _public_key(legacy_id):
     if legacy_id in PUBLIC_KEY_MAP:
         return PUBLIC_KEY_MAP[legacy_id]
     suffix = legacy_id.replace('research-topic-', '').zfill(8)
-    return 'research-area-%s' % suffix
+    return 'research-area-{}'.format(suffix)  # noqa: UP032
 
 
 class Command(BaseCommand):
@@ -68,11 +67,10 @@ class Command(BaseCommand):
             self.stdout.write(line)
         if plan['unresolved']:
             for line in plan['unresolved']:
-                self.stdout.write('UNRESOLVED: %s' % line)
+                self.stdout.write(f'UNRESOLVED: {line}')
         if dry_run:
             self.stdout.write(
-                'atlas_migrate_graph: dry-run nodes=%d relations=%d unresolved=%d'
-                % (
+                'atlas_migrate_graph: dry-run nodes={} relations={} unresolved={}'.format(
                     len(plan['nodes']),
                     len(plan['relations']),
                     len(plan['unresolved']),
@@ -81,13 +79,20 @@ class Command(BaseCommand):
             return
         if plan['unresolved']:
             raise SystemExit(
-                'atlas_migrate_graph: %d unresolved references; refusing to write'
-                % len(plan['unresolved'])
+                'atlas_migrate_graph: {} unresolved references; refusing to write'.format(
+                    len(plan['unresolved'])
+                )
             )
         version = self._apply(plan, label=options['label'])
-        self.stdout.write(
-            'atlas_migrate_graph: migrated draft id=%d nodes=%d relations=%d'
-            % (version.id, version.nodes.count(), version.relations.count())
+        message = (
+            'atlas_migrate_graph: migrated draft id={} nodes={} relations={}'
+        )
+        self.stdout.write(  # noqa: UP032
+            message.format(
+                version.id,
+                version.nodes.count(),
+                version.relations.count(),
+            )
         )
 
     def _build_plan(self, carry_positions=False):
@@ -110,16 +115,14 @@ class Command(BaseCommand):
                 mapping = TYPE_MAP.get(node.type)
                 if mapping is None:
                     unresolved.append(
-                        '%s: unknown legacy node type %r'
-                        % (node.node_id, node.type)
+                        f'{node.node_id}: unknown legacy node type {node.type!r}'
                     )
                     continue
                 atlas_type, canonical_source = mapping
                 canonical = self._resolve_canonical(node, canonical_source)
                 if canonical is None:
                     unresolved.append(
-                        '%s(%s): translation_key missing'
-                        % (canonical_source, node.node_id)
+                        f'{canonical_source}({node.node_id}): translation_key missing'
                     )
                     continue
                 # The Atlas topology is locale-neutral (one version): the EN
@@ -156,8 +159,7 @@ class Command(BaseCommand):
                 nodes.append(entry)
                 locale_nodes.append(entry)
                 report.append(
-                    '%s -> %s (%s, canonical %s:%s)'
-                    % (
+                    '{} -> {} ({}, canonical {}:{})'.format(
                         node.node_id,
                         entry['public_key'],
                         atlas_type,
@@ -170,8 +172,7 @@ class Command(BaseCommand):
                 atlas_type = RELATION_MAP.get(edge.relation_type)
                 if atlas_type is None:
                     unresolved.append(
-                        '%s: unknown legacy relation type %r'
-                        % (edge.id, edge.relation_type)
+                        f'{edge.id}: unknown legacy relation type {edge.relation_type!r}'
                     )
                     continue
                 # Endpoints resolve to the KEPT node's public key: the FA
@@ -202,9 +203,9 @@ class Command(BaseCommand):
                         'weight': edge.weight,
                     }
                 )
-                report.append(
-                    '%s -> %s (%s)'
-                    % (
+                message = '{} -> {} ({})'
+                report.append(  # noqa: UP032
+                    message.format(
                         _public_key(edge.source.node_id),
                         _public_key(edge.target.node_id),
                         atlas_type,
