@@ -89,17 +89,42 @@ NODE_TYPES = [
 RELATION_TYPES = [
     # (key, label_en, label_fa, inverse_en, inverse_fa, directed,
     #  hierarchy, priority, self_loop, allowed pairs)
-    ('specializes', 'specializes', 'تخصیص دارد به', 'generalizes', 'تعمیم می‌دهد', True, True, 90, 'forbid', [('area', 'area')]),
-    ('related-to', 'related to', 'مرتبط با', 'related to', 'مرتبط با', False, False, 40, 'forbid', []),
-    ('uses', 'uses', 'استفاده می‌کند از', 'used by', 'استفاده شده در', True, False, 70, 'forbid', [('project', 'method'), ('project', 'technology'), ('method', 'technology')]),
-    ('implements', 'implements', 'پیاده‌سازی می‌کند', 'implemented by', 'پیاده‌سازی شده با', True, False, 75, 'forbid', [('project', 'method'), ('project', 'technology'), ('technology', 'method')]),
-    ('applies', 'applies', 'به‌کار می‌گیرد', 'applied in', 'به‌کار رفته در', True, False, 70, 'forbid', [('project', 'research-area'), ('publication', 'research-area')]),
-    ('produces', 'produces', 'تولید می‌کند', 'produced by', 'تولید شده توسط', True, False, 80, 'forbid', [('project', 'publication'), ('research-area', 'publication')]),
-    ('published-as', 'published as', 'منتشر شده به‌صورت', 'publishes', 'منتشر می‌کند', True, False, 80, 'forbid', [('project', 'publication')]),
-    ('supports', 'supports', 'پشتیبانی می‌کند', 'supported by', 'به‌کار رفته در', True, False, 60, 'forbid', [('method', 'research-area'), ('technology', 'research-area'), ('method', 'project'), ('technology', 'project')]),
-    ('informed-by', 'informed by', 'برآمده از', 'informs', 'جهت می‌دهد به', True, False, 50, 'forbid', [('project', 'publication'), ('research-area', 'publication'), ('method', 'research-area')]),
-    ('evaluated-with', 'evaluated with', 'ارزیابی شده با', 'evaluates', 'ارزیابی می‌کند', True, False, 65, 'forbid', [('project', 'method'), ('publication', 'method'), ('method', 'technology')]),
-    ('research-focus', 'research focus', 'تمرکز پژوهشی', 'research focus of', 'تمرکز پژوهشی برای', True, False, 95, 'forbid', [('identity', 'research-area')]),
+    ('specializes', 'specializes', 'تخصیص دارد به', 'generalizes',  # noqa: E501
+     'تعمیم می‌دهد', True, True, 90, 'forbid', [('area', 'area')]),
+    ('related-to', 'related to', 'مرتبط با', 'related to',  # noqa: E501
+     'مرتبط با', False, False, 40, 'forbid', []),
+    ('uses', 'uses', 'استفاده می‌کند از', 'used by',  # noqa: E501
+     'استفاده شده در', True, False, 70, 'forbid',
+     [('project', 'method'), ('project', 'technology'),
+      ('method', 'technology')]),
+    ('implements', 'implements', 'پیاده‌سازی می‌کند',  # noqa: E501
+     'implemented by', 'پیاده‌سازی شده با', True, False, 75, 'forbid',
+     [('project', 'method'), ('project', 'technology'),
+      ('technology', 'method')]),
+    ('applies', 'applies', 'به‌کار می‌گیرد', 'applied in',  # noqa: E501
+     'به‌کار رفته در', True, False, 70, 'forbid',
+     [('project', 'research-area'), ('publication', 'research-area')]),
+    ('produces', 'produces', 'تولید می‌کند', 'produced by',  # noqa: E501
+     'تولید شده توسط', True, False, 80, 'forbid',
+     [('project', 'publication'), ('research-area', 'publication')]),
+    ('published-as', 'published as', 'منتشر شده به‌صورت',  # noqa: E501
+     'publishes', 'منتشر می‌کند', True, False, 80, 'forbid',
+     [('project', 'publication')]),
+    ('supports', 'supports', 'پشتیبانی می‌کند', 'supported by',  # noqa: E501
+     'به‌کار رفته در', True, False, 60, 'forbid',
+     [('method', 'research-area'), ('technology', 'research-area'),
+      ('method', 'project'), ('technology', 'project')]),
+    ('informed-by', 'informed by', 'برآمده از', 'informs',  # noqa: E501
+     'جهت می‌دهد به', True, False, 50, 'forbid',
+     [('project', 'publication'), ('research-area', 'publication'),
+      ('method', 'research-area')]),
+    ('evaluated-with', 'evaluated with', 'ارزیابی شده با',  # noqa: E501
+     'evaluates', 'ارزیابی می‌کند', True, False, 65, 'forbid',
+     [('project', 'method'), ('publication', 'method'),
+      ('method', 'technology')]),
+    ('research-focus', 'research focus', 'تمرکز پژوهشی',  # noqa: E501
+     'research focus of', 'تمرکز پژوهشی برای', True, False, 95, 'forbid',
+     [('identity', 'research-area')]),
 ]
 
 # Allowed pairs name node types by their SEMANTIC_ROLE vocabulary position:
@@ -140,9 +165,10 @@ class Command(BaseCommand):
             _, was_created = self._upsert_relation_type(spec, dry_run)
             created += was_created
             updated += not was_created
-        self.stdout.write(
-            'atlas_seed_taxonomy: created=%d updated=%d%s'
-            % (created, updated, ' (dry-run)' if dry_run else '')
+        self.stdout.write(  # noqa: UP032
+            'atlas_seed_taxonomy: created={} updated={}{}'.format(
+                created, updated, ' (dry-run)' if dry_run else ''
+            )
         )
 
     def _upsert_node_type(self, row, dry_run):
@@ -162,12 +188,18 @@ class Command(BaseCommand):
             status = 'would-update' if (changed and dry_run) else (
                 'update' if changed else 'ok'
             )
-            self.stdout.write('node-type %s: %s' % (key, status))
+            message = 'node-type {}: {}'
+            self.stdout.write(  # noqa: UP032
+                message.format(key, status)
+            )
             return existing, False
         except AtlasNodeType.DoesNotExist:
             if not dry_run:
                 return AtlasNodeType.objects.create(**row), True
-            self.stdout.write('node-type %s: would-create' % key)
+            message = 'node-type {}: would-create'
+            self.stdout.write(  # noqa: UP032
+                message.format(key)
+            )
             return None, True
 
     def _upsert_relation_type(self, spec, dry_run):
@@ -200,11 +232,17 @@ class Command(BaseCommand):
             status = 'would-update' if (changed and dry_run) else (
                 'update' if changed else 'ok'
             )
-            self.stdout.write('relation-type %s: %s' % (key, status))
+            message = 'relation-type {}: {}'
+            self.stdout.write(  # noqa: UP032
+                message.format(key, status)
+            )
             return existing, False
         except AtlasRelationType.DoesNotExist:
             if dry_run:
-                self.stdout.write('relation-type %s: would-create' % key)
+                message = 'relation-type {}: would-create'
+                self.stdout.write(  # noqa: UP032
+                    message.format(key)
+                )
                 return None, True
             row = AtlasRelationType.objects.create(key=key, **values)
             self._set_pairs(row, pairs)

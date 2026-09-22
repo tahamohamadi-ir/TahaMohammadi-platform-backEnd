@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 
 from apps.content.models import GraphVersion
@@ -89,9 +88,11 @@ class Command(BaseCommand):
                 encoding='utf-8',
             )
         for entry in payload['versions']:
-            self.stdout.write(
-                'locale=%s version=%s status=%s nodes=%d edges=%d groups=%d'
-                % (
+            message = (
+                'locale={} version={} status={} nodes={} edges={} groups={}'
+            )
+            self.stdout.write(  # noqa: UP032
+                message.format(
                     entry['locale'],
                     entry['versionId'],
                     entry['status'],
