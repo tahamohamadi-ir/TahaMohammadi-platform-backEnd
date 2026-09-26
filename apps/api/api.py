@@ -7,11 +7,13 @@ Public edge exposure of ``/api/`` remains deferred (DEFER-0017); this module is
 for in-process and optional build-time ``CMS_API_BASE`` consumers only.
 """
 
+import json
 import re
+import time
 from datetime import date, datetime
 from pathlib import PurePosixPath
 
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse, HttpResponseNotModified
 from ninja import Field, NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.errors import ValidationError as NinjaValidationError
@@ -34,6 +36,12 @@ from apps.api.record_resolver import (
     _error_response,
     _extract_summary,
 )
+from apps.atlas.preview_tokens import (
+    AtlasPreviewCapability,
+    parse_atlas_preview_token,
+)
+from apps.atlas.projection import build_locale_projection, canonical_json, projection_etag
+from apps.atlas.validation import FailedServingGate, validate_payload_contract
 from apps.composition.projection import public_story_document
 from apps.content.models import (
     AccessState,
@@ -330,10 +338,7 @@ def _resolve_public_alternates(obj) -> list[AlternateLocaleOut]:
         return []
 
     siblings = list(
-        public_mgr()
-        .filter(translation_key=translation_key)
-        .exclude(pk=obj.pk)
-        .order_by("locale")
+        public_mgr().filter(translation_key=translation_key).exclude(pk=obj.pk).order_by("locale")
     )
     family = model.__name__.lower()
     route_family = PUBLIC_ROUTE_FAMILY_MAP.get(family, family)
@@ -407,9 +412,7 @@ def _resolve_public_related_records(obj) -> list[WorkRefOut]:
         public_mgr = getattr(model.objects, "public", None)
         if public_mgr is None:
             continue
-        target = resolve_published_target(
-            model, _entity_key_for_family(family_str), pk, locale
-        )
+        target = resolve_published_target(model, _entity_key_for_family(family_str), pk, locale)
         if target is None:
             continue
 
@@ -553,9 +556,7 @@ class LocalizedSiteSettingsPublicOut(Schema):
 def get_localized_site_settings(request, locale: str):
     """Serve published localized site settings for a locale (fail-closed, no fallback)."""
     if locale not in ("fa", "en"):
-        return _error_response(
-            request, 404, "NOT_FOUND", f"Locale '{locale}' not supported."
-        )
+        return _error_response(request, 404, "NOT_FOUND", f"Locale '{locale}' not supported.")
     item = LocalizedSiteSettings.objects.filter(locale=locale).first()
     if item is None or item.status != "published" or not item.published_payload:
         return _error_response(
@@ -578,8 +579,10 @@ def get_localized_site_settings(request, locale: str):
         family, record_id = reference.get("family"), reference.get("id")
         model = RESOLVER_FAMILIES.get(family) if isinstance(family, str) else None
         if (
-            model is None or not isinstance(record_id, str)
-            or not _ID_RE.fullmatch(record_id) or int(record_id) > MAX_ID
+            model is None
+            or not isinstance(record_id, str)
+            or not _ID_RE.fullmatch(record_id)
+            or int(record_id) > MAX_ID
         ):
             continue
         if model.objects.public().filter(pk=int(record_id), locale=locale).exists():
@@ -588,7 +591,8 @@ def get_localized_site_settings(request, locale: str):
     media_id = payload.pop("brandMediaId", None)
     media = (
         Media.objects.filter(pk=media_id, is_active=True).exclude(file="").first()
-        if type(media_id) is int and 0 < media_id <= MAX_ID else None
+        if type(media_id) is int and 0 < media_id <= MAX_ID
+        else None
     )
     payload["brandMedia"] = public_media_ref(media, request, locale=locale)
     return payload
@@ -625,9 +629,7 @@ def get_profile_journey(request, locale: str):
     Degree and field are comma-joined from real record fields.
     """
     if locale not in ("fa", "en"):
-        return _error_response(
-            request, 404, "NOT_FOUND", f"Locale '{locale}' not supported."
-        )
+        return _error_response(request, 404, "NOT_FOUND", f"Locale '{locale}' not supported.")
     profile = (
         Profile.objects.public()
         .filter(locale=locale, slug="about")
@@ -666,9 +668,7 @@ def get_profile_journey(request, locale: str):
 )
 def list_landings(request, locale: str) -> list[Landing]:
     items = list(published_for_locale(Landing.objects, locale))
-    items.extend(
-        published_list_extras(Landing, "landing", locale, {o.pk for o in items})
-    )
+    items.extend(published_list_extras(Landing, "landing", locale, {o.pk for o in items}))
     return order_like(items, "slug")
 
 
@@ -692,9 +692,7 @@ def get_landing(request, locale: str, slug: str) -> Landing:
 )
 def list_profiles(request, locale: str) -> list[Profile]:
     items = list(published_for_locale(Profile.objects, locale))
-    items.extend(
-        published_list_extras(Profile, "profile", locale, {o.pk for o in items})
-    )
+    items.extend(published_list_extras(Profile, "profile", locale, {o.pk for o in items}))
     return order_like(items, "slug")
 
 
@@ -739,20 +737,12 @@ def list_articles(
     # A04: still-published (snapshot-backed) records stay listed.
     extras = published_list_extras(Article, "article", locale, {a.pk for a in items})
     if tag:
-        extras = [
-            e for e in extras if e.topic_tags.filter(locale=locale, slug=tag).exists()
-        ]
+        extras = [e for e in extras if e.topic_tags.filter(locale=locale, slug=tag).exists()]
     if series:
         series_ids = set(
-            Series.objects.public()
-            .filter(locale=locale, slug=series)
-            .values_list("pk", flat=True)
+            Series.objects.public().filter(locale=locale, slug=series).values_list("pk", flat=True)
         )
-        extras = [
-            e
-            for e in extras
-            if set(e.series.values_list("pk", flat=True)) & series_ids
-        ]
+        extras = [e for e in extras if set(e.series.values_list("pk", flat=True)) & series_ids]
     return order_like(items + extras, "-published_at", "slug")
 
 
@@ -784,12 +774,8 @@ def get_article(request, locale: str, slug: str) -> Article:
 )
 def list_series(request, locale: str) -> list[Series]:
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Series.objects.public().filter(locale=locale).order_by("ordering", "slug")
-    )
-    items.extend(
-        published_list_extras(Series, "series", locale, {o.pk for o in items})
-    )
+    items = list(Series.objects.public().filter(locale=locale).order_by("ordering", "slug"))
+    items.extend(published_list_extras(Series, "series", locale, {o.pk for o in items}))
     return order_like(items, "ordering", "slug")
 
 
@@ -1054,15 +1040,12 @@ class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
         for rel in obj.topics.filter(locale=obj.locale).only("pk"):
             if rel.pk in seen:
                 continue
-            target = resolve_published_target(
-                ResearchTopic, "research-topic", rel.pk, obj.locale
-            )
+            target = resolve_published_target(ResearchTopic, "research-topic", rel.pk, obj.locale)
             if target is not None:
                 extras.append(target)
                 seen.add(rel.pk)
         return [
-            RelatedSlugOut(slug=t.slug, title=t.title)
-            for t in order_like(live + extras, "slug")
+            RelatedSlugOut(slug=t.slug, title=t.title) for t in order_like(live + extras, "slug")
         ]
 
     @staticmethod
@@ -1074,15 +1057,12 @@ class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
         for rel in obj.publications.filter(locale=obj.locale).only("pk"):
             if rel.pk in seen:
                 continue
-            target = resolve_published_target(
-                Publication, "publication", rel.pk, obj.locale
-            )
+            target = resolve_published_target(Publication, "publication", rel.pk, obj.locale)
             if target is not None:
                 extras.append(target)
                 seen.add(rel.pk)
         return [
-            RelatedSlugOut(slug=p.slug, title=p.title)
-            for p in order_like(live + extras, "slug")
+            RelatedSlugOut(slug=p.slug, title=p.title) for p in order_like(live + extras, "slug")
         ]
 
     @staticmethod
@@ -1107,9 +1087,7 @@ class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
                         parsed = date.fromisoformat(raw_verified.strip()[:10])
                     except ValueError:
                         parsed = None
-                elif isinstance(raw_verified, date) and not isinstance(
-                    raw_verified, datetime
-                ):
+                elif isinstance(raw_verified, date) and not isinstance(raw_verified, datetime):
                     parsed = raw_verified
                 result.append(
                     EvidenceOut(
@@ -1143,9 +1121,7 @@ class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
                 )
                 for row in rows
                 if isinstance(row, dict)
-                and bool(
-                    row.get("publication_approved", row.get("publicationApproved", False))
-                )
+                and bool(row.get("publication_approved", row.get("publicationApproved", False)))
                 and str(row.get("name", "") or "").strip()
             ]
         return [
@@ -1161,15 +1137,11 @@ class ProjectDetailOut(ProjectListOut, PublicPublicationMetadataMixinOut):
             return [
                 FundingOut(
                     funder=str(row.get("funder", "") or ""),
-                    grant_id=str(
-                        row.get("grant_id", row.get("grantId", "") or "") or ""
-                    ),
+                    grant_id=str(row.get("grant_id", row.get("grantId", "") or "") or ""),
                 )
                 for row in rows
                 if isinstance(row, dict)
-                and bool(
-                    row.get("publication_approved", row.get("publicationApproved", False))
-                )
+                and bool(row.get("publication_approved", row.get("publicationApproved", False)))
                 and str(row.get("funder", "") or "").strip()
             ]
         return [
@@ -1621,13 +1593,9 @@ class CreativeWorkDetailOut(CreativeWorkListOut, PublicPublicationMetadataMixinO
 @paginate(PageNumberPagination, page_size=10)
 def list_research_topics(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        ResearchTopic.objects.public().filter(locale=locale).order_by("slug")
-    )
+    items = list(ResearchTopic.objects.public().filter(locale=locale).order_by("slug"))
     items.extend(
-        published_list_extras(
-            ResearchTopic, "research-topic", locale, {o.pk for o in items}
-        )
+        published_list_extras(ResearchTopic, "research-topic", locale, {o.pk for o in items})
     )
     return order_like(items, "slug")
 
@@ -1752,9 +1720,7 @@ def list_research_projects(request, locale: str):
         .select_related("case_study")
         .order_by("-published_at", "slug")
     )
-    items.extend(
-        published_list_extras(Project, "project", locale, {o.pk for o in items})
-    )
+    items.extend(published_list_extras(Project, "project", locale, {o.pk for o in items}))
     return order_like(items, "-published_at", "slug")
 
 
@@ -1775,12 +1741,8 @@ def get_research_project(request, locale: str, slug: str) -> Project:
 @paginate(PageNumberPagination, page_size=10)
 def list_research_publications(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Publication.objects.public().filter(locale=locale).order_by("-date", "slug")
-    )
-    items.extend(
-        published_list_extras(Publication, "publication", locale, {o.pk for o in items})
-    )
+    items = list(Publication.objects.public().filter(locale=locale).order_by("-date", "slug"))
+    items.extend(published_list_extras(Publication, "publication", locale, {o.pk for o in items}))
     return order_like(items, "-date", "slug")
 
 
@@ -1811,12 +1773,8 @@ def get_research_publication(request, locale: str, slug: str) -> Publication:
 @paginate(PageNumberPagination, page_size=10)
 def list_publications(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Publication.objects.public().filter(locale=locale).order_by("-date", "slug")
-    )
-    items.extend(
-        published_list_extras(Publication, "publication", locale, {o.pk for o in items})
-    )
+    items = list(Publication.objects.public().filter(locale=locale).order_by("-date", "slug"))
+    items.extend(published_list_extras(Publication, "publication", locale, {o.pk for o in items}))
     return order_like(items, "-date", "slug")
 
 
@@ -1837,11 +1795,7 @@ def get_publication(request, locale: str, slug: str) -> Publication:
 @paginate(PageNumberPagination, page_size=10)
 def list_books(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Book.objects.public()
-        .filter(locale=locale)
-        .order_by("-publication_date", "slug")
-    )
+    items = list(Book.objects.public().filter(locale=locale).order_by("-publication_date", "slug"))
     items.extend(published_list_extras(Book, "book", locale, {o.pk for o in items}))
     return order_like(items, "-publication_date", "slug")
 
@@ -1858,9 +1812,7 @@ def get_book(request, locale: str, slug: str) -> Book:
         "book",
         locale,
         slug,
-        base_qs=Book.objects.public().select_related(
-            "cover_media", "story", "social_image"
-        ),
+        base_qs=Book.objects.public().select_related("cover_media", "story", "social_image"),
     )
     if book is None:
         raise HttpError(404, "book not found")
@@ -1875,9 +1827,7 @@ def get_book(request, locale: str, slug: str) -> Book:
 @paginate(PageNumberPagination, page_size=10)
 def list_talks(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Talk.objects.public().filter(locale=locale).order_by("-event_date", "slug")
-    )
+    items = list(Talk.objects.public().filter(locale=locale).order_by("-event_date", "slug"))
     items.extend(published_list_extras(Talk, "talk", locale, {o.pk for o in items}))
     return order_like(items, "-event_date", "slug")
 
@@ -1894,9 +1844,7 @@ def get_talk(request, locale: str, slug: str) -> Talk:
         "talk",
         locale,
         slug,
-        base_qs=Talk.objects.public().select_related(
-            "slides_media", "story", "social_image"
-        ),
+        base_qs=Talk.objects.public().select_related("slides_media", "story", "social_image"),
     )
     if talk is None:
         raise HttpError(404, "talk not found")
@@ -1911,14 +1859,8 @@ def get_talk(request, locale: str, slug: str) -> Talk:
 @paginate(PageNumberPagination, page_size=10)
 def list_downloads(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        Download.objects.public()
-        .filter(locale=locale)
-        .order_by("-published_at", "slug")
-    )
-    items.extend(
-        published_list_extras(Download, "download", locale, {o.pk for o in items})
-    )
+    items = list(Download.objects.public().filter(locale=locale).order_by("-published_at", "slug"))
+    items.extend(published_list_extras(Download, "download", locale, {o.pk for o in items}))
     return order_like(items, "-published_at", "slug")
 
 
@@ -1934,9 +1876,7 @@ def get_download(request, locale: str, slug: str) -> Download:
         "download",
         locale,
         slug,
-        base_qs=Download.objects.public().select_related(
-            "media", "story", "social_image"
-        ),
+        base_qs=Download.objects.public().select_related("media", "story", "social_image"),
     )
     if download is None:
         raise HttpError(404, "download not found")
@@ -1971,6 +1911,7 @@ def download_file(request, locale: str, slug: str):
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
+
 @api.get(
     "/courses/{locale}",
     response=list[CourseListOut],
@@ -1980,9 +1921,7 @@ def download_file(request, locale: str, slug: str):
 def list_courses(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
     items = list(Course.objects.public().filter(locale=locale).order_by("slug"))
-    items.extend(
-        published_list_extras(Course, "course", locale, {o.pk for o in items})
-    )
+    items.extend(published_list_extras(Course, "course", locale, {o.pk for o in items}))
     return order_like(items, "slug")
 
 
@@ -2015,9 +1954,7 @@ def get_course(request, locale: str, slug: str) -> Course:
 def list_teaching(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
     items = list(Course.objects.public().filter(locale=locale).order_by("slug"))
-    items.extend(
-        published_list_extras(Course, "course", locale, {o.pk for o in items})
-    )
+    items.extend(published_list_extras(Course, "course", locale, {o.pk for o in items}))
     return order_like(items, "slug")
 
 
@@ -2055,9 +1992,7 @@ def list_lessons(request, locale: str, course: str | None = None) -> LessonListO
         .order_by("position", "id")
     )
     # A04: still-published lessons stay listed under a published parent.
-    for extra in published_list_extras(
-        Lesson, "lesson", locale, {item.pk for item in lessons}
-    ):
+    for extra in published_list_extras(Lesson, "lesson", locale, {item.pk for item in lessons}):
         if getattr(extra, "course_id", None) != parent_course.pk:
             continue
         lessons.append(extra)
@@ -2081,9 +2016,7 @@ def list_lessons(request, locale: str, course: str | None = None) -> LessonListO
     response=LessonDetailOut,
     summary="Get one published course lesson with ordered neighbors",
 )
-def get_lesson_detail(
-    request, locale: str, courseSlug: str, lessonSlug: str
-) -> LessonDetailOut:
+def get_lesson_detail(request, locale: str, courseSlug: str, lessonSlug: str) -> LessonDetailOut:
     """Get published lesson detail with previous/next neighbors.
 
     Guards:
@@ -2200,9 +2133,7 @@ def _resolve_collection_items(collection: Collection) -> list[WorkRefOut]:
         public_mgr = getattr(model.objects, "public", None)
         if public_mgr is None:
             continue
-        target = resolve_published_target(
-            model, _entity_key_for_family(family_str), pk, locale
-        )
+        target = resolve_published_target(model, _entity_key_for_family(family_str), pk, locale)
         if target is None:
             continue
         route_family = PUBLIC_ROUTE_FAMILY_MAP.get(family_str, family_str)
@@ -2260,9 +2191,7 @@ class CollectionDetailOut(CollectionCardOut):
     response=CollectionListOut,
     summary="List published collections for a locale (paginated)",
 )
-def list_collections(
-    request, locale: str, page: int = 1, pageSize: int = 20
-) -> CollectionListOut:
+def list_collections(request, locale: str, page: int = 1, pageSize: int = 20) -> CollectionListOut:
     """List published collections with pagination (1-based, default 20, max 50)."""
     if locale not in Locale.values:
         raise HttpError(404, "collection not found")
@@ -2275,9 +2204,7 @@ def list_collections(
         .order_by("-published_at", "slug")
     )
     # A04: still-published (snapshot-backed) records stay listed.
-    live.extend(
-        published_list_extras(Collection, "collection", locale, {c.pk for c in live})
-    )
+    live.extend(published_list_extras(Collection, "collection", locale, {c.pk for c in live}))
     merged = order_like(live, "-published_at", "slug")
     total = len(merged)
     collections = merged[(page_num - 1) * page_size : page_num * page_size]
@@ -2315,9 +2242,7 @@ def get_collection_detail(request, locale: str, slug: str) -> CollectionDetailOu
         "collection",
         locale,
         slug,
-        base_qs=Collection.objects.public().select_related(
-            "cover_media", "story", "social_image"
-        ),
+        base_qs=Collection.objects.public().select_related("cover_media", "story", "social_image"),
     )
     if collection is None:
         raise HttpError(404, "collection not found")
@@ -2382,9 +2307,7 @@ def _resolve_series_items(series: Series) -> list[WorkRefOut]:
                 )
             )
     else:
-        candidates = list(
-            series.articles.filter(locale=locale).order_by("published_at", "id")
-        )
+        candidates = list(series.articles.filter(locale=locale).order_by("published_at", "id"))
         targets = []
         for art in candidates:
             target = resolve_published_target(Article, "article", art.pk, locale)
@@ -2465,13 +2388,9 @@ def get_series_detail(request, locale: str, slug: str) -> SeriesDetailOut:
 @paginate(PageNumberPagination, page_size=10)
 def list_creative_works(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        CreativeWork.objects.public().filter(locale=locale).order_by("slug")
-    )
+    items = list(CreativeWork.objects.public().filter(locale=locale).order_by("slug"))
     items.extend(
-        published_list_extras(
-            CreativeWork, "creative-work", locale, {o.pk for o in items}
-        )
+        published_list_extras(CreativeWork, "creative-work", locale, {o.pk for o in items})
     )
     return order_like(items, "slug")
 
@@ -2505,13 +2424,9 @@ def get_creative_work(request, locale: str, slug: str) -> CreativeWork:
 @paginate(PageNumberPagination, page_size=10)
 def list_creative(request, locale: str):
     # A04: still-published (snapshot-backed) records stay listed.
-    items = list(
-        CreativeWork.objects.public().filter(locale=locale).order_by("slug")
-    )
+    items = list(CreativeWork.objects.public().filter(locale=locale).order_by("slug"))
     items.extend(
-        published_list_extras(
-            CreativeWork, "creative-work", locale, {o.pk for o in items}
-        )
+        published_list_extras(CreativeWork, "creative-work", locale, {o.pk for o in items})
     )
     return order_like(items, "slug")
 
@@ -2628,9 +2543,7 @@ def _graph_public_related(
     by_node: dict[int, list[GraphRelatedRecordOut]] = {node.pk: [] for node in nodes}
     if not by_node:
         return by_node
-    rows = GraphNodeRelated.objects.filter(node__in=by_node).select_related(
-        "content_type"
-    )
+    rows = GraphNodeRelated.objects.filter(node__in=by_node).select_related("content_type")
     by_content_type: dict[int, list[GraphNodeRelated]] = {}
     for row in rows:
         by_content_type.setdefault(row.content_type_id, []).append(row)
@@ -2640,16 +2553,12 @@ def _graph_public_related(
         public = getattr(getattr(model, "objects", None), "public", None)
         if public is None:
             continue
-        ids = public().filter(pk__in=[row.object_id for row in group]).values_list(
-            "pk", flat=True
-        )
+        ids = public().filter(pk__in=[row.object_id for row in group]).values_list("pk", flat=True)
         visible.update((content_type_id, pk) for pk in ids)
     for row in rows:
         if (row.content_type_id, row.object_id) in visible:
             by_node[row.node_id].append(
-                GraphRelatedRecordOut(
-                    family=row.content_type.model, id=str(row.object_id)
-                )
+                GraphRelatedRecordOut(family=row.content_type.model, id=str(row.object_id))
             )
     return by_node
 
@@ -2716,6 +2625,208 @@ def get_graph(request, locale: str) -> GraphPayloadOut:
     if payload is None:
         raise HttpError(404, "graph not found")
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Knowledge Atlas — public projection (S-01.k, plan Task 15). The active route
+# is permanently draft-free; the preview endpoint is the only place draft data
+# is served, and only behind a Bearer credential (spec §10.10.1).
+# ---------------------------------------------------------------------------
+
+
+#: The public Atlas cache policy (plan Task 16): short-lived CDN/browser reuse.
+ATLAS_CACHE_CONTROL = "public, max-age=60"
+
+
+def _atlas_header_candidates(header: str) -> list[str]:
+    """The ``If-None-Match`` candidate validators, deliberately minimal.
+
+    The header is a comma list of quoted entity-tags; a client may weaken one
+    with a ``W/`` prefix. Comparison treats the validator as the literal
+    (spec §10.5), so each candidate is stripped of its optional ``W/`` and its
+    surrounding quotes and compared to the bare unquoted internal validator.
+    Malformed input can only produce candidates that cannot equal that literal,
+    so garbage never earns a 304; no fuller RFC-7232 parser is added.
+    """
+    candidates: list[str] = []
+    if not header or not header.strip():
+        return candidates
+    if "*" in header:
+        candidates.append(header.strip())
+    for chunk in header.split(","):
+        candidate = chunk.strip()
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        if len(candidate) >= 2 and candidate.startswith('"') and candidate.endswith('"'):
+            candidate = candidate[1:-1]
+        candidates.append(candidate)
+    return candidates
+
+
+def _if_none_match_matches(header: str, validator: str) -> bool:
+    """True only when one candidate equals the current, freshly computed validator."""
+    if not header or not header.strip():
+        return False
+    candidates = _atlas_header_candidates(header)
+    return any(candidate == validator for candidate in candidates)
+
+
+def _atlas_error_response(request, status: int, code: str, message: str):
+    """The I08 error envelope for the Atlas routes (``atlas_not_found``/``atlas_inval``)."""
+    return _error_response(request, status, code, message)
+
+
+def _atlas_gate_failure(request, issues):
+    """Fail closed on an unservable active version: 500, no partial payload."""
+    codes = ", ".join(sorted({issue.code for issue in issues})) or "unknown"
+    return _atlas_error_response(
+        request, 500, "atlas_inval", f"Atlas payload failed its contract check: {codes}"
+    )
+
+
+def public_atlas_payload(locale: str) -> dict | None:
+    """The ACTIVE version's §10.2 payload for one locale — ``None`` when absent.
+
+    Fail-closed serving gate (plan Task 15): the active row is read fresh from
+    the database per request, the draft is unreachable by construction (the
+    queryset filters ``status="active"``), and the freshly built projection is
+    validated against its own contract (spec §20.1/§11.4) **before** it is
+    returned. A payload that fails its contract check raises
+    :class:`apps.atlas.validation.FailedServingGate` — the view turns that into
+    the fail-closed 500 and no partial body ever reaches the wire. Plan B's
+    preview minting imports this function for its own validation, which is why
+    the gate lives here and not inside the view.
+    """
+    from apps.atlas.validation import FailedServingGate
+
+    if locale not in ("en", "fa"):
+        return None
+    version = AtlasVersion.objects.filter(status="active").first()
+    if version is None:
+        return None
+    projection = build_locale_projection(version, locale)
+    issues = validate_payload_contract(projection)
+    if issues:
+        raise FailedServingGate(issues)
+    return projection
+
+
+from apps.atlas.models import AtlasVersion  # noqa: E402  (real import, not a re-import)
+
+
+def _atlas_preview_response(request, capability: AtlasPreviewCapability):
+    """Build the draft projection for a *verified* preview capability."""
+    from django.http import HttpResponse
+
+    from apps.atlas.validation import validate_payload_contract
+
+    try:
+        version = AtlasVersion.objects.get(pk=capability.version_id)
+    except AtlasVersion.DoesNotExist:
+        return None  # unknown version → 403 (never 404 — a probe must not learn)
+    projection = build_locale_projection(version, capability.locale)
+    issues = validate_payload_contract(projection)
+    if issues:
+        return _atlas_gate_failure(request, issues)
+    body = json.dumps(projection, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    response = HttpResponse(body, content_type="application/json", charset="utf-8", status=200)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@api.get(
+    "/atlas/preview",
+    response={
+        200: dict,
+        401: ErrorEnvelopeOut,
+        403: ErrorEnvelopeOut,
+        404: ErrorEnvelopeOut,
+        500: ErrorEnvelopeOut,
+    },
+    summary="The draft Knowledge Atlas projection behind a Bearer capability",
+)
+def get_atlas_preview(request, locale: str = "en"):
+    """``GET /api/atlas/preview?locale=<en|fa>`` with ``Authorization: Bearer …``.
+
+    The credential travels only in the ``Authorization`` header — never in a
+    path segment or the query string, and a probe never learns that a draft
+    exists: bad credentials answer 401 (absent/unparseable) or 403
+    (expired/wrong purpose/wrong locale/unknown version), never 404. The signing
+    secret stays backend-only (settings); the payload is the exact-locale,
+    fail-closed draft projection of the token's version.
+    """
+    if locale not in ("en", "fa"):
+        return _atlas_error_response(request, 404, "atlas_not_found", "Unknown Atlas locale.")
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return _atlas_error_response(
+            request, 401, "atlas_unauthorized", "Bearer credential required."
+        )
+    capability = parse_atlas_preview_token(token.strip())
+    if capability is None:
+        return _atlas_error_response(request, 401, "atlas_unauthorized", "Credential is invalid.")
+    if capability.purpose != "atlas-preview":
+        return _atlas_error_response(
+            request, 403, "atlas_forbidden", "Credential scope does not match."
+        )
+    if capability.exp < int(time.time()):
+        return _atlas_error_response(request, 403, "atlas_forbidden", "Credential expired.")
+    if capability.locale not in ("en", "fa") or capability.locale != locale:
+        return _atlas_error_response(
+            request, 403, "atlas_forbidden", "Credential scope does not match."
+        )
+    response = _atlas_preview_response(request, capability)
+    if isinstance(response, HttpResponse):
+        return response
+    return _atlas_error_response(
+        request, 403, "atlas_forbidden", "Referenced version does not exist."
+    )
+
+
+@api.get(
+    "/atlas/{locale}",
+    response={200: dict, 404: ErrorEnvelopeOut, 500: ErrorEnvelopeOut},
+    summary="The active Knowledge Atlas payload for a locale (spec §10.2)",
+)
+def get_atlas(request, locale: str):
+    """Fail-closed serving of the ACTIVE version's projection only.
+
+    404 ``atlas_not_found`` for an unsupported locale or no active version; 500
+    ``atlas_inval`` with no partial body when the active version fails its own
+    contract check. Draft rows are unreachable by construction — the serving
+    path reads nothing but the ``status="active"`` row. Conditional GET
+    (plan Task 16): a matching ``If-None-Match`` answers 304 with no body and a
+    public ``max-age=60`` cache header, while an active version that fails its
+    contract check never earns a 304 — the short-circuit fires only after the
+    freshly computed validator proves the current payload is still servable.
+    """
+    if locale not in ("en", "fa"):
+        return _atlas_error_response(request, 404, "atlas_not_found", "Unknown Atlas locale.")
+    try:
+        payload = public_atlas_payload(locale)
+    except FailedServingGate as exc:
+        return _atlas_gate_failure(request, exc.issues)
+    if payload is None:
+        return _atlas_error_response(request, 404, "atlas_not_found", "No active Atlas version.")
+
+    validator = projection_etag(payload)
+    if _if_none_match_matches(request.headers.get("If-None-Match", ""), validator):
+        response = HttpResponseNotModified()
+        response.headers["ETag"] = f'"{validator}"'
+        response.headers["Cache-Control"] = ATLAS_CACHE_CONTROL
+        return response
+
+    body = canonical_json(payload)
+    response = HttpResponse(
+        body, content_type="application/json", charset="utf-8", status=200
+    )
+    response.headers["ETag"] = f'"{validator}"'
+    response.headers["Cache-Control"] = ATLAS_CACHE_CONTROL
+    return response
 
 
 from apps.analytics.api import (  # noqa: E402

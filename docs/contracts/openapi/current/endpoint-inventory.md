@@ -7,6 +7,8 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/article-redirects/{locale}` | List article slug redirects for a locale |
 | public | GET | `/api/articles/{locale}` | List published articles for a locale (paginated) |
 | public | GET | `/api/articles/{locale}/{slug}` | Get one published article by slug |
+| public | GET | `/api/atlas/preview` | The draft Knowledge Atlas projection behind a Bearer capability |
+| public | GET | `/api/atlas/{locale}` | The active Knowledge Atlas payload for a locale (spec §10.2) |
 | public | GET | `/api/books/{locale}` | List published books for a locale (paginated) |
 | public | GET | `/api/books/{locale}/{slug}` | Get one published book by slug |
 | public | POST | `/api/contact` | Contact form (emailed to owner, not stored). |
@@ -55,6 +57,40 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | public | GET | `/api/v1/site/{locale}/journey` | Published career timeline for a locale (fail-closed, no fallback). |
 | admin | GET | `/api/v1/admin/analytics` | Retrieve first-party received events report |
 | admin | GET | `/api/v1/admin/approval-queue` | Owner approval queue from the imported seed records. |
+| admin | GET | `/api/v1/admin/atlas/canonical-candidates` | Canonical Candidates |
+| admin | GET | `/api/v1/admin/atlas/node-types` | List Node Types |
+| admin | POST | `/api/v1/admin/atlas/node-types` | Create Node Type |
+| admin | DELETE | `/api/v1/admin/atlas/node-types/{type_key}` | Delete Node Type |
+| admin | PATCH | `/api/v1/admin/atlas/node-types/{type_key}` | Patch Node Type |
+| admin | GET | `/api/v1/admin/atlas/relation-types` | List Relation Types |
+| admin | POST | `/api/v1/admin/atlas/relation-types` | Create Relation Type |
+| admin | DELETE | `/api/v1/admin/atlas/relation-types/{type_key}` | Delete Relation Type |
+| admin | PATCH | `/api/v1/admin/atlas/relation-types/{type_key}` | Patch Relation Type |
+| admin | GET | `/api/v1/admin/atlas/versions` | List Versions |
+| admin | POST | `/api/v1/admin/atlas/versions` | Create Version |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}` | Version Detail |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/activate` | Activate Version Endpoint |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/archive` | Archive Version |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/clone` | Clone Version Route |
+| admin | PUT | `/api/v1/admin/atlas/versions/{version_id}/graph` | Bulk Replace Graph |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/groups` | List Groups |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/groups` | Create Group |
+| admin | DELETE | `/api/v1/admin/atlas/versions/{version_id}/groups/{group_key}` | Delete Group |
+| admin | PATCH | `/api/v1/admin/atlas/versions/{version_id}/groups/{group_key}` | Patch Group |
+| admin | PUT | `/api/v1/admin/atlas/versions/{version_id}/groups/{group_key}/members` | Replace Group Members |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/layout` | Recompute Version Layout |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/nodes` | List Nodes |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/nodes` | Create Node |
+| admin | DELETE | `/api/v1/admin/atlas/versions/{version_id}/nodes/{node_key}` | Delete Node |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/nodes/{node_key}` | Get Node |
+| admin | PATCH | `/api/v1/admin/atlas/versions/{version_id}/nodes/{node_key}` | Patch Node |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/preview-token` | Mint Preview Token |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/relations` | List Relations |
+| admin | POST | `/api/v1/admin/atlas/versions/{version_id}/relations` | Create Relation |
+| admin | DELETE | `/api/v1/admin/atlas/versions/{version_id}/relations/{relation_key}` | Delete Relation |
+| admin | PATCH | `/api/v1/admin/atlas/versions/{version_id}/relations/{relation_key}` | Patch Relation |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/status` | Version Status |
+| admin | GET | `/api/v1/admin/atlas/versions/{version_id}/validate` | Validate Version Endpoint |
 | admin | GET | `/api/v1/admin/auth/csrf` | Return the CSRF token and ensure the csrftoken cookie is set. |
 | admin | POST | `/api/v1/admin/auth/login` | Admin login. |
 | admin | POST | `/api/v1/admin/auth/logout` | End the admin session. |

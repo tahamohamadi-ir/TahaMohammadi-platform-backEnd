@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-08 — public journey timeline projection from published about profile (owner-directed)",
+  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6). Addendum 2026-09-21 — AtlasRelationTypeRowOut gains hierarchyRole + allowedSourceTypes + allowedTargetTypes (Plan B Task-12 prerequisite, owner-directed; additive only, zero removals)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -8,23 +8,23 @@
   },
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 57,
-      "sha256": "274407a8fa3ad3b4b78c677bed76cc14871276468a70fb0d8542d0a637b1876b",
+      "paths": 79,
+      "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 125,
-      "sha256": "b4ca00dfa302130dd250211705637614b11e8761078b6f00fd2d160b581af166"
+      "operations": 161,
+      "sha256": "f215d56bc377d089b5515f528a69095d89bebf5f6f04ac59c6bd16aa509de62f"
     },
     "public-openapi.json": {
-      "paths": 49,
-      "sha256": "469bd51ed7e1e0d3bed7c64affaf9d488c8ee124da69496e8f5b8acc36eda914",
+      "paths": 51,
+      "sha256": "bead273e13a6296030e3255b4a527e956cac8c09ccfff6b2c056df61bbf42139",
       "version": "0.4.0"
     }
   },
   "djangoSettingsModule": "config.settings.development",
   "note": "Stable hash-based acceptance record. Never rewritten by scripts/export_openapi.py; generation evidence lives in PROVENANCE.json, which always states source-generated-unaccepted. Recorded and verified in Docs/05-delivery/concept-alignment-v2/reviews/ACCEPTANCE-VERIFICATION-2026-09-06.md. 2026-09-08 re-pin (additive localized-settings featured/brand delta only, zero removed schema lines) verified by Backend CI provenance gate plus drift/access tests; evidence recorded in Back-End/docs/quality/product-v2/PU-03-settings-HANDOFF.md.",
-  "sourceCommit": "07197024dd26b6abff605bb0720a6c2aab190657",
+  "sourceCommit": "9d582d1c88330c5944de6b0431ce29aa7fe4daaf",
   "status": "scaffold-accepted",
   "supersedes": "The former PROVENANCE.json-embedded acceptance pointer (status scaffold-accepted plus acceptanceRecord), retired because every export regenerates PROVENANCE.json with a fresh timestamp, which made identical-snapshot acceptance ambiguous and broke the drift gate."
 }

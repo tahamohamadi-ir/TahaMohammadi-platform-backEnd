@@ -39,7 +39,8 @@ select = ["E", "F", "W", "I", "UP", "B"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "*_test.py"]
-testpaths = ["tests"]
+markers = ["slow: a budget/measurement test that is slower than the rest of the suite"]
+testpaths = ["tests", "apps"]
 
 [tool.uv]
 package = false
