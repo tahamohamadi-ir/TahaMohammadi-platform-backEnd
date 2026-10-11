@@ -24,10 +24,18 @@ BODY_FIELDS = {
     "landing": "body",
     "profile": "body",
     "article": "body",
+    "series": "description",
     "research-topic": "summary",
     "research-statement": "body",
     "project": "objective",
     "publication": "authors",
+    "book": "description",
+    "talk": "abstract",
+    "download": "description",
+    "course": "description",
+    "creative-work": "description",
+    "lesson": "summary",
+    "collection": "description",
 }
 
 QUEUE_LIMIT = 100

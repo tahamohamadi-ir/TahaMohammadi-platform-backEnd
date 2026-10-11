@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from django.db import models
 from django.utils import timezone
@@ -25,6 +26,8 @@ def _serialize_value(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, UUID):
         return str(value)
     if isinstance(value, models.Model):
         return value.pk
