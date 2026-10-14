@@ -22,3 +22,23 @@ backup/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Local agent tooling copies
+/.adal/
+/.agents/
+/.claude/
+/.gemini/
+/.grok/
+/.kiro/
+/.windsurf/
+/.cursor/hooks/
+/.cursor/hooks.json
+/.cursor/mcp.json
+/.cursor/rules/graft.mdc
+/GEMINI.md
+/opencode.json
+/.mcp.json
+/.ignore
+
+# Leftover local copy of the coordination design spec
+/apps/atlas/fixtures/design-spec/
