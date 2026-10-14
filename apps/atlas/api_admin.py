@@ -48,6 +48,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from ninja import Field, Router, Schema
+from ninja.responses import Status
 
 from apps.api.admin_common import (
     IMMUTABLE_ACTIVE,
@@ -760,7 +761,7 @@ def delete_node(request, version_id: int, node_key: str):
         status=204,
         detail=f"DELETE /versions/{version.pk}/nodes/{node_key} -> 204",
     )
-    return 204, None
+    return Status(204, None)
 
 
 @atlas_router.get("/canonical-candidates", response=list[AtlasCanonicalCandidateOut])
@@ -1134,7 +1135,7 @@ def delete_node_type(request, type_key: str):
         object_id=type_key,
         detail=f"DELETE /node-types/{type_key} -> 204",
     )
-    return 204, None
+    return Status(204, None)
 
 
 def _atlas_audit_generic(request, *, action: str, object_id: str, detail: str) -> None:
@@ -1224,7 +1225,7 @@ def delete_relation(request, version_id: int, relation_key: str):
         request, action="atlas.relation.delete", version=version, status=204,
         detail=f"DELETE relations/{relation_key} -> 204",
     )
-    return 204, None
+    return Status(204, None)
 
 
 @atlas_router.get("/versions/{version_id}/groups", response=list[AtlasGroupRowOut])
@@ -1278,7 +1279,7 @@ def delete_group(request, version_id: int, group_key: str):
         request, action="atlas.group.delete", version=version, status=204,
         detail=f"DELETE groups/{group_key} -> 204",
     )
-    return 204, None
+    return Status(204, None)
 
 
 # ---------------------------------------------------------------------------
@@ -1397,7 +1398,7 @@ def _taxonomy_delete(request, model, type_key: str, *, audit_action: str):
         request, action=audit_action, object_id=type_key,
         detail=f"DELETE {audit_action.split('.')[-1]} {type_key} -> 204",
     )
-    return 204, None
+    return Status(204, None)
 
 
 @atlas_router.get("/node-types", response=list[AtlasNodeTypeRowOut])
