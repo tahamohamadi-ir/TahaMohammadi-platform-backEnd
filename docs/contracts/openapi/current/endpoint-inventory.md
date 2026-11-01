@@ -133,6 +133,7 @@ Status: source-generated-unaccepted. Do not implement against this file until th
 | admin | POST | `/api/v1/admin/graph/versions` | Create an empty draft graph version. |
 | admin | GET | `/api/v1/admin/graph/versions/{version_id}` | Full camel payload of one graph version. |
 | admin | POST | `/api/v1/admin/graph/versions/{version_id}/activate` | Activate a DRAFT version; the previously active one is archived. |
+| admin | POST | `/api/v1/admin/graph/versions/{version_id}/duplicate` | Copy any version (typically the active one) into a new editable draft. |
 | admin | PUT | `/api/v1/admin/graph/versions/{version_id}/payload` | Replace the whole payload of a DRAFT version (If-Match optimistic lock). |
 | admin | GET | `/api/v1/admin/home-modules/{locale}` | Every home module row of a locale (draft+published), ordered. |
 | admin | PUT | `/api/v1/admin/home-modules/{locale}` | Full-array bulk save with optimistic locking via If-Match. |

@@ -5,13 +5,13 @@
   },
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 79,
-      "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
+      "paths": 80,
+      "sha256": "e1c580ce7f36113ae04d263e464c427f6bee1dde639dfa31e3cff6a04b6663bd",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 161,
-      "sha256": "f215d56bc377d089b5515f528a69095d89bebf5f6f04ac59c6bd16aa509de62f"
+      "operations": 162,
+      "sha256": "faf3ea5ce492539eaf00bb5e7ce919464a4cfbe22b58cddc27c797ae1787b913"
     },
     "public-openapi.json": {
       "paths": 51,
@@ -21,7 +21,7 @@
   },
   "command": "python scripts/export_openapi.py",
   "djangoSettingsModule": "config.settings.development",
-  "generatedAtUtc": "2026-09-21T08:01:27.786826+00:00",
-  "sourceCommit": "9d582d1c88330c5944de6b0431ce29aa7fe4daaf",
+  "generatedAtUtc": "2026-11-01T17:25:58.216162+00:00",
+  "sourceCommit": "f8d7f6cf0e2bf2e110643fbded4f1268a179e65a",
   "status": "source-generated-unaccepted"
 }

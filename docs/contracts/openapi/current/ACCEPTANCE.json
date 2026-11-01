@@ -1,5 +1,5 @@
 {
-  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6). Addendum 2026-09-21 — AtlasRelationTypeRowOut gains hierarchyRole + allowedSourceTypes + allowedTargetTypes (Plan B Task-12 prerequisite, owner-directed; additive only, zero removals)",
+  "acceptanceAddendum": "Addendum 2026-09-19 — Atlas admin authoring additive schema (Plan B, Tasks 1-6). Addendum 2026-09-21 — AtlasRelationTypeRowOut gains hierarchyRole + allowedSourceTypes + allowedTargetTypes (Plan B Task-12 prerequisite, owner-directed; additive only, zero removals). Addendum 2026-11-01 — POST /api/v1/admin/graph/versions/{id}/duplicate copies a graph version into a new draft (owner-directed Home graph editing; additive only, one new path, zero removals)",
   "acceptanceRecord": "Docs/03-contracts/OPENAPI-ACCEPTANCE.md",
   "accessEvidence": {
     "admin": "Back-End/tests/test_admin_openapi.py",
@@ -8,13 +8,13 @@
   },
   "artifacts": {
     "admin-openapi.json": {
-      "paths": 79,
-      "sha256": "85008de031715c44887c7f33f583411566f017b4375d2160c6fa5ba15d24eedf",
+      "paths": 80,
+      "sha256": "e1c580ce7f36113ae04d263e464c427f6bee1dde639dfa31e3cff6a04b6663bd",
       "version": "0.1.0"
     },
     "endpoint-inventory.md": {
-      "operations": 161,
-      "sha256": "f215d56bc377d089b5515f528a69095d89bebf5f6f04ac59c6bd16aa509de62f"
+      "operations": 162,
+      "sha256": "faf3ea5ce492539eaf00bb5e7ce919464a4cfbe22b58cddc27c797ae1787b913"
     },
     "public-openapi.json": {
       "paths": 51,

@@ -8473,6 +8473,35 @@
         "summary": "Activate a DRAFT version; the previously active one is archived."
       }
     },
+    "/api/v1/admin/graph/versions/{version_id}/duplicate": {
+      "post": {
+        "operationId": "apps_api_admin_graph_graph_version_duplicate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphVersionOut"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Copy any version (typically the active one) into a new editable draft."
+      }
+    },
     "/api/v1/admin/graph/versions/{version_id}/payload": {
       "put": {
         "operationId": "apps_api_admin_graph_graph_payload_put",
