@@ -618,3 +618,73 @@ def test_put_without_csrf_token_is_403_csrf_failed(csrf_client, admin_user, totp
     )
     data = assert_json(response, 403)
     assert data["code"] == "CSRF_FAILED"
+
+
+def _duplicate(client, version_id):
+    return client.post(f"{BASE}/versions/{version_id}/duplicate")
+
+
+def test_duplicate_active_version_into_editable_draft(admin_api_client):
+    article = make_article()
+    created = assert_json(_create_version(admin_api_client, "fa"), 201)
+    detail = assert_json(_detail(admin_api_client, created["id"]), 200)
+    payload = {
+        "nodes": [
+            _node("root", type="identity"),
+            _node(
+                "field",
+                type="field",
+                colorRole="research",
+                summary="Field summary",
+                relatedRecords=[{"family": "article", "id": str(article.pk)}],
+            ),
+        ],
+        "edges": [
+            _edge(source="root", target="field", relationType="includes"),
+        ],
+    }
+    assert_json(
+        _put_payload(
+            admin_api_client, created["id"], payload, if_match=detail["updatedAt"]
+        ),
+        200,
+    )
+    assert_json(_activate(admin_api_client, created["id"]), 200)
+    source = assert_json(_detail(admin_api_client, created["id"]), 200)
+
+    copy = assert_json(_duplicate(admin_api_client, created["id"]), 201)
+    assert copy["id"] != created["id"]
+    assert copy["status"] == "draft"
+    assert copy["locale"] == "fa"
+    assert copy["nodeCount"] == 2 and copy["edgeCount"] == 1
+
+    duplicated = assert_json(_detail(admin_api_client, copy["id"]), 200)
+    assert duplicated["nodes"] == source["nodes"]
+    assert duplicated["edges"] == source["edges"]
+
+    edited = {**payload, "nodes": [*payload["nodes"], _node("child")]}
+    assert_json(
+        _put_payload(
+            admin_api_client, copy["id"], edited, if_match=duplicated["updatedAt"]
+        ),
+        200,
+    )
+    statuses = {
+        row["id"]: (row["status"], row["nodeCount"])
+        for row in assert_json(admin_api_client.get(f"{BASE}/versions"), 200)
+    }
+    assert statuses[created["id"]] == ("active", 2)
+    assert statuses[copy["id"]] == ("draft", 3)
+    assert AuditLog.objects.filter(
+        action="graph.duplicate", model_name="graph", object_id=str(copy["id"])
+    ).count() == 1
+
+
+def test_duplicate_unknown_version_404(admin_api_client):
+    data = assert_json(_duplicate(admin_api_client, 999999), 404)
+    assert data["code"] == "NOT_FOUND"
+
+
+def test_duplicate_requires_admin():
+    response = Client().post(f"{BASE}/versions/1/duplicate")
+    assert response.status_code == 401
