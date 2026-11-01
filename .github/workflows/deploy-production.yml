@@ -1,0 +1,199 @@
+name: Deploy production
+
+# Rebuilds and redeploys ONLY the backend's `cms` service in the shared
+# `taha-cms-prod` Docker Compose stack. web/admin/db/mailpit/Caddy are
+# never restarted: the existing compose file, its network wiring and Caddy
+# routing are reused as-is. Modelled on the public site's
+# deploy-production.yml (same secrets, same host layout).
+#
+# Every push to main runs verify only (the same gates as ci.yml). The
+# deploy job requires a manual "Run workflow" dispatch, so nothing reaches
+# the live API without someone deliberately triggering it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: uv sync (locked environment)
+        run: uv sync --frozen
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Django system check
+        run: uv run python manage.py check
+
+      - name: Full test suite
+        run: uv run pytest
+
+      - name: OpenAPI export hash matches accepted provenance
+        run: uv run python scripts/verify_openapi_export.py
+
+  deploy:
+    name: Deploy backend to production
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+      PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+      PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+      PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+      PROD_APP_DIR: ${{ secrets.PROD_APP_DIR }}
+    steps:
+      - name: Check production deployment configuration
+        id: prod
+        shell: bash
+        run: |
+          required=(
+            PROD_SSH_PRIVATE_KEY
+            PROD_SSH_KNOWN_HOSTS
+            PROD_SSH_HOST
+            PROD_SSH_PORT
+            PROD_SSH_USER
+            PROD_APP_DIR
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Production deployment skipped: repository secret $name is not configured. See deploy/README.md."
+              exit 1
+            fi
+          done
+
+      - name: Configure production SSH access
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Build image, migrate, and recreate the cms service only
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -p "$PROD_SSH_PORT" "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "PROD_APP_DIR='$PROD_APP_DIR' DEPLOY_SHA='$DEPLOY_SHA' bash -se" <<'REMOTE'
+          set -euo pipefail
+
+          compose_file=/home/deploy/prod/docker-compose.prod.yml
+          env_file=/home/deploy/.env.prod
+          compose() {
+            docker compose -p taha-cms-prod --env-file "$env_file" -f "$compose_file" "$@"
+          }
+
+          # 0. Serialize with the admin deploy, which edits the same
+          #    .env.prod. (GitHub concurrency groups do not span repos.)
+          exec 9>/home/deploy/.deploy-prod.lock
+          flock -w 900 9
+
+          # 1. Checkout the exact deployed commit into a dedicated build
+          #    directory. This never touches /home/deploy/prod (the running
+          #    compose stack's config) or any other service's checkout: the
+          #    backend/ subfolder keeps it apart from the public site's src/
+          #    even when PROD_APP_DIR holds the same value.
+          mkdir -p "$PROD_APP_DIR/backend"
+          cd "$PROD_APP_DIR/backend"
+          if [ -d "src/.git" ]; then
+            git -C src reset --hard HEAD
+            git -C src fetch --prune origin "$DEPLOY_SHA"
+          else
+            git clone https://github.com/tahamohamadi-ir/TahaMohammadi-platform-backEnd.git src
+            git -C src fetch --prune origin "$DEPLOY_SHA"
+          fi
+          fetched_sha=$(git -C src rev-parse FETCH_HEAD)
+          test "$fetched_sha" = "$DEPLOY_SHA"
+          git -C src checkout --detach "$DEPLOY_SHA"
+
+          # 2. Build the cms image from the repo's own Dockerfile.
+          release_id="prod-${DEPLOY_SHA:0:8}"
+          docker build -q -f src/Dockerfile -t "taha-cms-prod:${release_id}" src
+
+          # 3. RELEASE_ID is shared by every app image in the compose file
+          #    (taha-{cms,web,admin}-prod:${RELEASE_ID}). Fail before
+          #    changing anything if that convention no longer holds.
+          RELEASE_ID="$release_id" compose config --images | grep -xF "taha-cms-prod:${release_id}" >/dev/null
+
+          # 4. Tag the images every service is running right now with the
+          #    CURRENT release id (so restoring it is a complete rollback),
+          #    and web/admin's also with the NEW one, so every service still
+          #    resolves to an existing image after the bump. No content
+          #    changes; tags only.
+          old_release=$(sed -n 's/^RELEASE_ID=//p' "$env_file" | tail -n 1)
+          echo "Current RELEASE_ID (rollback target): ${old_release:-<unset>}"
+          for svc in cms web admin; do
+            cid=$(compose ps -q "$svc")
+            [ -n "$cid" ] || continue
+            image=$(docker inspect --format '{{.Image}}' "$cid")
+            if [ -n "$old_release" ]; then
+              docker tag "$image" "taha-${svc}-prod:${old_release}"
+            fi
+            if [ "$svc" != cms ]; then
+              docker tag "$image" "taha-${svc}-prod:${release_id}"
+            fi
+          done
+
+          # 5. Back up the database, then apply migrations in a one-off
+          #    container from the NEW image while the old cms keeps serving.
+          #    RELEASE_ID is overridden only for this command; .env.prod is
+          #    not changed until the migration has succeeded, so a failed
+          #    migration leaves the live stack exactly as it was.
+          mkdir -p backups
+          backup="backups/pre-${release_id}-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+          # shellcheck disable=SC2016 # expands inside the db container
+          compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | gzip > "$backup"
+          test -s "$backup"
+          echo "Database backup: $PWD/$backup"
+          RELEASE_ID="$release_id" compose run --rm --no-deps -T cms python manage.py migrate --plan
+          RELEASE_ID="$release_id" compose run --rm --no-deps -T cms python manage.py migrate --noinput
+
+          # 6. Point RELEASE_ID at the new tag, replacing every existing
+          #    line (a prior manual edit once left two). mktemp keeps the
+          #    file 0600.
+          tmp=$(mktemp "${env_file}.XXXXXX")
+          grep -v '^RELEASE_ID=' "$env_file" > "$tmp" || true
+          printf 'RELEASE_ID=%s\n' "$release_id" >> "$tmp"
+          mv "$tmp" "$env_file"
+
+          # 7. Recreate only the cms service. --no-deps keeps db (and
+          #    everything else) untouched.
+          compose up -d --no-deps --force-recreate cms
+
+          # 8. Verify the new container answers /health/ with status ok.
+          compose ps cms
+          for attempt in $(seq 1 20); do
+            if compose exec -T cms python -c "import json, urllib.request; body = json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)); raise SystemExit(0 if body.get('status') == 'ok' else 1)"; then
+              echo "Deployed taha-cms-prod:${release_id}"
+              exit 0
+            fi
+            echo "Waiting for cms health (attempt $attempt)..."
+            sleep 3
+          done
+          echo "cms did not report healthy; see the rollback section in deploy/README.md" >&2
+          compose logs --tail 50 cms >&2
+          exit 1
+          REMOTE
