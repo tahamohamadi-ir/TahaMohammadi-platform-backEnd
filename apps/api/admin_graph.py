@@ -449,6 +449,42 @@ def graph_version_create(request, payload: GraphVersionCreateIn):
     )
 
 
+@graph_router.post(
+    "/versions/{version_id}/duplicate",
+    response={201: GraphVersionOut},
+    summary="Copy any version (typically the active one) into a new editable draft.",
+)
+def graph_version_duplicate(request, version_id: int):
+    _require_admin_otp(request)
+    _check_csrf(request)
+    source = _get_version_or_404(version_id)
+    payload = _stored_payload(source)
+    with transaction.atomic():
+        version = GraphVersion.objects.create(
+            locale=source.locale, status=GraphVersionStatus.DRAFT
+        )
+        _replace_payload(version, payload)
+    _audit(
+        request,
+        action="graph.duplicate",
+        version=version,
+        status=201,
+        extra=f"source={source.pk}",
+    )
+    return Status(
+        201,
+        GraphVersionOut(
+            id=version.pk,
+            locale=version.locale,
+            status=version.status,
+            createdAt=_format_revision(version.created_at),
+            updatedAt=_format_revision(version.updated_at),
+            nodeCount=len(payload.get("nodes") or []),
+            edgeCount=len(payload.get("edges") or []),
+        ),
+    )
+
+
 @graph_router.get(
     "/versions/{version_id}",
     response=GraphVersionDetailOut,
